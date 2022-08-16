@@ -1,0 +1,103 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - ceph.rook.io
+  resources:
+  - cephblockpoolradosnamespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ceph.rook.io
+  resources:
+  - cephblockpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ceph.rook.io
+  resources:
+  - cephclients
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumeclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumepools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumepools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumepools/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - volumes/status
+  verbs:
+  - get
+  - patch
+  - update

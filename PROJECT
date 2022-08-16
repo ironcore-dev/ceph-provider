@@ -1,0 +1,17 @@
+domain: onmetal.de
+layout:
+- go.kubebuilder.io/v3
+projectName: cephlet
+repo: github.com/onmetal/cephlet
+resources:
+- controller: true
+  domain: onmetal.de
+  group: storage.api.onmetal.de
+  kind: Volume
+  version: v1alpha1
+- controller: true
+  domain: onmetal.de
+  group: storage.api
+  kind: VolumePool
+  version: v1alpha1
+version: "3"
