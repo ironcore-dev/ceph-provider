@@ -5,10 +5,7 @@ categories:
     labels:
       - 'feature'
       - 'enhancement'
-      - 'compute'
-      - 'networking'
-      - 'storage'
-      - 'api-change'
+      - 'controllers'
   - title: '🐛 Bug Fixes'
     labels:
       - 'fix'
@@ -35,18 +32,9 @@ version-resolver:
 exclude-labels:
   - 'skip-changelog'
 autolabeler:
-  - label: 'api-change'
+  - label: 'controllers'
     files:
-      - '/apis/*'
-  - label: 'compute'
-    files:
-      - '/controllers/compute/*'
-  - label: 'storage'
-    files:
-      - '/controllers/storage/*'
-  - label: 'networking'
-    files:
-      - '/controllers/networking/*'
+      - '/controllers/*'
   - label: 'documentation'
     files:
       - '*.md'
@@ -63,8 +51,6 @@ autolabeler:
   - label: 'enhancement'
     branch:
       - '/enh\/.+/'
-    body:
-      - '/JIRA-[0-9]{1,4}/'
 template: |
   ## Changes
   $CHANGES
