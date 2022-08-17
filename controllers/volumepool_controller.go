@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sort"
+
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
@@ -13,7 +15,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sort"
 )
 
 const (
@@ -29,7 +30,7 @@ type VolumePoolReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	VolumePoolName        string
-	ProviderID            string
+	VolumePoolProviderID  string
 	VolumePoolLabels      map[string]string
 	VolumePoolAnnotations map[string]string
 	VolumeClassSelector   client.MatchingLabels
@@ -182,10 +183,10 @@ func (r *VolumePoolReconciler) birthCry(ctx context.Context) error {
 			Annotations: r.VolumePoolAnnotations,
 		},
 		Spec: storagev1alpha1.VolumePoolSpec{
-			ProviderID: r.ProviderID,
+			ProviderID: r.VolumePoolProviderID,
 		},
 	}, client.Apply, volumePoolFieldOwner, client.ForceOwnership); err != nil {
-		return fmt.Errorf("error applying machine pool: %w", err)
+		return fmt.Errorf("error applying volume pool: %w", err)
 	}
 	return nil
 }
