@@ -7,20 +7,18 @@ import (
 
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/envtestutils"
 	"github.com/onmetal/onmetal-api/envtestutils/apiserver"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,7 +27,12 @@ import (
 )
 
 const (
-	apiServiceTimeout     = 5 * time.Minute
+	slowSpecThreshold    = 10 * time.Second
+	eventuallyTimeout    = 3 * time.Second
+	pollingInterval      = 50 * time.Millisecond
+	consistentlyDuration = 1 * time.Second
+	apiServiceTimeout    = 5 * time.Minute
+
 	volumePoolName        = "my-pool"
 	volumePoolProviderID  = "custom://pool"
 	volumePoolReplication = 3
@@ -54,10 +57,14 @@ var (
 )
 
 func TestAPIs(t *testing.T) {
-	RegisterFailHandler(Fail)
-	SetDefaultEventuallyTimeout(10 * time.Second)
-	SetDefaultEventuallyPollingInterval(250 * time.Millisecond)
+	_, reporterConfig := GinkgoConfiguration()
+	reporterConfig.SlowSpecThreshold = slowSpecThreshold
+	SetDefaultConsistentlyPollingInterval(pollingInterval)
+	SetDefaultEventuallyPollingInterval(pollingInterval)
+	SetDefaultEventuallyTimeout(eventuallyTimeout)
+	SetDefaultConsistentlyDuration(consistentlyDuration)
 
+	RegisterFailHandler(Fail)
 	RunSpecs(t, "Cephlet Controller Suite")
 }
 

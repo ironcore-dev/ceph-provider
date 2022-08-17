@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/controller-utils/clientutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"github.com/pkg/errors"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +32,7 @@ const (
 	pvPoolKey      = "pool"
 	pvImageNameKey = "imageName"
 
-	// world wide number key
+	// worldwide number key
 	wwnKey string = "WWN"
 	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
 	wwnPrefix string = ""
