@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
@@ -150,23 +151,15 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		Expect(err).ToNot(HaveOccurred())
 
 		// register reconciler here
+
+		rookConfig := rook.NewConfigWithDefaults()
+		rookConfig.Namespace = rookNamespace.Name
+
 		Expect((&VolumeReconciler{
-			Client:                               k8sManager.GetClient(),
-			Scheme:                               k8sManager.GetScheme(),
-			VolumePoolName:                       volumePoolName,
-			RookClusterID:                        RookClusterIdDefaultValue,
-			RookNamespace:                        rookNamespace.Name,
-			RookMonitorEndpointConfigMapName:     RookMonitorConfigMapNameDefaultValue,
-			RookMonitorEndpointConfigMapDataKey:  RookMonitorConfigMapDataKeyDefaultValue,
-			RookCSIDriverName:                    RookCSIDriverNameDefaultValue,
-			RookCSIRBDNodeSecretName:             RookCSIRBDNodeSecretNameDefaultValue,
-			RookCSIRBDProvisionerSecretName:      RookCSIRBDProvisionerSecretNameDefaultValue,
-			RookStoragClassImageFeatures:         RookStorageClassImageFeaturesDefaultValue,
-			RookStorageClassFSType:               RookStorageClassFSTypeDefaultValue,
-			RookStorageClassMountOptions:         RookStorageClassMountOptionsDefaultValue,
-			RookStorageClassReclaimPolicy:        RookStorageClassReclaimPolicyDefaultValue,
-			RookStorageClassAllowVolumeExpansion: RookStorageClassAllowVolumeExpansionDefaultValue,
-			RookStorageClassVolumeBindingMode:    RookStorageClassVolumeBindingModeDefaultValue,
+			Client:         k8sManager.GetClient(),
+			Scheme:         k8sManager.GetScheme(),
+			VolumePoolName: volumePoolName,
+			RookConfig:     rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 		Expect((&VolumePoolReconciler{
 			Client:                k8sManager.GetClient(),
@@ -177,8 +170,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 			VolumePoolAnnotations: volumePoolAnnotations,
 			VolumeClassSelector:   volumeClassSelector,
 			VolumePoolReplication: volumePoolReplication,
-			RookNamespace:         rookNamespace.Name,
-			EnableRBDStats:        EnableRBDStatsDefaultValue,
+			RookConfig:            rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		go func() {

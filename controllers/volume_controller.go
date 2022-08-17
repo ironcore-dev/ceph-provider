@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/ceph"
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"github.com/pkg/errors"
@@ -45,21 +46,9 @@ var (
 // VolumeReconciler reconciles a Volume object
 type VolumeReconciler struct {
 	client.Client
-	Scheme                               *runtime.Scheme
-	VolumePoolName                       string
-	RookClusterID                        string
-	RookNamespace                        string
-	RookMonitorEndpointConfigMapName     string
-	RookMonitorEndpointConfigMapDataKey  string
-	RookCSIDriverName                    string
-	RookCSIRBDNodeSecretName             string
-	RookCSIRBDProvisionerSecretName      string
-	RookStoragClassImageFeatures         string
-	RookStorageClassFSType               string
-	RookStorageClassMountOptions         []string
-	RookStorageClassReclaimPolicy        string
-	RookStorageClassAllowVolumeExpansion bool
-	RookStorageClassVolumeBindingMode    string
+	Scheme         *runtime.Scheme
+	VolumePoolName string
+	RookConfig     *rook.Config
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
@@ -224,7 +213,7 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      volume.Namespace,
-			Namespace: r.RookNamespace,
+			Namespace: r.RookConfig.Namespace,
 		},
 		Spec: rookv1.ClientSpec{
 			Name: "",
@@ -259,7 +248,7 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 
 func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *v1.PersistentVolumeClaim) error {
 	cephClientSecret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookNamespace, Name: secretName}, cephClientSecret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookConfig.Namespace, Name: secretName}, cephClientSecret); err != nil {
 		return fmt.Errorf("unable to get secret: %w", err)
 	}
 	if cephClientSecret.Data == nil {
@@ -330,10 +319,10 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 
 func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *storagev1alpha1.Volume) ([]string, error) {
 	rookConfigMap := &corev1.ConfigMap{}
-	if err := r.Get(ctx, types.NamespacedName{Name: r.RookMonitorEndpointConfigMapName, Namespace: r.RookNamespace}, rookConfigMap); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: r.RookConfig.MonitorConfigMapName, Namespace: r.RookConfig.Namespace}, rookConfigMap); err != nil {
 		return nil, fmt.Errorf("failed to get ceph monitors configMap %s: %w", client.ObjectKeyFromObject(rookConfigMap), err)
 	}
-	dataKey := r.RookMonitorEndpointConfigMapDataKey
+	dataKey := r.RookConfig.MonitorConfigMapDataKey
 	var list ceph.ClusterList
 	if val, ok := rookConfigMap.Data[dataKey]; !ok {
 		return nil, fmt.Errorf("unable to find data key %s in rook configMap %s", dataKey, client.ObjectKeyFromObject(rookConfigMap))
@@ -342,13 +331,13 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 	}
 	var monitors []string
 	for _, cluster := range list {
-		if cluster.ClusterID == r.RookClusterID {
+		if cluster.ClusterID == r.RookConfig.ClusterId {
 			monitors = cluster.Monitors
 			break
 		}
 	}
 	if len(monitors) == 0 {
-		return nil, fmt.Errorf("no monitors provided for clusterID %s in configMap %s", r.RookClusterID, client.ObjectKeyFromObject(rookConfigMap))
+		return nil, fmt.Errorf("no monitors provided for clusterID %s in configMap %s", r.RookConfig.ClusterId, client.ObjectKeyFromObject(rookConfigMap))
 	}
 	return monitors, nil
 }
@@ -366,7 +355,7 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      volume.Namespace,
-			Namespace: r.RookNamespace,
+			Namespace: r.RookConfig.Namespace,
 		},
 		Spec: rookv1.CephBlockPoolRadosNamespaceSpec{
 			BlockPoolName: volume.Spec.VolumePoolRef.Name,
@@ -399,23 +388,23 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 		ObjectMeta: metav1.ObjectMeta{
 			Name: clusterID + "--" + volume.Spec.VolumePoolRef.Name,
 		},
-		Provisioner: r.RookCSIDriverName,
+		Provisioner: r.RookConfig.CSIDriverName,
 		Parameters: map[string]string{
 			"clusterID":     clusterID,
 			"pool":          r.VolumePoolName,
-			"imageFeatures": r.RookStoragClassImageFeatures,
-			"csi.storage.k8s.io/provisioner-secret-name":            r.RookCSIRBDProvisionerSecretName,
-			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookNamespace,
-			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookCSIRBDProvisionerSecretName,
-			"csi.storage.k8s.io/controller-expand-secret-namespace": r.RookNamespace,
-			"csi.storage.k8s.io/node-stage-secret-name":             r.RookCSIRBDNodeSecretName,
-			"csi.storage.k8s.io/node-stage-secret-namespace":        r.RookNamespace,
-			"csi.storage.k8s.io/fstype":                             r.RookStorageClassFSType,
+			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
+			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookConfig.Namespace,
+			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/controller-expand-secret-namespace": r.RookConfig.Namespace,
+			"csi.storage.k8s.io/node-stage-secret-name":             r.RookConfig.CSIRBDNodeSecretName,
+			"csi.storage.k8s.io/node-stage-secret-namespace":        r.RookConfig.Namespace,
+			"csi.storage.k8s.io/fstype":                             r.RookConfig.StorageClassFSType,
 		},
-		ReclaimPolicy:        (*corev1.PersistentVolumeReclaimPolicy)(&r.RookStorageClassReclaimPolicy),
-		MountOptions:         r.RookStorageClassMountOptions,
-		AllowVolumeExpansion: &r.RookStorageClassAllowVolumeExpansion,
-		VolumeBindingMode:    (*storagev1.VolumeBindingMode)(&r.RookStorageClassVolumeBindingMode),
+		ReclaimPolicy:        (*corev1.PersistentVolumeReclaimPolicy)(&r.RookConfig.StorageClassReclaimPolicy),
+		MountOptions:         r.RookConfig.StorageClassMountOptions,
+		AllowVolumeExpansion: &r.RookConfig.StorageClassAllowVolumeExpansion,
+		VolumeBindingMode:    (*storagev1.VolumeBindingMode)(&r.RookConfig.StorageClassVolumeBindingMode),
 	}
 
 	if err := ctrl.SetControllerReference(ns, storageClass, r.Scheme); err != nil {
