@@ -20,8 +20,8 @@ import (
 	goflag "flag"
 	"os"
 
-	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/cephlet/controllers"
+	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	flag "github.com/spf13/pflag"
