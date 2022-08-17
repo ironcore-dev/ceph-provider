@@ -2,10 +2,10 @@ package controllers
 
 import (
 	"context"
-	"github.com/onmetal/cephlet/pkg/rook"
 	"testing"
 	"time"
 
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"

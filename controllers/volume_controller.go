@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/onmetal/cephlet/pkg/rook"
 	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/ceph"
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"github.com/pkg/errors"

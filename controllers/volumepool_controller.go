@@ -3,10 +3,10 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/onmetal/cephlet/pkg/rook"
 	"sort"
 
 	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
