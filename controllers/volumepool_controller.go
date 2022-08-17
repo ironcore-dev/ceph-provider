@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -35,8 +36,7 @@ type VolumePoolReconciler struct {
 	VolumePoolAnnotations map[string]string
 	VolumeClassSelector   client.MatchingLabels
 	VolumePoolReplication int
-	RookNamespace         string
-	EnableRBDStats        bool
+	RookConfig            *rook.Config
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools,verbs=get;list;watch;create;update;patch;delete
@@ -79,14 +79,14 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pool.Name,
-			Namespace: r.RookNamespace,
+			Namespace: r.RookConfig.Namespace,
 		},
 		Spec: rookv1.NamedBlockPoolSpec{
 			PoolSpec: rookv1.PoolSpec{
 				Replicated: rookv1.ReplicatedSpec{
 					Size: uint(r.VolumePoolReplication),
 				},
-				EnableRBDStats: r.EnableRBDStats,
+				EnableRBDStats: r.RookConfig.EnableRBDStats,
 			},
 		},
 	}
@@ -118,7 +118,7 @@ func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool
 	cephPoolExisted, err := clientutils.DeleteIfExists(ctx, r.Client, &rookv1.CephBlockPool{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pool.Name,
-			Namespace: r.RookNamespace,
+			Namespace: r.RookConfig.Namespace,
 		}})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting %s: %w", pool.Name, err)
