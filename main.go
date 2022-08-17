@@ -18,9 +18,10 @@ package main
 
 import (
 	goflag "flag"
-	"os"
-
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	flag "github.com/spf13/pflag"
+	"os"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -44,6 +45,8 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(rookv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -58,10 +61,19 @@ func main() {
 	var volumeClassSelector map[string]string
 	var volumePoolLabels map[string]string
 	var volumePoolAnnotations map[string]string
+
 	var rookNamespace string
 	var enableRBDStats bool
-	var monitorEndpointConfigMapDataKey string
-	var monintorEndpointConfigMapName string
+	var rookMonitorConfigMapDataKey string
+	var rookMonitorConfigMapName string
+	var rookCSIRBDProvisionerSecretName string
+	var rookCSIRBDNodeSecretName string
+	var rookStorageClassAllowVolumeExpansion bool
+	var rookStorageClassFSType string
+	var rookStorageClassImageFeatures string
+	var rookStorageClassMountOptions []string
+	var rookStorageClassReclaimPolicy string
+	var rookStorageClassVolumeBindingMode string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -76,10 +88,18 @@ func main() {
 	flag.StringToStringVar(&volumePoolAnnotations, "volume-pool-annotations", nil, "Annotations to apply to the volume pool upon startup.")
 
 	//Rook
-	flag.StringVar(&monintorEndpointConfigMapName, "rook-ceph-mon-cm-name", "rook-ceph-mon-endpoints", "ConfigMap name containing actual ceph monitor list")
-	flag.StringVar(&monitorEndpointConfigMapDataKey, "rook-ceph-mon-cm-data-key", "csi-cluster-config-json", "Ceph monitor ConfigMap key")
+	flag.StringVar(&rookMonitorConfigMapName, "rook-ceph-mon-cm-name", controllers.RookMonitorConfigMapNameDefaultValue, "ConfigMap name containing actual ceph monitor list")
+	flag.StringVar(&rookMonitorConfigMapDataKey, "rook-ceph-mon-cm-data-key", controllers.RookMonitorConfigMapDataKeyDefaultValue, "Ceph monitor ConfigMap key")
 	flag.StringVar(&rookNamespace, "rook-namespace", "rook-ceph", "namespace for rook operator and ceph cluster")
 	flag.BoolVar(&enableRBDStats, "pool-enable-rbd-stats", false, "Enables collecting RBD per-image IO statistics by enabling dynamic OSD performance counters.")
+	flag.StringVar(&rookCSIRBDProvisionerSecretName, "rook-csi-rbd-provisioner-secret-name", controllers.RookCSIRBDProvisionerSecretNameDefaultValue, "Secret name containing Ceph csi rbd provisioner secrets")
+	flag.StringVar(&rookCSIRBDNodeSecretName, "rook-csi-rbd-node-secret-name", controllers.RookCSIRBDNodeSecretNameDefaultValue, "Secret name containing Ceph csi rbd node secrets")
+	flag.BoolVar(&rookStorageClassAllowVolumeExpansion, "ceph-sc-allow-volume-expansion", controllers.RookStorageClassAllowVolumeExpansionDefaultValue, "Ceph StorageClass: value for 'allowVolumeExpansion' field")
+	flag.StringVar(&rookStorageClassFSType, "ceph-sc-fs-type", controllers.RookStorageClassFSTypeDefaultValue, "Ceph StorageClass: value for 'csi.storage.k8s.io/fstype' parameter")
+	flag.StringVar(&rookStorageClassImageFeatures, "ceph-sc-image-features", controllers.RookStorageClassImageFeaturesDefaultValue, "Ceph StorageClass: value for 'imageFeatures' parameter")
+	flag.StringSliceVar(&rookStorageClassMountOptions, "ceph-sc-mount-options", controllers.RookStorageClassMountOptionsDefaultValue, "Ceph StorageClass: value for 'mountOptions' field, comma-separated values.")
+	flag.StringVar(&rookStorageClassReclaimPolicy, "ceph-sc-reclaim-policy", controllers.RookStorageClassReclaimPolicyDefaultValue, "Ceph StorageClass: value for 'reclaimPolicy' field")
+	flag.StringVar(&rookStorageClassVolumeBindingMode, "ceph-sc-volume-binding-mode", controllers.RookStorageClassVolumeBindingModeDefaultValue, "Ceph StorageClass: value for 'volumeBindingMode' field")
 
 	opts := zap.Options{
 		Development: true,
@@ -96,17 +116,6 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "926d3280.onmetal.de",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -114,15 +123,23 @@ func main() {
 	}
 
 	if err = (&controllers.VolumeReconciler{
-		Client:                              mgr.GetClient(),
-		Scheme:                              mgr.GetScheme(),
-		VolumePoolReplication:               volumePoolReplication,
-		VolumePoolName:                      volumePoolName,
-		VolumePoolLabels:                    volumePoolLabels,
-		VolumePoolAnnotations:               volumePoolAnnotations,
-		RookNamespace:                       rookNamespace,
-		RookMonitorEndpointConfigMapDataKey: monitorEndpointConfigMapDataKey,
-		RookMonitorEndpointConfigMapName:    monintorEndpointConfigMapName,
+		Client:                               mgr.GetClient(),
+		Scheme:                               mgr.GetScheme(),
+		VolumePoolReplication:                volumePoolReplication,
+		VolumePoolName:                       volumePoolName,
+		VolumePoolLabels:                     volumePoolLabels,
+		VolumePoolAnnotations:                volumePoolAnnotations,
+		RookNamespace:                        rookNamespace,
+		RookMonitorEndpointConfigMapDataKey:  rookMonitorConfigMapDataKey,
+		RookMonitorEndpointConfigMapName:     rookMonitorConfigMapName,
+		RookCSIRBDProvisionerSecretName:      rookCSIRBDProvisionerSecretName,
+		RookCSIRBDNodeSecretName:             rookCSIRBDNodeSecretName,
+		RookStorageClassAllowVolumeExpansion: rookStorageClassAllowVolumeExpansion,
+		RookStorageClassFSType:               rookStorageClassFSType,
+		RookStoragClassImageFeatures:         rookStorageClassImageFeatures,
+		RookStorageClassMountOptions:         rookStorageClassMountOptions,
+		RookStorageClassReclaimPolicy:        rookStorageClassReclaimPolicy,
+		RookStorageClassVolumeBindingMode:    rookStorageClassVolumeBindingMode,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
 		os.Exit(1)
