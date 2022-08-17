@@ -194,9 +194,3 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 
 	return testNamespace
 }
-
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
-})
