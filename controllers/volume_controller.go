@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/config"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	"github.com/pkg/errors"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -16,12 +18,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 const (
 	volumeFinalizer = "cephlet.onmetal.de/volume"
 	userIDKey       = "userID"
 	userKeyKey      = "userKey"
+
+	// world wide number key
+	wwnKey string = "WWN"
+	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
+	wwnPrefix string = ""
 )
 
 var (
@@ -80,7 +88,8 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
 	}
 
-	if err := r.applyPVC(ctx, log, volume, storageClass); err != nil {
+	pvc, err := r.applyPVC(ctx, log, volume, storageClass)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
 
@@ -93,6 +102,10 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
 	}
 
+	if err := r.updateAccessStatus(ctx, log, volume, pvc); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -100,7 +113,92 @@ func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *
 	return ctrl.Result{}, nil
 }
 
-func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) error {
+func (r *VolumeReconciler) updateAccessStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) error {
+
+	monitors, err := r.provideMonitorList(ctx, volume)
+	if err != nil {
+		return fmt.Errorf("failed to provide monitor list: %w", err)
+	}
+
+	image, err := r.getImage(ctx, log, volume, pvc)
+	if err != nil {
+		return fmt.Errorf("failed to provide image name: %w", err)
+	}
+
+	wwn, err := generateOrGetWWN(volume.Status)
+	if err != nil {
+		return fmt.Errorf("error creating WWN: %w", err)
+	}
+
+	volume.Status.Access = &storagev1alpha1.VolumeAccess{
+		SecretRef: &corev1.LocalObjectReference{
+			Name: volume.Name,
+		},
+		Driver: "ceph",
+		VolumeAttributes: map[string]string{
+			"monitors": string(monitors),
+			"image":    image,
+			wwnKey:     wwn,
+		},
+	}
+
+	//	TODO update
+
+	return nil
+}
+
+func generateOrGetWWN(volumeStatus storagev1alpha1.VolumeStatus) (string, error) {
+	if volumeStatus.Access == nil {
+		return generateWWN()
+	}
+
+	wwn, found := volumeStatus.Access.VolumeAttributes[wwnKey]
+	if !found {
+		return generateWWN()
+	}
+
+	return wwn, nil
+}
+
+// generate WWN as hex string (16 chars)
+func generateWWN() (string, error) {
+	// prefix is optional, set to 1100AA for private identifier
+	wwn := wwnPrefix
+
+	//TODO other random function ?
+
+	// use UUIDv4, because this will generate good random string
+	wwnUUID, err := uuid.NewRandom()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create WWN, cannot generate UUIDv4")
+	}
+
+	// append hex string without "-"
+	wwn += strings.Replace(wwnUUID.String(), "-", "", -1)
+
+	// WWN is 64Bit number as hex, so only the first 16 chars are returned
+	return wwn[:16], nil
+}
+
+func (r *VolumeReconciler) getImage(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) (string, error) {
+	pv := &corev1.PersistentVolume{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pvc.Spec.VolumeName, Namespace: volume.Namespace}, pv); err != nil {
+		return "", fmt.Errorf("unable to get pv: %w", err)
+	}
+
+	pool := pv.Spec.CSI.VolumeAttributes["pool"]
+	if pool == "" {
+		return "", errors.New("missing PV volumeAttribute: 'pool'")
+	}
+	imageName := pv.Spec.CSI.VolumeAttributes["imageName"]
+	if imageName == "" {
+		return "", errors.New("missing PV volumeAttribute: 'imageName'")
+	}
+
+	return fmt.Sprintf("%s/%s", pool, imageName), nil
+}
+
+func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -120,22 +218,22 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return err
+		return nil, err
 	}
 
 	// TODO: do proper status reporting
 	volumeBase := volume.DeepCopy()
 	volume.Status.State = storagev1alpha1.VolumeStateAvailable
 	if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
-		return fmt.Errorf("failed to patch volume state: %w", err)
+		return nil, fmt.Errorf("failed to patch volume state: %w", err)
 	}
 
 	log.V(3).Info("volume provided.")
-	return nil
+	return pvc, nil
 }
 
 func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, error) {
