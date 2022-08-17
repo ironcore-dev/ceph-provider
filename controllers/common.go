@@ -10,6 +10,9 @@ const (
 	RookStorageClassImageFeaturesDefaultValue        = "layering"
 	RookStorageClassReclaimPolicyDefaultValue        = "Delete"
 	RookStorageClassVolumeBindingModeDefaultValue    = "Immediate"
+	RookClusterIdDefaultValue                        = "rook-ceph"
+	RookCSIDriverNameDefaultValue                    = "rook-ceph.rbd.csi.ceph.com"
+	EnableRBDStatsDefaultValue                       = false
 )
 
 var (
