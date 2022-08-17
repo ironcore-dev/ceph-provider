@@ -2,9 +2,11 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/config"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
@@ -25,6 +27,10 @@ const (
 	volumeFinalizer = "cephlet.onmetal.de/volume"
 	userIDKey       = "userID"
 	userKeyKey      = "userKey"
+	volumeDriver    = "ceph"
+
+	pvPoolKey      = "pool"
+	pvImageNameKey = "imageName"
 
 	// world wide number key
 	wwnKey string = "WWN"
@@ -48,6 +54,7 @@ type VolumeReconciler struct {
 	RookNamespace                       string
 	RookMonitorEndpointConfigMapName    string
 	RookMonitorEndpointConfigMapDataKey string
+	RookClusterID                       string
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
@@ -98,11 +105,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
 	}
 
-	if err := r.applySecret(ctx, volume, secretName); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
-	}
-
-	if err := r.updateAccessStatus(ctx, log, volume, pvc); err != nil {
+	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
 	}
 
@@ -111,40 +114,6 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
-}
-
-func (r *VolumeReconciler) updateAccessStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) error {
-
-	monitors, err := r.provideMonitorList(ctx, volume)
-	if err != nil {
-		return fmt.Errorf("failed to provide monitor list: %w", err)
-	}
-
-	image, err := r.getImage(ctx, log, volume, pvc)
-	if err != nil {
-		return fmt.Errorf("failed to provide image name: %w", err)
-	}
-
-	wwn, err := generateOrGetWWN(volume.Status)
-	if err != nil {
-		return fmt.Errorf("error creating WWN: %w", err)
-	}
-
-	volume.Status.Access = &storagev1alpha1.VolumeAccess{
-		SecretRef: &corev1.LocalObjectReference{
-			Name: volume.Name,
-		},
-		Driver: "ceph",
-		VolumeAttributes: map[string]string{
-			"monitors": string(monitors),
-			"image":    image,
-			wwnKey:     wwn,
-		},
-	}
-
-	//	TODO update
-
-	return nil
 }
 
 func generateOrGetWWN(volumeStatus storagev1alpha1.VolumeStatus) (string, error) {
@@ -180,19 +149,19 @@ func generateWWN() (string, error) {
 	return wwn[:16], nil
 }
 
-func (r *VolumeReconciler) getImage(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) (string, error) {
+func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) (string, error) {
 	pv := &corev1.PersistentVolume{}
 	if err := r.Get(ctx, types.NamespacedName{Name: pvc.Spec.VolumeName, Namespace: volume.Namespace}, pv); err != nil {
 		return "", fmt.Errorf("unable to get pv: %w", err)
 	}
 
-	pool := pv.Spec.CSI.VolumeAttributes["pool"]
-	if pool == "" {
-		return "", errors.New("missing PV volumeAttribute: 'pool'")
+	pool, ok := pv.Spec.CSI.VolumeAttributes[pvPoolKey]
+	if !ok {
+		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvPoolKey)
 	}
-	imageName := pv.Spec.CSI.VolumeAttributes["imageName"]
-	if imageName == "" {
-		return "", errors.New("missing PV volumeAttribute: 'imageName'")
+	imageName, ok := pv.Spec.CSI.VolumeAttributes[pvImageNameKey]
+	if !ok {
+		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvImageNameKey)
 	}
 
 	return fmt.Sprintf("%s/%s", pool, imageName), nil
@@ -283,7 +252,7 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 	return secretName, nil
 }
 
-func (r *VolumeReconciler) applySecret(ctx context.Context, volume *storagev1alpha1.Volume, secretName string) error {
+func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *v1.PersistentVolumeClaim) error {
 	cephClientSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookNamespace, Name: secretName}, cephClientSecret); err != nil {
 		return fmt.Errorf("unable to get secret: %w", err)
@@ -321,9 +290,22 @@ func (r *VolumeReconciler) applySecret(ctx context.Context, volume *storagev1alp
 		return fmt.Errorf("failed to apply volume secret %s: %w", client.ObjectKeyFromObject(volumeSecret), err)
 	}
 
-	monitors, err := r.provideMonitorList(ctx, volume)
+	monitors, err := r.getMonitorListForVolume(ctx, volume)
 	if err != nil {
-		return fmt.Errorf("failed to get monitor list for volume secret %s: %w", client.ObjectKeyFromObject(volumeSecret), err)
+		return fmt.Errorf("failed to get monitor list for volume: %w", err)
+	}
+
+	imageKey, err := r.getImageKeyFromPV(ctx, log, volume, pvc)
+	if err != nil {
+		return fmt.Errorf("failed to provide image name: %w", err)
+	}
+
+	// TODO:
+	// Currently we only create a WWN and add it to the volume status. Ideally we want to have it as
+	// metadata attached to the real Ceph block device.
+	wwn, err := generateOrGetWWN(volume.Status)
+	if err != nil {
+		return fmt.Errorf("error creating WWN: %w", err)
 	}
 
 	volumeBase := volume.DeepCopy()
@@ -331,40 +313,39 @@ func (r *VolumeReconciler) applySecret(ctx context.Context, volume *storagev1alp
 		SecretRef: &corev1.LocalObjectReference{
 			Name: volume.Name,
 		},
-		Driver: "ceph",
+		Driver: volumeDriver,
 		VolumeAttributes: map[string]string{
-			"monitors": monitors,
-			//	"image":    connection.Image,
-			//	wwnKey:     wwn,
+			"monitors": strings.Join(monitors, ","),
+			"image":    imageKey,
+			wwnKey:     wwn,
 		},
 	}
 	return nil
 }
 
-func (r *VolumeReconciler) provideMonitorList(ctx context.Context, volume *storagev1alpha1.Volume) (string, error) {
-	cm := &corev1.ConfigMap{}
-	if err := r.Get(ctx, client.ObjectKey{Name: r.RookMonitorEndpointConfigMapName, Namespace: r.RookConfig.Namespace}, cm); err != nil {
-		return "", fmt.Errorf("failed to get ceph monitors configMap %s: %w", client.ObjectKeyFromObject(cm), err)
+func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *storagev1alpha1.Volume) ([]string, error) {
+	rookConfigMap := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: r.RookMonitorEndpointConfigMapName, Namespace: r.RookConfig.Namespace}, rookConfigMap); err != nil {
+		return nil, fmt.Errorf("failed to get ceph monitors configMap %s: %w", client.ObjectKeyFromObject(rookConfigMap), err)
 	}
-	//dataKey := r.RookMonitorEndpointConfigMapDataKey
-	//var list ceph.ClusterList
-	//if val, ok := cm.Data[dataKey]; !ok {
-	//	return errors.Errorf("unable to find key %q in configMap %q", dataKey, r.RookConfig.MonEndpointConfigMapName)
-	//} else if err = json.Unmarshal([]byte(val), &list); err != nil {
-	//	return fmt.Errorf("failed to decode ceph cluster list in ConfigMap %s: %w", client.ObjectKeyFromObject(cm), err)
-	//}
-	//var monitors []string
-	//for _, cluster := range list {
-	//	if cluster.ClusterID == r.RookConfig.ClusterID {
-	//		monitors = cluster.Monitors
-	//		break
-	//	}
-	//}
-	//if len(monitors) == 0 {
-	//	return errors.Errorf("No monitors provided for clusterID %q in configMap %q", r.RookConfig.ClusterID, r.RookConfig.MonEndpointConfigMapName)
-	//}
-	//volume.Status.Connection.Monitors = monitors
-	return "", nil
+	dataKey := r.RookMonitorEndpointConfigMapDataKey
+	var list ceph.ClusterList
+	if val, ok := rookConfigMap.Data[dataKey]; !ok {
+		return nil, fmt.Errorf("unable to find data key %s in rook configMap %s", dataKey, client.ObjectKeyFromObject(rookConfigMap))
+	} else if err := json.Unmarshal([]byte(val), &list); err != nil {
+		return nil, fmt.Errorf("failed to decode ceph cluster list in rook config map %s: %w", client.ObjectKeyFromObject(rookConfigMap), err)
+	}
+	var monitors []string
+	for _, cluster := range list {
+		if cluster.ClusterID == r.RookClusterID {
+			monitors = cluster.Monitors
+			break
+		}
+	}
+	if len(monitors) == 0 {
+		return nil, fmt.Errorf("no monitors provided for clusterID %s in configMap %s", r.RookClusterID, client.ObjectKeyFromObject(rookConfigMap))
+	}
+	return monitors, nil
 }
 
 func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, error) {

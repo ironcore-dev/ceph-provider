@@ -4,12 +4,15 @@ go 1.19
 
 require (
 	github.com/go-logr/logr v1.2.3
+	github.com/google/uuid v1.3.0
 	github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad
 	github.com/onmetal/onmetal-api v0.0.13-0.20220816071349-6a09b849a81a
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.20.0
+	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.9.9
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.8.0
 	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3
 	k8s.io/client-go v0.24.3
@@ -50,7 +53,6 @@ require (
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.1.0 // indirect
@@ -92,7 +94,7 @@ require (
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
