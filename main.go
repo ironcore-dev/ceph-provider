@@ -64,6 +64,7 @@ func main() {
 
 	var rookNamespace string
 	var enableRBDStats bool
+	var rookClusterID string
 	var rookMonitorConfigMapDataKey string
 	var rookMonitorConfigMapName string
 	var rookCSIRBDProvisionerSecretName string
@@ -74,6 +75,7 @@ func main() {
 	var rookStorageClassMountOptions []string
 	var rookStorageClassReclaimPolicy string
 	var rookStorageClassVolumeBindingMode string
+	var rookCSIDriverName string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -88,10 +90,11 @@ func main() {
 	flag.StringToStringVar(&volumePoolAnnotations, "volume-pool-annotations", nil, "Annotations to apply to the volume pool upon startup.")
 
 	//Rook
+	flag.StringVar(&rookClusterID, "rook-cluster-id", controllers.RookClusterIdDefaultValue, "rook ceph cluster ID")
 	flag.StringVar(&rookMonitorConfigMapName, "rook-ceph-mon-cm-name", controllers.RookMonitorConfigMapNameDefaultValue, "ConfigMap name containing actual ceph monitor list")
 	flag.StringVar(&rookMonitorConfigMapDataKey, "rook-ceph-mon-cm-data-key", controllers.RookMonitorConfigMapDataKeyDefaultValue, "Ceph monitor ConfigMap key")
 	flag.StringVar(&rookNamespace, "rook-namespace", "rook-ceph", "namespace for rook operator and ceph cluster")
-	flag.BoolVar(&enableRBDStats, "pool-enable-rbd-stats", false, "Enables collecting RBD per-image IO statistics by enabling dynamic OSD performance counters.")
+	flag.BoolVar(&enableRBDStats, "pool-enable-rbd-stats", controllers.EnableRBDStatsDefaultValue, "Enables collecting RBD per-image IO statistics by enabling dynamic OSD performance counters.")
 	flag.StringVar(&rookCSIRBDProvisionerSecretName, "rook-csi-rbd-provisioner-secret-name", controllers.RookCSIRBDProvisionerSecretNameDefaultValue, "Secret name containing Ceph csi rbd provisioner secrets")
 	flag.StringVar(&rookCSIRBDNodeSecretName, "rook-csi-rbd-node-secret-name", controllers.RookCSIRBDNodeSecretNameDefaultValue, "Secret name containing Ceph csi rbd node secrets")
 	flag.BoolVar(&rookStorageClassAllowVolumeExpansion, "ceph-sc-allow-volume-expansion", controllers.RookStorageClassAllowVolumeExpansionDefaultValue, "Ceph StorageClass: value for 'allowVolumeExpansion' field")
@@ -100,7 +103,7 @@ func main() {
 	flag.StringSliceVar(&rookStorageClassMountOptions, "ceph-sc-mount-options", controllers.RookStorageClassMountOptionsDefaultValue, "Ceph StorageClass: value for 'mountOptions' field, comma-separated values.")
 	flag.StringVar(&rookStorageClassReclaimPolicy, "ceph-sc-reclaim-policy", controllers.RookStorageClassReclaimPolicyDefaultValue, "Ceph StorageClass: value for 'reclaimPolicy' field")
 	flag.StringVar(&rookStorageClassVolumeBindingMode, "ceph-sc-volume-binding-mode", controllers.RookStorageClassVolumeBindingModeDefaultValue, "Ceph StorageClass: value for 'volumeBindingMode' field")
-
+	flag.StringVar(&rookCSIDriverName, "ceph-csi-driver", controllers.RookCSIDriverNameDefaultValue, "Name of Ceph CSI driver")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -125,20 +128,19 @@ func main() {
 	if err = (&controllers.VolumeReconciler{
 		Client:                               mgr.GetClient(),
 		Scheme:                               mgr.GetScheme(),
-		VolumePoolReplication:                volumePoolReplication,
 		VolumePoolName:                       volumePoolName,
-		VolumePoolLabels:                     volumePoolLabels,
-		VolumePoolAnnotations:                volumePoolAnnotations,
+		RookClusterID:                        rookClusterID,
 		RookNamespace:                        rookNamespace,
-		RookMonitorEndpointConfigMapDataKey:  rookMonitorConfigMapDataKey,
 		RookMonitorEndpointConfigMapName:     rookMonitorConfigMapName,
-		RookCSIRBDProvisionerSecretName:      rookCSIRBDProvisionerSecretName,
+		RookMonitorEndpointConfigMapDataKey:  rookMonitorConfigMapDataKey,
+		RookCSIDriverName:                    rookCSIDriverName,
 		RookCSIRBDNodeSecretName:             rookCSIRBDNodeSecretName,
-		RookStorageClassAllowVolumeExpansion: rookStorageClassAllowVolumeExpansion,
-		RookStorageClassFSType:               rookStorageClassFSType,
+		RookCSIRBDProvisionerSecretName:      rookCSIRBDProvisionerSecretName,
 		RookStoragClassImageFeatures:         rookStorageClassImageFeatures,
+		RookStorageClassFSType:               rookStorageClassFSType,
 		RookStorageClassMountOptions:         rookStorageClassMountOptions,
 		RookStorageClassReclaimPolicy:        rookStorageClassReclaimPolicy,
+		RookStorageClassAllowVolumeExpansion: rookStorageClassAllowVolumeExpansion,
 		RookStorageClassVolumeBindingMode:    rookStorageClassVolumeBindingMode,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
@@ -147,12 +149,14 @@ func main() {
 	if err = (&controllers.VolumePoolReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
-		VolumePoolReplication: volumePoolReplication,
 		VolumePoolName:        volumePoolName,
+		VolumePoolProviderID:  providerID,
 		VolumePoolLabels:      volumePoolLabels,
 		VolumePoolAnnotations: volumePoolAnnotations,
 		VolumeClassSelector:   volumeClassSelector,
+		VolumePoolReplication: volumePoolReplication,
 		RookNamespace:         rookNamespace,
+		EnableRBDStats:        enableRBDStats,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VolumePool")
 		os.Exit(1)

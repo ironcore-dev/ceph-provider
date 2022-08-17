@@ -46,17 +46,14 @@ var (
 type VolumeReconciler struct {
 	client.Client
 	Scheme                               *runtime.Scheme
-	VolumePoolReplication                int
 	VolumePoolName                       string
-	VolumePoolLabels                     map[string]string
-	VolumePoolAnnotations                map[string]string
+	RookClusterID                        string
 	RookNamespace                        string
 	RookMonitorEndpointConfigMapName     string
 	RookMonitorEndpointConfigMapDataKey  string
-	RookClusterID                        string
-	RookCSIRBDProvisionerSecretName      string
-	RookCSIRBDNodeSecretName             string
 	RookCSIDriverName                    string
+	RookCSIRBDNodeSecretName             string
+	RookCSIRBDProvisionerSecretName      string
 	RookStoragClassImageFeatures         string
 	RookStorageClassFSType               string
 	RookStorageClassMountOptions         []string
