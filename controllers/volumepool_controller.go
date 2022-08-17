@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
