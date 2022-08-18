@@ -317,7 +317,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	}
 
 	volumeBase := volume.DeepCopy()
-	volumeBase.Status.Access = &storagev1alpha1.VolumeAccess{
+	volume.Status.Access = &storagev1alpha1.VolumeAccess{
 		SecretRef: &corev1.LocalObjectReference{
 			Name: volume.Name,
 		},
