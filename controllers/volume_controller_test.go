@@ -125,7 +125,7 @@ var _ = Describe("VolumeReconciler", func() {
 		cephClientSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "secret-",
-				Namespace:    cephNs.Namespace,
+				Namespace:    rookNs.Name,
 			},
 			Data: map[string][]byte{
 				testNs.Name: []byte("ceph secret"),
@@ -146,8 +146,8 @@ var _ = Describe("VolumeReconciler", func() {
 		By("checking that the volume status has been updated")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
-			g.Expect(vol.Status.Access).To(Not(BeNil()))
-			g.Expect(vol.Status.Access.SecretRef).To(Not(BeEmpty()))
+			g.Expect(vol.Status.Access).NotTo(BeNil())
+			g.Expect(vol.Status.Access.SecretRef).NotTo(BeEmpty())
 		}).Should(Succeed())
 
 	})
