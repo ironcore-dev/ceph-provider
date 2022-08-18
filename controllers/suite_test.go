@@ -134,7 +134,7 @@ var _ = BeforeSuite(func() {
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 })
 
-func SetupTest(ctx context.Context) *corev1.Namespace {
+func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 	var (
 		cancel context.CancelFunc
 	)
@@ -148,7 +148,8 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 				GenerateName: "testns-",
 			},
 		}
-		Expect(k8sClient.Create(ctx, testNamespace)).To(Succeed(), "failed to create test namespace")
+		err := k8sClient.Create(ctx, testNamespace)
+		Expect(err).To(Succeed(), "failed to create test namespace")
 
 		rookNamespace = &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -175,6 +176,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
+
 		Expect((&VolumePoolReconciler{
 			Client:                k8sManager.GetClient(),
 			Scheme:                k8sManager.GetScheme(),
@@ -198,5 +200,5 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete rook namespace")
 	})
 
-	return testNamespace
+	return testNamespace, rookNamespace
 }
