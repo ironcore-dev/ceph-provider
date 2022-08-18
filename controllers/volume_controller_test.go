@@ -47,8 +47,8 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 	})
 
-	FIt("should announce volumepool", func() {
-		By("checking that a VolumePool has been created")
+	FIt("should reconcile volume", func() {
+		By("checking that a Volume has been created")
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "volume-",
@@ -65,13 +65,12 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
 
-		By("ceph namespace created but not ready")
+		By("checking that the ceph namespace has been created")
 		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
 		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
 		Eventually(func() error { return k8sClient.Get(ctx, cephNsKey, cephNs) }).Should(Succeed())
-		//Eventually(k8sClient.Get(ctx, cephNsKey, cephNs)).Should(Succeed())
 
-		By("ceph namespace status set to ready")
+		By("updating the ceph namespace status to ready")
 		cephNsBase := cephNs.DeepCopy()
 		cephNs.Status = &rookv1.CephBlockPoolRadosNamespaceStatus{
 			Phase: rookv1.ConditionReady,
@@ -81,12 +80,12 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Status().Patch(ctx, cephNs, client.MergeFrom(cephNsBase))).To(Succeed())
 
-		By("pvc created")
+		By("checking that the pvc has been created")
 		pvc := &corev1.PersistentVolumeClaim{}
 		pvcKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
 		Eventually(func() error { return k8sClient.Get(ctx, pvcKey, pvc) }).Should(Succeed())
 
-		By("create pv for pvc")
+		By("creating the pv for pvc")
 		pv := &corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "pv-",
@@ -117,12 +116,12 @@ var _ = Describe("VolumeReconciler", func() {
 		pvc.Spec.VolumeName = pv.Name
 		Expect(k8sClient.Patch(ctx, pvc, client.MergeFrom(pvcBase)))
 
-		By("ceph client created but not ready")
+		By("checking that the ceph client has been created")
 		cephClient := &rookv1.CephClient{}
 		cephClientKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
 		Eventually(func() error { return k8sClient.Get(ctx, cephClientKey, cephClient) }).Should(Succeed())
 
-		By("ceph client status set to ready and create secret")
+		By("creating the ceph client secret")
 		cephClientSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "secret-",
@@ -134,6 +133,7 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Create(ctx, cephClientSecret)).To(Succeed())
 
+		By("updating the ceph client status to ready")
 		cephClientBase := cephClient.DeepCopy()
 		cephClient.Status = &rookv1.CephClientStatus{
 			Phase: rookv1.ConditionReady,
@@ -143,7 +143,7 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
 
-		By("check if volume status is updated")
+		By("checking that the volume status has been updated")
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
 			g.Expect(vol.Status.Access).To(Not(BeNil()))
