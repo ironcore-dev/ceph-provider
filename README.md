@@ -1,8 +1,43 @@
 # cephlet
-// TODO(user): Add simple overview of use/purpose
+
+[![Test](https://github.com/onmetal/cephlet/actions/workflows/test.yml/badge.svg)](https://github.com/onmetal/cephlet/actions/workflows/test.yml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
+[![GitHub License](https://img.shields.io/static/v1?label=License&message=Apache-2.0&color=blue&style=flat-square)](LICENSE)
+
+`cephlet` is a Ceph based provider implementation of the [onmetal-api](https://github.com/onmetal/onmetal-api) `Volume` 
+and `VolumePool` types.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+> As Ceph does not support the creation of access secrets for each individual block devices, we chose to use Kubernetes `Namespace`s
+as a tenant separation. All `Volumes` within a `Namespace` belong essentially to one tenant. 
+
+The task of the `cephlet` is to create a Ceph block device for every `Volume` in a given namespace. Additionally,
+for every `Namespace` an own `CephClient` and a corresponding `StorageClass` is created. The `StorageClass` is being used
+to later create the `PersistantVolumeClaims` for a given `Namespace`. The access credentials which are being extracted
+from the `CephClient` are stored in a `Secret` which is then referenced in the status of the `Volume`.
+
+The graph blow illustrates the relationships between the entities created in the reconciliation flow of a `Volume`.
+
+```mermaid
+graph TD
+    NS -- one per namespace --> SC[StorageClass]
+    NS[Namespace] -- contains --> V
+    V[Volume] -- creates  --> PVC[PersistantVolumeClaim]
+    NS -- one per namespace --> CC[CephClient]
+    CC -- creates --> S[Access Secret]
+    V -- references --> S
+```
+
+The `VolumePool` is indicating the consumer of the storage API where a `Volume` can be created. The `cephlet` is announcing
+its pool as configured and accumulates all supported `VolumeClasses` in the pool status. The mapping between a `VolumePool`
+and Ceph is done via the creation of a `CephBlockPool`.
+
+```mermaid
+graph TD
+    VP[VolumePool] -- creates --> CephBlockPool
+    VP -- announce in status --> VC[VolumeClass]
+```
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
@@ -27,13 +62,6 @@ make docker-build docker-push IMG=<some-registry>/cephlet:tag
 make deploy IMG=<some-registry>/cephlet:tag
 ```
 
-### Uninstall CRDs
-To delete the CRDs from the cluster:
-
-```sh
-make uninstall
-```
-
 ### Undeploy controller
 UnDeploy the controller to the cluster:
 
@@ -51,13 +79,8 @@ It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controlle
 which provides a reconcile function responsible for synchronizing resources untile the desired state is reached on the cluster 
 
 ### Test It Out
-1. Install the CRDs into the cluster:
 
-```sh
-make install
-```
-
-2. Run your controller (this will run in the foreground, so switch to a new terminal if you want to leave it running):
+Run your controller (this will run in the foreground, so switch to a new terminal if you want to leave it running):
 
 ```sh
 make run
