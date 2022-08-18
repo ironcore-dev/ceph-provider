@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -42,9 +43,9 @@ import (
 )
 
 const (
-	slowSpecThreshold    = 10 * time.Second
-	eventuallyTimeout    = 3 * time.Second
-	pollingInterval      = 50 * time.Millisecond
+	slowSpecThreshold    = 20 * time.Second
+	eventuallyTimeout    = 20 * time.Second
+	pollingInterval      = 250 * time.Millisecond
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute
 
@@ -134,7 +135,7 @@ var _ = BeforeSuite(func() {
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 })
 
-func SetupTest(ctx context.Context) *corev1.Namespace {
+func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 	var (
 		cancel context.CancelFunc
 	)
@@ -143,19 +144,31 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 	BeforeEach(func() {
 		var mgrCtx context.Context
 		mgrCtx, cancel = context.WithCancel(ctx)
-		testNamespace = &corev1.Namespace{
+		*testNamespace = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "testns-",
 			},
 		}
-		Expect(k8sClient.Create(ctx, testNamespace)).To(Succeed(), "failed to create test namespace")
+		err := k8sClient.Create(ctx, testNamespace)
+		Expect(err).To(Succeed(), "failed to create test namespace")
 
-		rookNamespace = &corev1.Namespace{
+		*rookNamespace = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "rookns-",
 			},
 		}
 		Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create test namespace")
+
+		rookConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rook.MonitorConfigMapNameDefaultValue,
+				Namespace: rookNamespace.Name,
+			},
+			Data: map[string]string{
+				rook.MonitorConfigMapDataKeyDefaultValue: fmt.Sprintf("[{\"clusterID\":\"%s\",\"monitors\":[\"100.64.10.121:6789\"],\"namespace\":\"\"}]", rook.ClusterIdDefaultValue),
+			},
+		}
+		Expect(k8sClient.Create(ctx, rookConfigMap)).To(Succeed(), "failed to create rook configmap")
 
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme:             scheme.Scheme,
@@ -175,6 +188,7 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
+
 		Expect((&VolumePoolReconciler{
 			Client:                k8sManager.GetClient(),
 			Scheme:                k8sManager.GetScheme(),
@@ -198,5 +212,5 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete rook namespace")
 	})
 
-	return testNamespace
+	return testNamespace, rookNamespace
 }

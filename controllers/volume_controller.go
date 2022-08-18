@@ -29,7 +29,6 @@ import (
 	"github.com/pkg/errors"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -260,7 +259,8 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 	return secretName, nil
 }
 
-func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *v1.PersistentVolumeClaim) error {
+func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *corev1.PersistentVolumeClaim) error {
+	defer log.V(2).Info("applySecretAndUpdateVolumeStatus done")
 	cephClientSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookConfig.Namespace, Name: secretName}, cephClientSecret); err != nil {
 		return fmt.Errorf("unable to get secret: %w", err)
@@ -317,7 +317,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	}
 
 	volumeBase := volume.DeepCopy()
-	volumeBase.Status.Access = &storagev1alpha1.VolumeAccess{
+	volume.Status.Access = &storagev1alpha1.VolumeAccess{
 		SecretRef: &corev1.LocalObjectReference{
 			Name: volume.Name,
 		},
@@ -328,7 +328,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 			wwnKey:     wwn,
 		},
 	}
-	return nil
+	return r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase))
 }
 
 func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *storagev1alpha1.Volume) ([]string, error) {
@@ -438,6 +438,6 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
-		Owns(&v1.PersistentVolumeClaim{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }

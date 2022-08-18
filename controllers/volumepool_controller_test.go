@@ -15,19 +15,58 @@
 package controllers
 
 import (
+	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("VolumePoolReconciler", func() {
-	_ = SetupTest(ctx)
+	testNs, rookNs := SetupTest(ctx)
 
-	It("should announce volumepool", func() {
-		By("checking that a VolumePool has been created")
-		volumePool := &storagev1alpha1.VolumePool{}
-		volumePoolKey := types.NamespacedName{Name: volumePoolName}
-		Expect(k8sClient.Get(ctx, volumePoolKey, volumePool)).Should(Succeed())
+	When("is started", func() {
+		It("should announce volumepool", func() {
+			Skip("WIP")
+			//TODO
+
+			By("checking that a VolumePool has been created")
+			volumePool := &storagev1alpha1.VolumePool{}
+			volumePoolKey := types.NamespacedName{Name: volumePoolName}
+			Eventually(k8sClient.Get(ctx, volumePoolKey, volumePool)).Should(Succeed())
+
+			rookPool := &rookv1.CephBlockPool{}
+			rookPoolKey := types.NamespacedName{Name: volumePoolName, Namespace: rookNs.Name}
+			Eventually(k8sClient.Get(ctx, rookPoolKey, rookPool)).Should(Succeed())
+
+			Expect(rookPool.Spec.PoolSpec.Replicated.Size).To(Equal(volumePoolReplication))
+			Expect(rookPool.Spec.PoolSpec.EnableRBDStats).To(Equal(rook.EnableRBDStatsDefaultValue))
+		})
 	})
+
+	When("should reconcile", func() {
+		It("a valid custom created pool", func() {
+			Skip("WIP")
+			//TODO
+
+			volumePool := &storagev1alpha1.VolumePool{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "custom-pool-",
+					Namespace:    testNs.Name,
+				},
+				Spec: storagev1alpha1.VolumePoolSpec{
+					ProviderID: "custom://custom-pool",
+				},
+			}
+			Eventually(k8sClient.Create(ctx, volumePool)).Should(Succeed())
+
+			By("checking that a VolumePool has been created")
+			rookPool := &rookv1.CephBlockPool{}
+			rookPoolKey := types.NamespacedName{Name: volumePool.Name, Namespace: rookNs.Name}
+			Eventually(k8sClient.Get(ctx, rookPoolKey, rookPool)).Should(Succeed())
+		})
+	})
+
 })
