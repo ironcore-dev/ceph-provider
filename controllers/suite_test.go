@@ -201,6 +201,13 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 			RookConfig:            rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
+		Expect((&ImagePopulatorReconciler{
+			Client:                 k8sManager.GetClient(),
+			Scheme:                 k8sManager.GetScheme(),
+			PopulatorImageName:     "populator-image",
+			PopulatorPodDevicePath: "/dev/block",
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
 		go func() {
 			Expect(k8sManager.Start(mgrCtx)).To(Succeed(), "failed to start manager")
 		}()

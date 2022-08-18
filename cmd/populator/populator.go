@@ -16,24 +16,17 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"os"
 
-	populator_machinery "github.com/kubernetes-csi/lib-volume-populator/populator-machinery"
 	"github.com/onmetal/cephlet/pkg/image"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"github.com/onmetal/onmetal-image/oci/remote"
 	"github.com/onmetal/onmetal-image/oci/store"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
-	prefix     = "cephlet.onmetal.de"
 	devicePath = "/dev/block"
 )
 
@@ -66,19 +59,19 @@ func main() {
 	flag.Parse()
 
 	switch mode {
-	case "controller":
-		const (
-			groupName  = "storage.api.onmetal.de"
-			apiVersion = "v1alpha1"
-			kind       = "Volume"
-			resource   = "volumes"
-		)
-		var (
-			gk  = schema.GroupKind{Group: groupName, Kind: kind}
-			gvr = schema.GroupVersionResource{Group: groupName, Version: apiVersion, Resource: resource}
-		)
-		populator_machinery.RunController(masterURL, kubeconfig, imageName, httpEndpoint, metricsPath,
-			namespace, prefix, gk, gvr, "", devicePath, getPopulatorPodArgs)
+	//case "controller":
+	//	const (
+	//		groupName  = "storage.api.onmetal.de"
+	//		apiVersion = "v1alpha1"
+	//		kind       = "Volume"
+	//		resource   = "volumes"
+	//	)
+	//	var (
+	//		gk  = schema.GroupKind{Group: groupName, Kind: kind}
+	//		gvr = schema.GroupVersionResource{Group: groupName, Version: apiVersion, Resource: resource}
+	//	)
+	//	populator_machinery.RunController(masterURL, kubeconfig, imageName, httpEndpoint, metricsPath,
+	//		namespace, prefix, gk, gvr, "", devicePath, getPopulatorPodArgs)
 	case "populate":
 		populate(storePath, image, devicePath)
 	default:
@@ -127,17 +120,4 @@ func populate(storePath string, ref string, devicePath string) {
 		os.Exit(1)
 	}
 	log.Info("Successfully populated device", "Device", devicePath)
-}
-
-func getPopulatorPodArgs(rawBlock bool, u *unstructured.Unstructured) ([]string, error) {
-	var volume storagev1alpha1.Volume
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), &volume); err != nil {
-		return nil, fmt.Errorf("failed to convert volume: %w", err)
-	}
-	if !rawBlock {
-		return nil, fmt.Errorf("only raw block device population is supported: %s", volume.Name)
-	}
-	args := []string{"--mode=populate"}
-	args = append(args, "--image="+volume.Spec.Image)
-	return args, nil
 }
