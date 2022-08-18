@@ -15,6 +15,7 @@
 package controllers
 
 import (
+	"fmt"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -24,10 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	volSize = "1Gi"
 )
 
 var _ = Describe("VolumeReconciler", func() {
@@ -47,7 +44,11 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 	})
 
-	FIt("should reconcile volume", func() {
+	It("should reconcile volume", func() {
+		volumeSize := "1Gi"
+		cephPoolName := "pool-1"
+		cephImageName := "image-1"
+
 		By("checking that a Volume has been created")
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
@@ -58,7 +59,7 @@ var _ = Describe("VolumeReconciler", func() {
 				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
 				Resources: corev1.ResourceList{
-					"storage": quantity(volSize),
+					"storage": resource.MustParse(volumeSize),
 				},
 			},
 		}
@@ -103,8 +104,8 @@ var _ = Describe("VolumeReconciler", func() {
 						Driver:       "rook-ceph.rbd.csi.ceph.com",
 						VolumeHandle: "handle",
 						VolumeAttributes: map[string]string{
-							"pool":      "pool-1",
-							"imageName": "image-1",
+							"pool":      cephPoolName,
+							"imageName": cephImageName,
 						},
 					},
 				},
@@ -121,6 +122,7 @@ var _ = Describe("VolumeReconciler", func() {
 		cephClientKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
 		Eventually(func() error { return k8sClient.Get(ctx, cephClientKey, cephClient) }).Should(Succeed())
 
+		rookVolumeSecret := "ceph secret"
 		By("creating the ceph client secret")
 		cephClientSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -128,7 +130,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    rookNs.Name,
 			},
 			Data: map[string][]byte{
-				testNs.Name: []byte("ceph secret"),
+				testNs.Name: []byte(rookVolumeSecret),
 			},
 		}
 		Expect(k8sClient.Create(ctx, cephClientSecret)).To(Succeed())
@@ -147,13 +149,23 @@ var _ = Describe("VolumeReconciler", func() {
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
 			g.Expect(vol.Status.Access).NotTo(BeNil())
-			g.Expect(vol.Status.Access.SecretRef).NotTo(BeEmpty())
+			g.Expect(vol.Status.Access.SecretRef).NotTo(BeNil())
 		}).Should(Succeed())
 
+		By("checking that the volume access attributes are correct")
+		Expect(vol.Status.Access.Driver).To(BeEquivalentTo("ceph"))
+		Expect(vol.Status.Access.VolumeAttributes).NotTo(BeNil())
+		Expect(vol.Status.Access.VolumeAttributes["image"]).To(BeEquivalentTo(fmt.Sprintf("%s/%s", cephPoolName, cephImageName)))
+		Expect(vol.Status.Access.VolumeAttributes["monitors"]).NotTo(BeEmpty())
+		Expect(vol.Status.Access.VolumeAttributes["WWN"]).NotTo(BeEmpty())
+
+		accessSecret := &corev1.Secret{}
+		accessSecretKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Status.Access.SecretRef.Name}
+		Expect(k8sClient.Get(ctx, accessSecretKey, accessSecret)).To(Succeed())
+
+		Expect(accessSecret.Data).NotTo(BeNil())
+		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(testNs.Name))
+		Expect(accessSecret.Data["userKey"]).To(BeEquivalentTo(rookVolumeSecret))
 	})
 
 })
-
-func quantity(s string) resource.Quantity {
-	return resource.MustParse(s)
-}
