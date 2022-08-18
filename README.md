@@ -14,7 +14,7 @@ as a tenant separation. All `Volumes` within a `Namespace` belong essentially to
 
 The task of the `cephlet` is to create a Ceph block device for every `Volume` in a given namespace. Additionally,
 for every `Namespace` an own `CephClient` and a corresponding `StorageClass` is created. The `StorageClass` is being used
-to later create the `PersistantVolumeClaims` for a given `Namespace`. The access credentials which are being extracted
+to later create the `PersistentVolumeClaims` for a given `Namespace`. The access credentials which are being extracted
 from the `CephClient` are stored in a `Secret` which is then referenced in the status of the `Volume`.
 
 The graph blow illustrates the relationships between the entities created in the reconciliation flow of a `Volume`.
@@ -23,7 +23,7 @@ The graph blow illustrates the relationships between the entities created in the
 graph TD
     NS -- one per namespace --> SC[StorageClass]
     NS[Namespace] -- contains --> V
-    V[Volume] -- creates  --> PVC[PersistantVolumeClaim]
+    V[Volume] -- creates  --> PVC[PersistentVolumeClaim]
     NS -- one per namespace --> CC[CephClient]
     CC -- creates --> S[Access Secret]
     V -- references --> S
@@ -38,6 +38,8 @@ graph TD
     VP[VolumePool] -- creates --> CephBlockPool
     VP -- announce in status --> VC[VolumeClass]
 ```
+
+Additional documentation can be found in the [docs](/docs) folder.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
@@ -70,7 +72,8 @@ make undeploy
 ```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+We'd love to get feedback from you. Please report bugs, suggestions or post questions by opening a GitHub issue.
 
 ### How it works
 This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
