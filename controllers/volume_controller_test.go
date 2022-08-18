@@ -1,3 +1,17 @@
+// Copyright 2022 OnMetal authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controllers
 
 import (
@@ -9,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -48,15 +63,91 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
 
 		By("ceph namespace created but not ready")
-		cephNs := rookv1.CephBlockPoolRadosNamespace{}
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: rookNs.Name,
-				//namespace represents customer
-				Name: testNs.Name,
-			}, &cephNs)
+		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
+		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
+		Eventually(func() error { return k8sClient.Get(ctx, cephNsKey, cephNs) }).Should(Succeed())
+		//Eventually(k8sClient.Get(ctx, cephNsKey, cephNs)).Should(Succeed())
+
+		By("ceph namespace status set to ready")
+		cephNsBase := cephNs.DeepCopy()
+		cephNs.Status = &rookv1.CephBlockPoolRadosNamespaceStatus{
+			Phase: rookv1.ConditionReady,
+			Info: map[string]string{
+				"clusterID": "test-cluster-id",
+			},
+		}
+		Expect(k8sClient.Status().Patch(ctx, cephNs, client.MergeFrom(cephNsBase))).To(Succeed())
+
+		By("pvc created")
+		pvc := &corev1.PersistentVolumeClaim{}
+		pvcKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
+		Eventually(func() error { return k8sClient.Get(ctx, pvcKey, pvc) }).Should(Succeed())
+
+		By("create pv for pvc")
+		pv := &corev1.PersistentVolume{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "pv-",
+				Namespace:    pvc.Namespace,
+			},
+			Spec: corev1.PersistentVolumeSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{
+					corev1.ReadWriteOnce,
+				},
+				Capacity: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceStorage: resource.MustParse("1Gi"),
+				},
+				PersistentVolumeSource: corev1.PersistentVolumeSource{
+					CSI: &corev1.CSIPersistentVolumeSource{
+						Driver:       "rook-ceph.rbd.csi.ceph.com",
+						VolumeHandle: "handle",
+						VolumeAttributes: map[string]string{
+							"pool":      "pool-1",
+							"imageName": "image-1",
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pv)).To(Succeed())
+
+		pvcBase := pvc.DeepCopy()
+		pvc.Spec.VolumeName = pv.Name
+		Expect(k8sClient.Patch(ctx, pvc, client.MergeFrom(pvcBase)))
+
+		By("ceph client created but not ready")
+		cephClient := &rookv1.CephClient{}
+		cephClientKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
+		Eventually(func() error { return k8sClient.Get(ctx, cephClientKey, cephClient) }).Should(Succeed())
+
+		By("ceph client status set to ready and create secret")
+		cephClientSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "secret-",
+				Namespace:    cephNs.Namespace,
+			},
+			Data: map[string][]byte{
+				testNs.Name: []byte("ceph secret"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, cephClientSecret)).To(Succeed())
+
+		cephClientBase := cephClient.DeepCopy()
+		cephClient.Status = &rookv1.CephClientStatus{
+			Phase: rookv1.ConditionReady,
+			Info: map[string]string{
+				"secretName": cephClientSecret.Name,
+			},
+		}
+		Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
+
+		By("check if volume status is updated")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
+			g.Expect(vol.Status.Access).To(Not(BeNil()))
+			g.Expect(vol.Status.Access.SecretRef).To(Not(BeEmpty()))
 		}).Should(Succeed())
 
 	})
