@@ -32,11 +32,13 @@ import (
 )
 
 const (
-	annSelectedNode        = "volume.kubernetes.io/selected-node"
-	populatorPodPrefix     = "populate"
-	pvcFinalizer           = "cephlet.onmetal.de/populate-target-protection"
-	populatorContainerName = "populate"
-	populatorPodVolumeName = "target"
+	annSelectedNode         = "volume.kubernetes.io/selected-node"
+	populatorPodPrefix      = "populate"
+	pvcFinalizer            = "cephlet.onmetal.de/populate-target-protection"
+	populatorContainerName  = "populate"
+	populatorPodVolumeName  = "target"
+	populatorPvcPrefix      = "prime"
+	populatedFromAnnoSuffix = "populated-from"
 )
 
 var (
@@ -48,6 +50,8 @@ type ImagePopulatorReconciler struct {
 	Scheme                 *runtime.Scheme
 	PopulatorImageName     string
 	PopulatorPodDevicePath string
+	PopulatorNamespace     string
+	Prefix                 string
 }
 
 func (r *ImagePopulatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -73,6 +77,11 @@ func (r *ImagePopulatorReconciler) delete(ctx context.Context, log logr.Logger, 
 }
 
 func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logger, pvc *corev1.PersistentVolumeClaim) (ctrl.Result, error) {
+	if r.PopulatorNamespace == pvc.Namespace {
+		// Ignore PVCs in our own working namespace
+		return ctrl.Result{}, nil
+	}
+
 	dataSourceRef := pvc.Spec.DataSourceRef
 	if dataSourceRef == nil {
 		// Ignore PVCs without a datasource
@@ -121,61 +130,99 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 	// Look for the populator pod
 	podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
-	pod := &corev1.Pod{}
-	podKey := types.NamespacedName{Name: podName, Namespace: pvc.Namespace}
+	var pod *corev1.Pod
+	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, podKey, pod); !errors.IsNotFound(err) {
-		if !errors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
-		}
+		return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
+	}
+
+	// Look for PVC'
+	pvcPrimeName := fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID)
+	var pvcPrime *corev1.PersistentVolumeClaim
+	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
+	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); !errors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to get shadow PVC %s: %w", pvcPrimeKey, err)
 	}
 
 	// *** Here is the first place we start to create/modify objects ***
 
 	// If the PVC is unbound, we need to perform the population
 	if "" == pvc.Spec.VolumeName {
-		// Ensure the PVC has a finalizer on it so we can clean up the stuff we create
+		// Ensure the PVC has a finalizer on it, so we can clean up the stuff we create
 		if _, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, pvc, pvcFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on PVC: %w", err)
 		}
-		if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock != *pvc.Spec.VolumeMode {
-			// ignore non block volumes
-			return ctrl.Result{}, nil
-		}
 
-		// Calculate the args for the populator pod
-		var args []string
-		args = append(args, "--mode=populate")
-		args = append(args, "--image="+volume.Spec.Image)
+		// If the pod doesn't exist yet, create it
+		if pod == nil {
+			if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock != *pvc.Spec.VolumeMode {
+				// ignore non block volumes
+				return ctrl.Result{}, nil
+			}
 
-		// Make the pod
-		pod = &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      podName,
-				Namespace: pvc.Namespace,
-			},
-			Spec: makePopulatePodSpec(pvc.Name),
-		}
-		pod.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName = pvc.Name
-		con := &pod.Spec.Containers[0]
-		con.Image = r.PopulatorImageName
-		con.Args = args
-		con.VolumeDevices = []corev1.VolumeDevice{
-			{
-				Name:       populatorPodVolumeName,
-				DevicePath: r.PopulatorPodDevicePath,
-			},
-		}
+			// Calculate the args for the populator pod
+			var args []string
+			args = append(args, "--mode=populate")
+			args = append(args, "--image="+volume.Spec.Image)
 
-		if waitForFirstConsumer {
-			pod.Spec.NodeName = nodeName
-		}
+			// Make the pod
+			pod = &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: r.PopulatorNamespace,
+				},
+				Spec: makePopulatePodSpec(pvc.Name),
+			}
+			pod.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName = pvcPrimeName
+			con := &pod.Spec.Containers[0]
+			con.Image = r.PopulatorImageName
+			con.Args = args
+			con.VolumeDevices = []corev1.VolumeDevice{
+				{
+					Name:       populatorPodVolumeName,
+					DevicePath: r.PopulatorPodDevicePath,
+				},
+			}
 
-		if err := ctrl.SetControllerReference(pvc, pod, r.Scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error owning populator pod %s: %w", podKey, err)
-		}
+			if waitForFirstConsumer {
+				pod.Spec.NodeName = nodeName
+			}
 
-		if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
-			return ctrl.Result{}, fmt.Errorf("could not apply populator pod: %w", err)
+			if err := ctrl.SetControllerReference(pvc, pod, r.Scheme); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error owning populator pod %s: %w", podKey, err)
+			}
+
+			if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
+				return ctrl.Result{}, fmt.Errorf("could not apply populator pod: %w", err)
+			}
+
+			// If PVC' doesn't exist yet, create it
+			if pvcPrime == nil {
+				pvcPrime = &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      pvcPrimeName,
+						Namespace: r.PopulatorNamespace,
+					},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources:        pvc.Spec.Resources,
+						StorageClassName: pvc.Spec.StorageClassName,
+						VolumeMode:       pvc.Spec.VolumeMode,
+					},
+				}
+				if waitForFirstConsumer {
+					pvcPrime.Annotations = map[string]string{
+						annSelectedNode: nodeName,
+					}
+				}
+
+				if err := r.Patch(ctx, pvcPrime, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
+					return ctrl.Result{}, fmt.Errorf("could not apply prime pvc %s: %w", pvcPrimeKey, err)
+				}
+
+				// We'll get called again later when the pod exists
+				return ctrl.Result{}, nil
+			}
 		}
 
 		if corev1.PodSucceeded != pod.Status.Phase {
@@ -189,15 +236,73 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 			return ctrl.Result{}, nil
 		}
 
+		// This would be bad
+		if pvcPrime == nil {
+			return ctrl.Result{}, fmt.Errorf("failed to find PVC for populator pod")
+		}
+
+		// Get PV
+		pv := &corev1.PersistentVolume{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pvcPrime.Spec.VolumeName}, pv); !errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to get pv for prime pvc %s: %w", pvcPrimeKey, err)
+		}
+
+		// Examine the claimref for the PV and see if it's bound to the correct PVC
+		pvBase := pv.DeepCopy()
+		claimRef := pv.Spec.ClaimRef
+		if claimRef.Name != pvc.Name || claimRef.Namespace != pvc.Namespace || claimRef.UID != pvc.UID {
+			// Make new PV with strategic patch values to perform the PV rebind
+			patchPv := corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        pv.Name,
+					Annotations: map[string]string{},
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					ClaimRef: &corev1.ObjectReference{
+						Namespace:       pvc.Namespace,
+						Name:            pvc.Name,
+						UID:             pvc.UID,
+						ResourceVersion: pvc.ResourceVersion,
+					},
+				},
+			}
+			populatedFromAnno := r.Prefix + "/" + populatedFromAnnoSuffix
+			patchPv.Annotations[populatedFromAnno] = pvc.Namespace + "/" + dataSourceRef.Name
+
+			if err := r.Patch(ctx, pv, client.MergeFrom(pvBase)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to patch pv %s: %w", client.ObjectKeyFromObject(pv), err)
+			}
+
+			// Don't start cleaning up yet -- we need to bind controller to acknowledge
+			// the switch
+			return ctrl.Result{}, nil
+		}
+
 		// We'll get called again later when the pod exists
 		return ctrl.Result{}, nil
 	}
 
-	// *** At this point the volume population is done and we're just cleaning up ***
+	// Wait for the bind controller to rebind the PV
+	if pvcPrime != nil {
+		if corev1.ClaimLost != pvcPrime.Status.Phase {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// *** At this point the volume population is done, and we're just cleaning up ***
 
 	// If the pod still exists, delete it
-	if err := r.Delete(ctx, pod); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to clean up populator pod %s: %w", podKey, err)
+	if pod != nil {
+		if err := r.Delete(ctx, pod); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to clean up populator pod %s: %w", podKey, err)
+		}
+	}
+
+	// If PVC' still exists, delete it
+	if pvcPrime != nil {
+		if err := r.Delete(ctx, pvcPrime); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete prime pvc %s: %w", pvcPrimeKey, err)
+		}
 	}
 
 	// Make sure the PVC finalizer is gone
