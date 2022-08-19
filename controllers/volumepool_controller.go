@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -117,6 +118,25 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 	poolBase := pool.DeepCopy()
 	poolBase.Status.State = storagev1alpha1.VolumePoolStateAvailable
 	poolBase.Status.AvailableVolumeClasses = availableVolumeClasses
+	if err := r.Status().Patch(ctx, pool, client.MergeFrom(poolBase)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to patch status for volume pool: %w", err)
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: r.RookConfig.Namespace}, rookPool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch rook pool: %w", err)
+	}
+
+	poolBase = pool.DeepCopy()
+	switch {
+	case rookPool.Status == nil:
+		pool.Status.State = storagev1alpha1.VolumePoolStatePending
+	case rookPool.Status.Phase == rookv1.ConditionReady:
+		pool.Status.State = storagev1alpha1.VolumePoolStateAvailable
+	case rookPool.Status.Phase == rookv1.ConditionFailure:
+		pool.Status.State = storagev1alpha1.VolumePoolStateNotAvailable
+	default:
+		pool.Status.State = storagev1alpha1.VolumePoolStatePending
+	}
 	if err := r.Status().Patch(ctx, pool, client.MergeFrom(poolBase)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to patch status for volume pool: %w", err)
 	}
