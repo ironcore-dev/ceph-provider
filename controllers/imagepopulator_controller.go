@@ -17,8 +17,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
@@ -31,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -219,7 +219,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				return ctrl.Result{}, fmt.Errorf("could not create populator pod: %w", err)
 			}
 
-			log.V(1).Info("Created populator Pod", "Pod", podKey)
+			log.Info("Created populator Pod", "Pod", podKey)
 
 			// If PVC' doesn't exist yet, create it
 			if pvcPrime == nil {
@@ -301,6 +301,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				return ctrl.Result{}, fmt.Errorf("failed to patch claimref of pv %s: %w", client.ObjectKeyFromObject(pv), err)
 			}
 
+			log.Info("Patched claimref of PVC to use the populated PV")
+
 			// Don't start cleaning up yet -- we need to bind controller to acknowledge
 			// the switch
 			return ctrl.Result{}, nil
@@ -321,6 +323,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 	// If the pod still exists, delete it
 	if pod != nil {
+		log.Info("Deleting populator pod", "Pod", client.ObjectKeyFromObject(pod))
 		if err := r.Delete(ctx, pod); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to clean up populator pod %s: %w", podKey, err)
 		}
@@ -328,6 +331,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 	// If PVC' still exists, delete it
 	if pvcPrime != nil {
+		log.Info("Deleting populator PVC", "PVC", client.ObjectKeyFromObject(pvcPrime))
 		if err := r.Delete(ctx, pvcPrime); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete prime pvc %s: %w", pvcPrimeKey, err)
 		}
@@ -337,6 +341,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	if _, err := clientutils.PatchEnsureNoFinalizer(ctx, r.Client, pvc, pvcFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from pvc: %w", err)
 	}
+
+	log.Info("Successfully populated PVC")
 
 	return ctrl.Result{}, nil
 }

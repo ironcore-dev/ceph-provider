@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/errors"
 
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
@@ -24,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,7 +58,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		Expect(k8sClient.Create(ctx, volumePopulator)).To(Succeed())
 	})
 
-	It("should create a populator pod for a given PVC, create a shaddow PVC, mock a successful run and reassign the PV claim", func() {
+	It("should create a populator pod for a given PVC, create a shadow PVC, mock a successful run and reassign the PV claim", func() {
 		By("creating a volume")
 		volumeSize := "1Gi"
 		vol := &storagev1alpha1.Volume{
@@ -150,7 +150,12 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
 			g.Expect(err).NotTo(HaveOccurred())
 
-			// TODO: compare spec
+			g.Expect(pvc.Spec.AccessModes).To(Equal([]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}))
+			g.Expect(pvc.Spec.Resources).To(Equal(corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1.ResourceStorage]},
+			}))
+			g.Expect(pvc.Spec.StorageClassName).To(Equal(&storageClass.Name))
+			g.Expect(pvc.Spec.VolumeMode).To(Equal(&mode))
 		}).Should(Succeed())
 
 		By("ensuring that the populator pod has been created")
@@ -187,7 +192,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			}))
 		}).Should(Succeed())
 
-		By("creating a PV for the shaddow PVC")
+		By("creating a PV for the shadow PVC")
 		pvPrime := &corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "pv-",

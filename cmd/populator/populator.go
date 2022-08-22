@@ -22,7 +22,6 @@ import (
 	"github.com/onmetal/cephlet/pkg/image"
 	"github.com/onmetal/onmetal-image/oci/remote"
 	"github.com/onmetal/onmetal-image/oci/store"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -32,23 +31,16 @@ const (
 
 func main() {
 	var (
-		mode      string
 		image     string
 		storePath string
 	)
-	// Main arg
-	flag.StringVar(&mode, "mode", "", "Mode to run in (controller, populate)")
+
 	// Populate args
 	flag.StringVar(&image, "iamge", "", "Image location which the PVC should be populated with")
 	flag.StringVar(&storePath, "storePath", "/tmp", "Location of the local image store")
 	flag.Parse()
 
-	switch mode {
-	case "populate":
-		populate(storePath, image, devicePath)
-	default:
-		klog.Fatalf("Invalid mode: %s", mode)
-	}
+	populate(storePath, image, devicePath)
 }
 
 func populate(storePath string, ref string, devicePath string) {
