@@ -82,11 +82,15 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		return ctrl.Result{}, nil
 	}
 
+	log.Info("Reconciling PVC")
+
 	dataSourceRef := pvc.Spec.DataSourceRef
 	if dataSourceRef == nil {
 		// Ignore PVCs without a datasource
 		return ctrl.Result{}, nil
 	}
+
+	log.Info("Found datasource ref for PVC", "DataSourceRef", dataSourceRef)
 
 	if storagev1alpha1.SchemeGroupVersion.String() != *dataSourceRef.APIGroup || "Volume" != dataSourceRef.Kind || "" == dataSourceRef.Name {
 		// Ignore PVCs if the datasourceRef is not a Volume
@@ -103,11 +107,12 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		return ctrl.Result{}, fmt.Errorf("the datasource %s ref for PVC could not be found: %w", volumeKey, err)
 	}
 
+	log.Info("Found volume as datasource ref for PVC", "Volume", client.ObjectKeyFromObject(volume))
+
 	var waitForFirstConsumer bool
 	var nodeName string
 	if pvc.Spec.StorageClassName != nil {
 		storageClassName := *pvc.Spec.StorageClassName
-
 		storageClass := &storagev1.StorageClass{}
 		storageClassKey := types.NamespacedName{Name: storageClassName}
 		if err := r.Get(ctx, storageClassKey, storageClass); err != nil {
@@ -117,6 +122,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 			// We'll get called again later when the storage class exists
 			return ctrl.Result{}, fmt.Errorf("storageclass %s for PVC does not exist: %w", storageClassKey, err)
 		}
+
+		log.Info("Found StorageClass for PVC", "StorageClass", storageClassKey)
 
 		if storageClass.VolumeBindingMode != nil && storagev1.VolumeBindingWaitForFirstConsumer == *storageClass.VolumeBindingMode {
 			waitForFirstConsumer = true
@@ -130,18 +137,22 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 	// Look for the populator pod
 	podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
-	var pod *corev1.Pod
+	pod := &corev1.Pod{}
 	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, podKey, pod); !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
+	} else if errors.IsNotFound(err) {
+		pod = nil
 	}
 
 	// Look for PVC'
 	pvcPrimeName := fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID)
-	var pvcPrime *corev1.PersistentVolumeClaim
+	pvcPrime := &corev1.PersistentVolumeClaim{}
 	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get shadow PVC %s: %w", pvcPrimeKey, err)
+	} else if errors.IsNotFound(err) {
+		pvcPrime = nil
 	}
 
 	// *** Here is the first place we start to create/modify objects ***
@@ -188,13 +199,11 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				pod.Spec.NodeName = nodeName
 			}
 
-			if err := ctrl.SetControllerReference(pvc, pod, r.Scheme); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error owning populator pod %s: %w", podKey, err)
+			if err := r.Create(ctx, pod); err != nil {
+				return ctrl.Result{}, fmt.Errorf("could not create populator pod: %w", err)
 			}
 
-			if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
-				return ctrl.Result{}, fmt.Errorf("could not apply populator pod: %w", err)
-			}
+			log.V(1).Info("Applied populator Pod", "Pod", podKey)
 
 			// If PVC' doesn't exist yet, create it
 			if pvcPrime == nil {
@@ -216,8 +225,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 					}
 				}
 
-				if err := r.Patch(ctx, pvcPrime, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
-					return ctrl.Result{}, fmt.Errorf("could not apply prime pvc %s: %w", pvcPrimeKey, err)
+				if err := r.Create(ctx, pvcPrime); err != nil {
+					return ctrl.Result{}, fmt.Errorf("could not create prime pvc %s: %w", pvcPrimeKey, err)
 				}
 
 				// We'll get called again later when the pod exists
@@ -338,6 +347,5 @@ func makePopulatePodSpec(pvcName string) corev1.PodSpec {
 func (r *ImagePopulatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolumeClaim{}).
-		Owns(&corev1.Pod{}).
 		Complete(r)
 }

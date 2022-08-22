@@ -247,12 +247,14 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 
 	//ToDo this should be async: wait until ready and put a new request in the queue
 	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
-		return "", fmt.Errorf("ceph client %s is not ready yet: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", nil
+		//		return "", fmt.Errorf("ceph client %s is not ready yet", client.ObjectKeyFromObject(cephClient))
 	}
 
 	secretName, found := cephClient.Status.Info["secretName"]
 	if !found {
-		return "", fmt.Errorf("failed to get secret name from ceph client %s status: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", nil
+		//return "", fmt.Errorf("failed to get secret name from ceph client %s status: %w", client.ObjectKeyFromObject(cephClient), err)
 	}
 
 	return secretName, nil
@@ -260,6 +262,11 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 
 func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *corev1.PersistentVolumeClaim) error {
 	defer log.V(2).Info("applySecretAndUpdateVolumeStatus done")
+
+	if secretName == "" {
+		return nil
+	}
+
 	cephClientSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookConfig.Namespace, Name: secretName}, cephClientSecret); err != nil {
 		return fmt.Errorf("unable to get secret: %w", err)
@@ -385,7 +392,8 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 
 	//ToDo this should be async: wait until ready and put a new request in the queue
 	if cephNs.Status == nil || cephNs.Status.Phase != rookv1.ConditionReady {
-		return "", fmt.Errorf("empty status found for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
+		return "", nil
+		//return "", fmt.Errorf("empty status found for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
 	}
 
 	clusterID, found := cephNs.Status.Info["clusterID"]
@@ -438,5 +446,7 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&rookv1.CephBlockPoolRadosNamespace{}).
+		Owns(&rookv1.CephClient{}).
 		Complete(r)
 }

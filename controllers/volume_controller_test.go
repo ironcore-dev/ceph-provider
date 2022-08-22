@@ -29,7 +29,7 @@ import (
 )
 
 var _ = Describe("VolumeReconciler", func() {
-	testNs, rookNs := SetupTest(ctx)
+	testNs, rookNs, _ := SetupTest(ctx)
 
 	var (
 		volumeClass *storagev1alpha1.VolumeClass
