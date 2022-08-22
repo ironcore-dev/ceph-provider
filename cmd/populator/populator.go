@@ -32,46 +32,18 @@ const (
 
 func main() {
 	var (
-		mode         string
-		image        string
-		storePath    string
-		httpEndpoint string
-		metricsPath  string
-		masterURL    string
-		kubeconfig   string
-		imageName    string
-		namespace    string
+		mode      string
+		image     string
+		storePath string
 	)
 	// Main arg
 	flag.StringVar(&mode, "mode", "", "Mode to run in (controller, populate)")
 	// Populate args
 	flag.StringVar(&image, "iamge", "", "Image location which the PVC should be populated with")
 	flag.StringVar(&storePath, "storePath", "/tmp", "Location of the local image store")
-	// Controller args
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
-	flag.StringVar(&masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
-	flag.StringVar(&imageName, "image-name", "", "Image to use for populating")
-	// Metrics args
-	flag.StringVar(&httpEndpoint, "http-endpoint", "", "The TCP network address where the HTTP server for diagnostics, including metrics and leader election health check, will listen (example: `:8080`). The default is empty string, which means the server is disabled.")
-	flag.StringVar(&metricsPath, "metrics-path", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
-	// Other args
-	flag.StringVar(&namespace, "namespace", "hello", "Namespace to deploy controller")
 	flag.Parse()
 
 	switch mode {
-	//case "controller":
-	//	const (
-	//		groupName  = "storage.api.onmetal.de"
-	//		apiVersion = "v1alpha1"
-	//		kind       = "Volume"
-	//		resource   = "volumes"
-	//	)
-	//	var (
-	//		gk  = schema.GroupKind{Group: groupName, Kind: kind}
-	//		gvr = schema.GroupVersionResource{Group: groupName, Version: apiVersion, Resource: resource}
-	//	)
-	//	populator_machinery.RunController(masterURL, kubeconfig, imageName, httpEndpoint, metricsPath,
-	//		namespace, prefix, gk, gvr, "", devicePath, getPopulatorPodArgs)
 	case "populate":
 		populate(storePath, image, devicePath)
 	default:

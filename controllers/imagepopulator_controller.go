@@ -17,6 +17,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
@@ -39,6 +41,9 @@ const (
 	populatorPodVolumeName  = "target"
 	populatorPvcPrefix      = "prime"
 	populatedFromAnnoSuffix = "populated-from"
+
+	pvcOwnerName      = "ceplhlet.onmetal.de/ownerPVCName"
+	pvcOwnerNamespace = "cephlet.onmetal.de/ownerPVCNamespace"
 )
 
 var (
@@ -54,6 +59,8 @@ type ImagePopulatorReconciler struct {
 	Prefix                 string
 }
 
+// Reconcile
+// ref: https://github.com/kubernetes-csi/lib-volume-populator/blob/master/populator-machinery/controller.go
 func (r *ImagePopulatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 	pvc := &corev1.PersistentVolumeClaim{}
@@ -139,9 +146,10 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
 	pod := &corev1.Pod{}
 	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
-	if err := r.Get(ctx, podKey, pod); !errors.IsNotFound(err) {
+	if err := r.Get(ctx, podKey, pod); err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
 	} else if errors.IsNotFound(err) {
+		// TODO: optimize not found case -> handling of nil in code below
 		pod = nil
 	}
 
@@ -149,7 +157,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	pvcPrimeName := fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID)
 	pvcPrime := &corev1.PersistentVolumeClaim{}
 	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
-	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); !errors.IsNotFound(err) {
+	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to get shadow PVC %s: %w", pvcPrimeKey, err)
 	} else if errors.IsNotFound(err) {
 		pvcPrime = nil
@@ -178,9 +186,17 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 			// Make the pod
 			pod = &corev1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Pod",
+					APIVersion: corev1.SchemeGroupVersion.String(),
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
 					Namespace: r.PopulatorNamespace,
+					Annotations: map[string]string{
+						pvcOwnerName:      pvc.Name,
+						pvcOwnerNamespace: pvc.Namespace,
+					},
 				},
 				Spec: makePopulatePodSpec(pvc.Name),
 			}
@@ -199,18 +215,27 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				pod.Spec.NodeName = nodeName
 			}
 
-			if err := r.Create(ctx, pod); err != nil {
+			if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
 				return ctrl.Result{}, fmt.Errorf("could not create populator pod: %w", err)
 			}
 
-			log.V(1).Info("Applied populator Pod", "Pod", podKey)
+			log.V(1).Info("Created populator Pod", "Pod", podKey)
 
 			// If PVC' doesn't exist yet, create it
 			if pvcPrime == nil {
+
 				pvcPrime = &corev1.PersistentVolumeClaim{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "PersistentVolumeClaim",
+						APIVersion: corev1.SchemeGroupVersion.String(),
+					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pvcPrimeName,
 						Namespace: r.PopulatorNamespace,
+						Annotations: map[string]string{
+							pvcOwnerName:      pvc.Name,
+							pvcOwnerNamespace: pvc.Namespace,
+						},
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -225,7 +250,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 					}
 				}
 
-				if err := r.Create(ctx, pvcPrime); err != nil {
+				if err := r.Patch(ctx, pvcPrime, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
 					return ctrl.Result{}, fmt.Errorf("could not create prime pvc %s: %w", pvcPrimeKey, err)
 				}
 
@@ -252,8 +277,10 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 		// Get PV
 		pv := &corev1.PersistentVolume{}
-		if err := r.Get(ctx, types.NamespacedName{Name: pvcPrime.Spec.VolumeName}, pv); !errors.IsNotFound(err) {
+		if err := r.Get(ctx, types.NamespacedName{Name: pvcPrime.Spec.VolumeName}, pv); err != nil && !errors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("failed to get pv for prime pvc %s: %w", pvcPrimeKey, err)
+		} else if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
 		}
 
 		// Examine the claimref for the PV and see if it's bound to the correct PVC
@@ -261,25 +288,17 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		claimRef := pv.Spec.ClaimRef
 		if claimRef.Name != pvc.Name || claimRef.Namespace != pvc.Namespace || claimRef.UID != pvc.UID {
 			// Make new PV with strategic patch values to perform the PV rebind
-			patchPv := corev1.PersistentVolume{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        pv.Name,
-					Annotations: map[string]string{},
-				},
-				Spec: corev1.PersistentVolumeSpec{
-					ClaimRef: &corev1.ObjectReference{
-						Namespace:       pvc.Namespace,
-						Name:            pvc.Name,
-						UID:             pvc.UID,
-						ResourceVersion: pvc.ResourceVersion,
-					},
-				},
+			pv.Spec.ClaimRef = &corev1.ObjectReference{
+				Namespace:       pvc.Namespace,
+				Name:            pvc.Name,
+				UID:             pvc.UID,
+				ResourceVersion: pvc.ResourceVersion,
 			}
 			populatedFromAnno := r.Prefix + "/" + populatedFromAnnoSuffix
-			patchPv.Annotations[populatedFromAnno] = pvc.Namespace + "/" + dataSourceRef.Name
+			pv.Annotations = map[string]string{populatedFromAnno: pvc.Namespace + "/" + dataSourceRef.Name}
 
 			if err := r.Patch(ctx, pv, client.MergeFrom(pvBase)); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to patch pv %s: %w", client.ObjectKeyFromObject(pv), err)
+				return ctrl.Result{}, fmt.Errorf("failed to patch claimref of pv %s: %w", client.ObjectKeyFromObject(pv), err)
 			}
 
 			// Don't start cleaning up yet -- we need to bind controller to acknowledge
@@ -344,8 +363,71 @@ func makePopulatePodSpec(pvcName string) corev1.PodSpec {
 	}
 }
 
+func (r *ImagePopulatorReconciler) enqueuePVCsFromPV() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		pv := obj.(*corev1.PersistentVolume)
+
+		if pv.Spec.ClaimRef == nil {
+			return nil
+		}
+
+		return []ctrl.Request{{NamespacedName: types.NamespacedName{
+			Name:      pv.Spec.ClaimRef.Name,
+			Namespace: pv.Spec.ClaimRef.Namespace}}}
+	})
+}
+
+func (r *ImagePopulatorReconciler) enqueuePVCFromPrimePVC() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		pvc := obj.(*corev1.PersistentVolumeClaim)
+
+		pvcName, ok := pvc.Annotations[pvcOwnerName]
+		if !ok {
+			return nil
+		}
+		pvcNamespace, ok := pvc.Annotations[pvcOwnerNamespace]
+		if !ok {
+			return nil
+		}
+		return []ctrl.Request{{NamespacedName: types.NamespacedName{
+			Namespace: pvcNamespace,
+			Name:      pvcName,
+		}}}
+	})
+}
+
+func (r *ImagePopulatorReconciler) enqueuePVCfromPlaceholderPod() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		pod := obj.(*corev1.Pod)
+
+		pvcName, ok := pod.Annotations[pvcOwnerName]
+		if !ok {
+			return nil
+		}
+		pvcNamespace, ok := pod.Annotations[pvcOwnerNamespace]
+		if !ok {
+			return nil
+		}
+		return []ctrl.Request{{NamespacedName: types.NamespacedName{
+			Namespace: pvcNamespace,
+			Name:      pvcName,
+		}}}
+	})
+}
+
 func (r *ImagePopulatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolumeClaim{}).
+		Watches(
+			&source.Kind{Type: &corev1.Pod{}},
+			r.enqueuePVCfromPlaceholderPod()).
+		Watches(
+			&source.Kind{Type: &corev1.PersistentVolume{}},
+			r.enqueuePVCsFromPV(),
+		).
+		Watches(
+			&source.Kind{Type: &corev1.PersistentVolumeClaim{}},
+			r.enqueuePVCFromPrimePVC(),
+		).
 		Complete(r)
 }

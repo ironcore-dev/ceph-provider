@@ -103,6 +103,7 @@ var _ = BeforeSuite(func() {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
+	// as the volume population is an alpha feature, we need to enable the corresponding feature gate
 	testEnv.ControlPlane.GetAPIServer().Configure().Set("feature-gates", "AnyVolumeDataSource=true")
 
 	testEnvExt = &envtestutils.EnvironmentExtensions{
