@@ -21,6 +21,13 @@ on:
 
 jobs:
   buildAndPush:
+    strategy:
+      matrix:
+        image:
+          - name: cephlet
+            target: manager
+          - name: image-populator
+            target: populator
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
@@ -28,7 +35,7 @@ jobs:
         id: meta
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/cephlet
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
           tags: |
             type=semver,pattern={{version}}
             type=schedule
