@@ -85,7 +85,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --target cephlet -t ${CONTROLLER_IMG} .
+	docker build --target manager -t ${CONTROLLER_IMG} .
 	docker build --target populator -t ${POPULATOR_IMG} .
 
 .PHONY: docker-push
