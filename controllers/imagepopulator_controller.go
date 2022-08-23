@@ -59,7 +59,10 @@ type ImagePopulatorReconciler struct {
 	Prefix                 string
 }
 
-// Reconcile
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// The main reconciliation logic is derived from the Kubernetes populator machinery and adapted to use the
+// controller-runtime controller flow.
 // ref: https://github.com/kubernetes-csi/lib-volume-populator/blob/master/populator-machinery/controller.go
 func (r *ImagePopulatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
@@ -181,7 +184,6 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 			// Calculate the args for the populator pod
 			var args []string
-			args = append(args, "--mode=populate")
 			args = append(args, "--image="+volume.Spec.Image)
 
 			// Make the pod
