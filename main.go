@@ -22,7 +22,7 @@ import (
 
 	"github.com/onmetal/cephlet/controllers"
 	"github.com/onmetal/cephlet/pkg/rook"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	flag "github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"

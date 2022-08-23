@@ -23,14 +23,17 @@ import (
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	"github.com/onmetal/onmetal-api/equality"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const (
@@ -110,7 +113,7 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, fmt.Errorf("failed to apply ceph volume pool %s: %w", client.ObjectKeyFromObject(rookPool), err)
 	}
 
-	return r.patchVolumePoolStatus(ctx, pool)
+	return r.patchVolumePoolStatus(ctx, pool, rookPool)
 }
 
 func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) (ctrl.Result, error) {
@@ -146,7 +149,7 @@ func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev
 		return nil, fmt.Errorf("error listing machine classes: %w", err)
 	}
 
-	availableVolumeClasses := make([]corev1.LocalObjectReference, 0, len(list.Items))
+	var availableVolumeClasses []corev1.LocalObjectReference
 	for _, volumeClass := range list.Items {
 		availableVolumeClasses = append(availableVolumeClasses, corev1.LocalObjectReference{Name: volumeClass.Name})
 	}
@@ -156,15 +159,10 @@ func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev
 	return availableVolumeClasses, nil
 }
 
-func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *storagev1alpha1.VolumePool) (ctrl.Result, error) {
+func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *storagev1alpha1.VolumePool, rookPool *rookv1.CephBlockPool) (ctrl.Result, error) {
 	availableVolumeClasses, err := r.gatherVolumeClasses(ctx)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to gather available volume classes for volume pool: %w", err)
-	}
-
-	rookPool := &rookv1.CephBlockPool{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pool.Name, Namespace: r.RookConfig.Namespace}, rookPool); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch rook pool: %w", err)
 	}
 
 	poolBase := pool.DeepCopy()
@@ -199,7 +197,16 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// TODO: setup watch for VolumeClasses in order to reconcile availableVolumeClasses in Pool Status
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&storagev1alpha1.VolumePool{}).
+		//TODO: remove once API Server is fixed
+		For(&storagev1alpha1.VolumePool{}, builder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				old := updateEvent.ObjectOld.(*storagev1alpha1.VolumePool)
+				new := updateEvent.ObjectNew.(*storagev1alpha1.VolumePool)
+
+				return !equality.Semantic.DeepEqual(old.Spec, new.Spec)
+			},
+		})).
+		//TODO: check if we get called once the CephBlockPool is being changed
 		Owns(&rookv1.CephBlockPool{}).
 		Complete(r)
 }

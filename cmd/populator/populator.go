@@ -36,7 +36,7 @@ func main() {
 	)
 
 	// Populate args
-	flag.StringVar(&image, "iamge", "", "Image location which the PVC should be populated with")
+	flag.StringVar(&image, "image", "", "Image location which the PVC should be populated with")
 	flag.StringVar(&storePath, "storePath", "/tmp", "Location of the local image store")
 	flag.Parse()
 
@@ -45,6 +45,7 @@ func main() {
 
 func populate(storePath string, ref string, devicePath string) {
 	ctx := ctrl.SetupSignalHandler()
+	//TODO: check if logger is there
 	log := ctrl.LoggerFrom(ctx)
 
 	reg, err := remote.DockerRegistry(nil)

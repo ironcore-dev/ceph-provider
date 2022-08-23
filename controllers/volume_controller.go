@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
-	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -91,10 +91,10 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 
 func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Volume")
-
-	if err := clientutils.PatchAddFinalizer(ctx, r.Client, volume, volumeFinalizer); err != nil {
-		return ctrl.Result{}, err
-	}
+	//TODO: check if needed
+	//if err := clientutils.PatchAddFinalizer(ctx, r.Client, volume, volumeFinalizer); err != nil {
+	//	return ctrl.Result{}, err
+	//}
 
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
 	switch {
@@ -125,6 +125,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 }
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
+	//TODO: handle deletion of CephClient and CephRadosNamespace
 	return ctrl.Result{}, nil
 }
 
@@ -194,8 +195,17 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
+			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
 			StorageClassName: &storageClass,
 		},
+	}
+
+	if volume.Spec.Image != "" {
+		pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+			APIGroup: pointer.StringPtr(storagev1alpha1.SchemeGroupVersion.String()),
+			Kind:     "Volume",
+			Name:     volume.Name,
+		}
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
@@ -204,6 +214,11 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 
 	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return nil, err
+	}
+
+	//TODO: requeue if PVC is not bound
+	if pvc.Status.Phase != corev1.ClaimBound {
+		return nil, fmt.Errorf("pvc is not in ClaimBound state yet")
 	}
 
 	// TODO: do proper status reporting
