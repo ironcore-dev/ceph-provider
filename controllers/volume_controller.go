@@ -96,8 +96,11 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, err
 	}
 
-	storageClass, err := r.applyStorageClass(ctx, log, volume)
-	if err != nil {
+	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
+	switch {
+	case requeue:
+		return ctrl.Result{Requeue: true}, nil
+	case err != nil:
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
 	}
 
@@ -106,8 +109,11 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
 
-	secretName, err := r.applyCephClient(ctx, log, volume)
-	if err != nil {
+	secretName, requeue, err := r.applyCephClient(ctx, log, volume)
+	switch {
+	case requeue:
+		return ctrl.Result{}, nil
+	case err != nil:
 		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
 	}
 
@@ -211,11 +217,11 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	return pvc, nil
 }
 
-func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, error) {
+func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
 	ns := &corev1.Namespace{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns)
 	if err != nil {
-		return "", fmt.Errorf("failed to get namespace for volume: %w", err)
+		return "", false, fmt.Errorf("failed to get namespace for volume: %w", err)
 	}
 
 	cephClient := &rookv1.CephClient{
@@ -238,24 +244,24 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 	}
 
 	if err := ctrl.SetControllerReference(ns, cephClient, r.Scheme); err != nil {
-		return "", fmt.Errorf("failed to set ownerreference for ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", false, fmt.Errorf("failed to set ownerreference for ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
 	}
 
 	if err := r.Patch(ctx, cephClient, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", fmt.Errorf("failed to patch ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", false, fmt.Errorf("failed to patch ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
 	}
 
-	//ToDo this should be async: wait until ready and put a new request in the queue
 	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
-		return "", fmt.Errorf("ceph client %s is not ready yet", client.ObjectKeyFromObject(cephClient))
+		log.V(1).Info("ceph client is not ready yet", "client", client.ObjectKeyFromObject(cephClient))
+		return "", true, nil
 	}
 
 	secretName, found := cephClient.Status.Info["secretName"]
 	if !found {
-		return "", fmt.Errorf("failed to get secret name from ceph client %s status: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", false, fmt.Errorf("failed to get secret name from ceph client %s status: %w", client.ObjectKeyFromObject(cephClient), err)
 	}
 
-	return secretName, nil
+	return secretName, false, nil
 }
 
 func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *corev1.PersistentVolumeClaim) error {
@@ -355,10 +361,10 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 	return monitors, nil
 }
 
-func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, error) {
+func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
 	ns := &corev1.Namespace{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	cephNs := &rookv1.CephBlockPoolRadosNamespace{
@@ -376,21 +382,21 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 	}
 
 	if err := ctrl.SetControllerReference(ns, cephNs, r.Scheme); err != nil {
-		return "", fmt.Errorf("failed to set controller reference for volume: %w", err)
+		return "", false, fmt.Errorf("failed to set controller reference for volume: %w", err)
 	}
 
 	if err := r.Patch(ctx, cephNs, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", fmt.Errorf("failed to patch cephNs for volume: %w", err)
+		return "", false, fmt.Errorf("failed to patch cephNs for volume: %w", err)
 	}
 
-	//ToDo this should be async: wait until ready and put a new request in the queue
 	if cephNs.Status == nil || cephNs.Status.Phase != rookv1.ConditionReady {
-		return "", fmt.Errorf("empty status found for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
+		log.V(1).Info("empty cephNS status found", "cephNS", client.ObjectKeyFromObject(cephNs))
+		return "", true, nil
 	}
 
 	clusterID, found := cephNs.Status.Info["clusterID"]
 	if !found {
-		return "", fmt.Errorf("no clusterId in status for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
+		return "", false, fmt.Errorf("no clusterId in status for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
 	}
 
 	storageClass := &storagev1.StorageClass{
@@ -421,16 +427,16 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 	}
 
 	if err := ctrl.SetControllerReference(ns, storageClass, r.Scheme); err != nil {
-		return "", fmt.Errorf("failed to set controller reference for storageClass %s: %w", client.ObjectKeyFromObject(storageClass), err)
+		return "", false, fmt.Errorf("failed to set controller reference for storageClass %s: %w", client.ObjectKeyFromObject(storageClass), err)
 	}
 
 	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", fmt.Errorf("failed to patch storageClass %s for volume %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(volume), err)
+		return "", false, fmt.Errorf("failed to patch storageClass %s for volume %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(volume), err)
 	}
 
 	log.V(1).Info("Applied StorageClass")
 
-	return storageClass.Name, nil
+	return storageClass.Name, false, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
