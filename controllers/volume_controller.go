@@ -26,7 +26,6 @@ import (
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
-	"github.com/pkg/errors"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -146,7 +145,7 @@ func generateWWN() (string, error) {
 	// use UUIDv4, because this will generate good random string
 	wwnUUID, err := uuid.NewRandom()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create WWN, cannot generate UUIDv4")
+		return "", fmt.Errorf("failed to generate UUIDv4 for WWN: %w", err)
 	}
 
 	// append hex string without "-"
@@ -248,7 +247,7 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 
 	//ToDo this should be async: wait until ready and put a new request in the queue
 	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
-		return "", fmt.Errorf("ceph client %s is not ready yet: %w", client.ObjectKeyFromObject(cephClient), err)
+		return "", fmt.Errorf("ceph client %s is not ready yet", client.ObjectKeyFromObject(cephClient))
 	}
 
 	secretName, found := cephClient.Status.Info["secretName"]
@@ -439,5 +438,7 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&rookv1.CephBlockPoolRadosNamespace{}).
+		Owns(&rookv1.CephClient{}).
 		Complete(r)
 }

@@ -26,7 +26,8 @@ import (
 )
 
 var _ = Describe("VolumePoolReconciler", func() {
-	testNs, rookNs := SetupTest(ctx)
+	testNs, rookNs, _ := SetupTest(ctx)
+
 	When("is started", func() {
 		It("should announce a VolumePool", func() {
 			By("checking that a VolumePool has been created")

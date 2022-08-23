@@ -15,6 +15,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Copy the go source
 COPY main.go main.go
+COPY cmd/ cmd/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 
@@ -24,13 +25,21 @@ ARG TARGETARCH
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o manager main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o manager main.go && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o populator ./cmd/populator/populator.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static:nonroot as manager
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
+
+FROM gcr.io/distroless/static:nonroot as populator
+WORKDIR /
+COPY --from=builder /workspace/populator .
+USER 65532:65532
+
+ENTRYPOINT ["/populator"]
