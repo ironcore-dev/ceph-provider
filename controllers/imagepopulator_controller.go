@@ -17,6 +17,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
@@ -35,15 +36,17 @@ import (
 
 const (
 	annSelectedNode         = "volume.kubernetes.io/selected-node"
-	populatorPodPrefix      = "populate"
+	populatorPodPrefix      = "populate-"
+	populatorPvcPrefix      = "prime-"
 	pvcFinalizer            = "cephlet.onmetal.de/populate-target-protection"
 	populatorContainerName  = "populate"
 	populatorPodVolumeName  = "target"
-	populatorPvcPrefix      = "prime"
 	populatedFromAnnoSuffix = "populated-from"
 
 	pvcOwnerName      = "ceplhlet.onmetal.de/ownerPVCName"
 	pvcOwnerNamespace = "cephlet.onmetal.de/ownerPVCNamespace"
+
+	metadataUIDFieldName = ".metadata.uid"
 )
 
 var (
@@ -59,7 +62,10 @@ type ImagePopulatorReconciler struct {
 	Prefix                 string
 }
 
-// Reconcile
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// The main reconciliation logic is derived from the Kubernetes populator machinery and adapted to use the
+// controller-runtime controller flow.
 // ref: https://github.com/kubernetes-csi/lib-volume-populator/blob/master/populator-machinery/controller.go
 func (r *ImagePopulatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
@@ -143,7 +149,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	}
 
 	// Look for the populator pod
-	podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
+	podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 	pod := &corev1.Pod{}
 	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, podKey, pod); err != nil && !errors.IsNotFound(err) {
@@ -154,7 +160,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	}
 
 	// Look for PVC'
-	pvcPrimeName := fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID)
+	pvcPrimeName := generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID)
 	pvcPrime := &corev1.PersistentVolumeClaim{}
 	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); err != nil && !errors.IsNotFound(err) {
@@ -181,7 +187,6 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 			// Calculate the args for the populator pod
 			var args []string
-			args = append(args, "--mode=populate")
 			args = append(args, "--image="+volume.Spec.Image)
 
 			// Make the pod
@@ -383,57 +388,84 @@ func (r *ImagePopulatorReconciler) enqueuePVCsFromPV() handler.EventHandler {
 	})
 }
 
-func (r *ImagePopulatorReconciler) enqueuePVCFromPrimePVC() handler.EventHandler {
+func (r *ImagePopulatorReconciler) enqueuePVCFromPrimePVC(ctx context.Context, log logr.Logger) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
 		pvc := obj.(*corev1.PersistentVolumeClaim)
+		log = log.WithValues("PVC", client.ObjectKeyFromObject(pvc))
 
-		pvcName, ok := pvc.Annotations[pvcOwnerName]
-		if !ok {
+		pvcUID := r.getUIDFromPrefixedName(pvc.Name, populatorPvcPrefix)
+
+		pvcList := &corev1.PersistentVolumeClaimList{}
+		if err := r.List(ctx, pvcList, &client.MatchingFields{metadataUIDFieldName: pvcUID}); err != nil {
+			log.Error(err, "failed to list PVCs")
 			return nil
 		}
-		pvcNamespace, ok := pvc.Annotations[pvcOwnerNamespace]
-		if !ok {
-			return nil
+
+		res := make([]ctrl.Request, 0, len(pvcList.Items))
+		for _, pvc := range pvcList.Items {
+			res = append(res, ctrl.Request{NamespacedName: types.NamespacedName{
+				Namespace: pvc.Namespace,
+				Name:      pvc.Name,
+			}})
 		}
-		return []ctrl.Request{{NamespacedName: types.NamespacedName{
-			Namespace: pvcNamespace,
-			Name:      pvcName,
-		}}}
+		return res
 	})
 }
 
-func (r *ImagePopulatorReconciler) enqueuePVCfromPlaceholderPod() handler.EventHandler {
+func (r *ImagePopulatorReconciler) enqueuePVCfromPlaceholderPod(ctx context.Context, log logr.Logger) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
 		pod := obj.(*corev1.Pod)
+		log = log.WithValues("Pod", client.ObjectKeyFromObject(pod))
 
-		pvcName, ok := pod.Annotations[pvcOwnerName]
-		if !ok {
+		pvcUID := r.getUIDFromPrefixedName(pod.Name, populatorPodPrefix)
+
+		pvcList := &corev1.PersistentVolumeClaimList{}
+		if err := r.List(ctx, pvcList, &client.MatchingFields{metadataUIDFieldName: pvcUID}); err != nil {
+			log.Error(err, "failed to list PVCs")
 			return nil
 		}
-		pvcNamespace, ok := pod.Annotations[pvcOwnerNamespace]
-		if !ok {
-			return nil
+
+		res := make([]ctrl.Request, 0, len(pvcList.Items))
+		for _, pvc := range pvcList.Items {
+			res = append(res, ctrl.Request{NamespacedName: types.NamespacedName{
+				Namespace: pvc.Namespace,
+				Name:      pvc.Name,
+			}})
 		}
-		return []ctrl.Request{{NamespacedName: types.NamespacedName{
-			Namespace: pvcNamespace,
-			Name:      pvcName,
-		}}}
+		return res
 	})
+}
+
+func (r *ImagePopulatorReconciler) getUIDFromPrefixedName(name, prefix string) string {
+	return strings.TrimPrefix(name, prefix)
+}
+
+func generateNameFromPrefixAndUID(prefix string, uid types.UID) string {
+	return fmt.Sprintf("%s%s", prefix, uid)
 }
 
 func (r *ImagePopulatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.Background()
+	log := ctrl.Log.WithName("imagepopulator").WithName("setup")
+
+	if err := mgr.GetCache().IndexField(ctx, &corev1.PersistentVolumeClaim{}, metadataUIDFieldName, func(obj client.Object) []string {
+		return []string{string(obj.GetUID())}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolumeClaim{}).
 		Watches(
 			&source.Kind{Type: &corev1.Pod{}},
-			r.enqueuePVCfromPlaceholderPod()).
+			r.enqueuePVCfromPlaceholderPod(ctx, log)).
 		Watches(
 			&source.Kind{Type: &corev1.PersistentVolume{}},
 			r.enqueuePVCsFromPV(),
 		).
 		Watches(
 			&source.Kind{Type: &corev1.PersistentVolumeClaim{}},
-			r.enqueuePVCFromPrimePVC(),
+			r.enqueuePVCFromPrimePVC(ctx, log),
 		).
 		Complete(r)
 }

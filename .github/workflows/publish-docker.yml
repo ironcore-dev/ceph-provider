@@ -26,7 +26,7 @@ jobs:
         image:
           - name: cephlet
             target: manager
-          - name: image-populator
+          - name: populator
             target: populator
     runs-on: self-hosted
     steps:

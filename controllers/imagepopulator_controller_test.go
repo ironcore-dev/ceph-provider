@@ -15,8 +15,6 @@
 package controllers
 
 import (
-	"fmt"
-
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -34,8 +32,9 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 	testNs, _, populatorNS := SetupTest(ctx)
 
 	var (
-		volumeClass *storagev1alpha1.VolumeClass
-		apiGroup    = storagev1alpha1.SchemeGroupVersion.String()
+		volumeClass       *storagev1alpha1.VolumeClass
+		storagev1ApiGroup = storagev1alpha1.SchemeGroupVersion.String()
+		podApiGroup       = corev1.SchemeGroupVersion.String()
 	)
 
 	BeforeEach(func() {
@@ -51,11 +50,22 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 				GenerateName: "pop-",
 			},
 			SourceKind: metav1.GroupKind{
-				Group: apiGroup,
+				Group: storagev1ApiGroup,
 				Kind:  "Volume",
 			},
 		}
 		Expect(k8sClient.Create(ctx, volumePopulator)).To(Succeed())
+
+		volumePopulatorPod := &popv1beta1.VolumePopulator{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "pop-",
+			},
+			SourceKind: metav1.GroupKind{
+				Group: podApiGroup,
+				Kind:  "Pod",
+			},
+		}
+		Expect(k8sClient.Create(ctx, volumePopulatorPod)).To(Succeed())
 	})
 
 	It("should create a populator pod for a given PVC, create a shadow PVC, mock a successful run and reassign the PV claim", func() {
@@ -108,7 +118,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,
 				DataSourceRef: &corev1.TypedLocalObjectReference{
-					APIGroup: &apiGroup,
+					APIGroup: &storagev1ApiGroup,
 					Kind:     "Volume",
 					Name:     vol.Name,
 				},
@@ -124,7 +134,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedLocalObjectReference{
-				APIGroup: &apiGroup,
+				APIGroup: &storagev1ApiGroup,
 				Kind:     "Volume",
 				Name:     vol.Name,
 			}))
@@ -143,7 +153,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		pvcPrime := &corev1.PersistentVolumeClaim{}
 		pvcPrimeKey := types.NamespacedName{
 			Namespace: populatorNS.Name,
-			Name:      fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID),
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
 		}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
@@ -160,7 +170,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 
 		By("ensuring that the populator pod has been created")
 		populatorPod := &corev1.Pod{}
-		podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
@@ -170,7 +180,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(populatorPod.Spec.Containers[0]).To(Equal(corev1.Container{
 				Name:            populatorContainerName,
 				Image:           defaultPopulatorImage,
-				Args:            []string{"--mode=populate", "--image=" + vol.Spec.Image},
+				Args:            []string{"--image=" + vol.Spec.Image},
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				VolumeDevices: []corev1.VolumeDevice{
 					{
@@ -244,6 +254,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(pv.Spec.ClaimRef.Namespace).To(Equal(pvc.Namespace))
 			g.Expect(pv.Spec.ClaimRef.Name).To(Equal(pvc.Name))
 			g.Expect(pv.Spec.ClaimRef.UID).To(Equal(pvc.UID))
+			g.Expect(pv.Annotations).To(ContainElement(pvc.Namespace + "/" + pvc.Spec.DataSourceRef.Name))
 		}).Should(Succeed())
 
 		By("patching the shadow pvc claim status to Lost")
@@ -256,7 +267,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		pvc.Spec.VolumeName = pv.Name
 		Expect(k8sClient.Patch(ctx, pvc, client.MergeFrom(pvcBase))).To(Succeed())
 
-		By("ensuring that the populator pod has a deletion timestamp")
+		By("ensuring that the populator pod has been deleted and can not be found")
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
 			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
@@ -279,6 +290,183 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			g.Expect(pvc.Finalizers).To(Not(ContainElement(pvcFinalizer)))
+		}).Should(Succeed())
+	})
+
+	It("should ignore datasource refs which are not Volumes", func() {
+		By("creating a storageclass")
+		bindingMode := storagev1.VolumeBindingWaitForFirstConsumer
+		storageClass := &storagev1.StorageClass{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StorageClass",
+				APIVersion: "storage.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "sc-",
+			},
+			Provisioner:       "my-driver",
+			VolumeBindingMode: &bindingMode,
+		}
+		Expect(k8sClient.Create(ctx, storageClass)).To(Succeed())
+
+		By("creating a pvc")
+		mode := corev1.PersistentVolumeBlock
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "pvc-",
+				Namespace:    testNs.Name,
+				Annotations:  map[string]string{annSelectedNode: "node"},
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+				},
+				StorageClassName: &storageClass.Name,
+				VolumeMode:       &mode,
+				DataSourceRef: &corev1.TypedLocalObjectReference{
+					APIGroup: &podApiGroup,
+					Kind:     "Pod",
+					Name:     "my-pod",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+
+		By("ensuring that the pvc has no finalizer set")
+		pvcKey := types.NamespacedName{Name: pvc.Name, Namespace: testNs.Name}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, pvcKey, pvc)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(pvc.Finalizers).NotTo(ContainElement(pvcFinalizer))
+		}).Should(Succeed())
+
+		By("ensuring that the shadow pvc is not being created")
+		pvcPrime := &corev1.PersistentVolumeClaim{}
+		pvcPrimeKey := types.NamespacedName{
+			Namespace: populatorNS.Name,
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
+		}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
+		}).Should(Succeed())
+
+		By("ensuring that the populator pod can not be found")
+		populatorPod := &corev1.Pod{}
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
+		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
+		}).Should(Succeed())
+	})
+
+	It("should ignore PVCs which are not block devices", func() {
+		By("creating a volume")
+		volumeSize := "1Gi"
+		vol := &storagev1alpha1.Volume{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "volume-",
+				Namespace:    testNs.Name,
+			},
+			Spec: storagev1alpha1.VolumeSpec{
+				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
+				Resources: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(volumeSize),
+				},
+				Image: "my-image",
+			},
+		}
+		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+
+		By("creating a storageclass")
+		bindingMode := storagev1.VolumeBindingWaitForFirstConsumer
+		storageClass := &storagev1.StorageClass{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "StorageClass",
+				APIVersion: "storage.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "sc-",
+			},
+			Provisioner:       "my-driver",
+			VolumeBindingMode: &bindingMode,
+		}
+		Expect(k8sClient.Create(ctx, storageClass)).To(Succeed())
+
+		By("creating a pvc")
+		mode := corev1.PersistentVolumeFilesystem
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "pvc-",
+				Namespace:    testNs.Name,
+				Annotations:  map[string]string{annSelectedNode: "node"},
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1.ResourceStorage]},
+				},
+				StorageClassName: &storageClass.Name,
+				VolumeMode:       &mode,
+				DataSourceRef: &corev1.TypedLocalObjectReference{
+					APIGroup: &storagev1ApiGroup,
+					Kind:     "Volume",
+					Name:     vol.Name,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+
+		By("ensuring that the pvc has a correct datasource ref")
+		pvcKey := types.NamespacedName{Name: pvc.Name, Namespace: testNs.Name}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, pvcKey, pvc)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedLocalObjectReference{
+				APIGroup: &storagev1ApiGroup,
+				Kind:     "Volume",
+				Name:     vol.Name,
+			}))
+		}).Should(Succeed())
+
+		By("ensuring that the pvc has no finalizer")
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, pvcKey, pvc)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(pvc.Finalizers).To(Not(ContainElement(pvcFinalizer)))
+		}).Should(Succeed())
+
+		By("ensuring that the shadow pvc is not being created")
+		pvcPrime := &corev1.PersistentVolumeClaim{}
+		pvcPrimeKey := types.NamespacedName{
+			Namespace: populatorNS.Name,
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
+		}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
+		}).Should(Succeed())
+
+		By("ensuring that the populator pod can not be found")
+		populatorPod := &corev1.Pod{}
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
+		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
+			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
 		}).Should(Succeed())
 	})
 })
