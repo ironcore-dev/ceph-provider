@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
@@ -52,6 +53,10 @@ const (
 	volumePoolName        = "my-pool"
 	volumePoolProviderID  = "custom://pool"
 	volumePoolReplication = 3
+
+	defaultDevicePath     = "/dev/block"
+	defaultPopulatorImage = "populator-image"
+	defaultPrefix         = "my-prefix"
 )
 
 var (
@@ -91,11 +96,15 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
+		//AttachControlPlaneOutput: true,
 		CRDDirectoryPaths: []string{
 			modutils.Dir("github.com/rook/rook", "deploy", "examples", "crds.yaml"),
+			modutils.Dir("github.com/kubernetes-csi/volume-data-source-validator/client", "config", "crd", "populator.storage.k8s.io_volumepopulators.yaml"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
+	// as the volume population is an alpha feature, we need to enable the corresponding feature gate
+	testEnv.ControlPlane.GetAPIServer().Configure().Set("feature-gates", "AnyVolumeDataSource=true")
 
 	testEnvExt = &envtestutils.EnvironmentExtensions{
 		APIServiceDirectoryPaths: []string{
@@ -112,6 +121,7 @@ var _ = BeforeSuite(func() {
 
 	Expect(rookv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(storagev1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(popv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// Init package-level k8sClient
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -135,12 +145,13 @@ var _ = BeforeSuite(func() {
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 })
 
-func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
+func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *corev1.Namespace) {
 	var (
 		cancel context.CancelFunc
 	)
 	testNamespace := &corev1.Namespace{}
 	rookNamespace := &corev1.Namespace{}
+	populatorNamespace := &corev1.Namespace{}
 	BeforeEach(func() {
 		var mgrCtx context.Context
 		mgrCtx, cancel = context.WithCancel(ctx)
@@ -149,15 +160,21 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 				GenerateName: "testns-",
 			},
 		}
-		err := k8sClient.Create(ctx, testNamespace)
-		Expect(err).To(Succeed(), "failed to create test namespace")
+		Expect(k8sClient.Create(ctx, testNamespace)).To(Succeed(), "failed to create test namespace")
+
+		*populatorNamespace = corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "populator-",
+			},
+		}
+		Expect(k8sClient.Create(ctx, populatorNamespace)).To(Succeed(), "failed to create populator namespace")
 
 		*rookNamespace = corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "rookns-",
 			},
 		}
-		Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create test namespace")
+		Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create rook namespace")
 
 		rookConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -201,6 +218,15 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 			RookConfig:            rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
+		Expect((&ImagePopulatorReconciler{
+			Client:                 k8sManager.GetClient(),
+			Scheme:                 k8sManager.GetScheme(),
+			PopulatorImageName:     defaultPopulatorImage,
+			PopulatorPodDevicePath: defaultDevicePath,
+			PopulatorNamespace:     populatorNamespace.Name,
+			Prefix:                 defaultPrefix,
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
 		go func() {
 			Expect(k8sManager.Start(mgrCtx)).To(Succeed(), "failed to start manager")
 		}()
@@ -210,7 +236,8 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace) {
 		cancel()
 		Expect(k8sClient.Delete(ctx, testNamespace)).To(Succeed(), "failed to delete test namespace")
 		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete rook namespace")
+		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete populator namespace")
 	})
 
-	return testNamespace, rookNamespace
+	return testNamespace, rookNamespace, populatorNamespace
 }

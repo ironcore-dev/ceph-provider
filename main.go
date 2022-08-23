@@ -60,6 +60,11 @@ func main() {
 	var volumePoolLabels map[string]string
 	var volumePoolAnnotations map[string]string
 
+	var populatorImage string
+	var populatorDevicePath string
+	var populatorNamespace string
+	var populatorPrefix string
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -71,6 +76,12 @@ func main() {
 	flag.StringToStringVar(&volumeClassSelector, "volume-class-selector", nil, "Selector for volume classes to report as available.")
 	flag.StringToStringVar(&volumePoolLabels, "volume-pool-labels", nil, "Labels to apply to the volume pool upon startup.")
 	flag.StringToStringVar(&volumePoolAnnotations, "volume-pool-annotations", nil, "Annotations to apply to the volume pool upon startup.")
+
+	// image populator
+	flag.StringVar(&populatorImage, "populator-image", "", "Container image of the populator pod.")
+	flag.StringVar(&populatorDevicePath, "populator-device-path", "/dev/block", "Device path presented in the populator pod.")
+	flag.StringVar(&populatorNamespace, "populator-namespace", "populator-system", "Namespace for the populator resources.")
+	flag.StringVar(&populatorPrefix, "populator-prefix", "populator", "Prefix to use for populator resources.")
 
 	rookConfig := &rook.Config{}
 	flag.StringVar(&rookConfig.ClusterId, "rook-cluster-id", rook.ClusterIdDefaultValue, "rook ceph cluster ID")
@@ -130,6 +141,17 @@ func main() {
 		RookConfig:            rookConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VolumePool")
+		os.Exit(1)
+	}
+	if err = (&controllers.ImagePopulatorReconciler{
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		PopulatorImageName:     populatorImage,
+		PopulatorPodDevicePath: populatorDevicePath,
+		PopulatorNamespace:     populatorNamespace,
+		Prefix:                 populatorPrefix,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ImagePopulator")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
