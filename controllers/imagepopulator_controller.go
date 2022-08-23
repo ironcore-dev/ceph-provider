@@ -43,9 +43,6 @@ const (
 	populatorPodVolumeName  = "target"
 	populatedFromAnnoSuffix = "populated-from"
 
-	pvcOwnerName      = "ceplhlet.onmetal.de/ownerPVCName"
-	pvcOwnerNamespace = "cephlet.onmetal.de/ownerPVCNamespace"
-
 	metadataUIDFieldName = ".metadata.uid"
 )
 
@@ -198,10 +195,6 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
 					Namespace: r.PopulatorNamespace,
-					Annotations: map[string]string{
-						pvcOwnerName:      pvc.Name,
-						pvcOwnerNamespace: pvc.Namespace,
-					},
 				},
 				Spec: makePopulatePodSpec(pvc.Name),
 			}
@@ -237,10 +230,6 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pvcPrimeName,
 						Namespace: r.PopulatorNamespace,
-						Annotations: map[string]string{
-							pvcOwnerName:      pvc.Name,
-							pvcOwnerNamespace: pvc.Namespace,
-						},
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
