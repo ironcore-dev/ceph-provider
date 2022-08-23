@@ -15,8 +15,6 @@
 package controllers
 
 import (
-	"fmt"
-
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -155,7 +153,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		pvcPrime := &corev1.PersistentVolumeClaim{}
 		pvcPrimeKey := types.NamespacedName{
 			Namespace: populatorNS.Name,
-			Name:      fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID),
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
 		}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
@@ -172,7 +170,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 
 		By("ensuring that the populator pod has been created")
 		populatorPod := &corev1.Pod{}
-		podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
@@ -256,6 +254,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(pv.Spec.ClaimRef.Namespace).To(Equal(pvc.Namespace))
 			g.Expect(pv.Spec.ClaimRef.Name).To(Equal(pvc.Name))
 			g.Expect(pv.Spec.ClaimRef.UID).To(Equal(pvc.UID))
+			g.Expect(pv.Annotations).To(ContainElement(pvc.Namespace + "/" + pvc.Spec.DataSourceRef.Name))
 		}).Should(Succeed())
 
 		By("patching the shadow pvc claim status to Lost")
@@ -348,7 +347,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		pvcPrime := &corev1.PersistentVolumeClaim{}
 		pvcPrimeKey := types.NamespacedName{
 			Namespace: populatorNS.Name,
-			Name:      fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID),
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
 		}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
@@ -358,7 +357,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 
 		By("ensuring that the populator pod can not be found")
 		populatorPod := &corev1.Pod{}
-		podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
@@ -452,7 +451,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		pvcPrime := &corev1.PersistentVolumeClaim{}
 		pvcPrimeKey := types.NamespacedName{
 			Namespace: populatorNS.Name,
-			Name:      fmt.Sprintf("%s-%s", populatorPvcPrefix, pvc.UID),
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
 		}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, pvcPrimeKey, pvcPrime)
@@ -462,7 +461,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 
 		By("ensuring that the populator pod can not be found")
 		populatorPod := &corev1.Pod{}
-		podName := fmt.Sprintf("%s-%s", populatorPodPrefix, pvc.UID)
+		podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 		populatorPodKey := types.NamespacedName{Namespace: populatorNS.Name, Name: podName}
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, populatorPodKey, populatorPod)
