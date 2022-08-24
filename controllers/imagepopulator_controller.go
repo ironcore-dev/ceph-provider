@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -345,6 +346,11 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 func makePopulatePodSpec(pvcName string) corev1.PodSpec {
 	return corev1.PodSpec{
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsGroup: pointer.Int64(0),
+			RunAsUser:  pointer.Int64(0),
+			FSGroup:    pointer.Int64(0),
+		},
 		Containers: []corev1.Container{
 			{
 				Name:            populatorContainerName,
