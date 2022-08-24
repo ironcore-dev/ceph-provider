@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -149,7 +150,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 	pod := &corev1.Pod{}
 	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
-	if err := r.Get(ctx, podKey, pod); err != nil && !errors.IsNotFound(err) {
+	if err := r.Get(ctx, podKey, pod); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
 	} else if errors.IsNotFound(err) {
 		// TODO: optimize not found case -> handling of nil in code below
@@ -160,7 +161,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	pvcPrimeName := generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID)
 	pvcPrime := &corev1.PersistentVolumeClaim{}
 	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
-	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); err != nil && !errors.IsNotFound(err) {
+	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get shadow PVC %s: %w", pvcPrimeKey, err)
 	} else if errors.IsNotFound(err) {
 		pvcPrime = nil
@@ -178,13 +179,14 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		// If the pod doesn't exist yet, create it
 		if pod == nil {
 			if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock != *pvc.Spec.VolumeMode {
+				log.Info(fmt.Sprintf("skipped pvc %s: volumeMode mode is not block", client.ObjectKeyFromObject(pvc)))
 				// ignore non block volumes
 				return ctrl.Result{}, nil
 			}
 
 			// Calculate the args for the populator pod
 			var args []string
-			args = append(args, "--image="+volume.Spec.Image)
+			args = append(args, "-image="+volume.Spec.Image)
 
 			// Make the pod
 			pod = &corev1.Pod{
@@ -271,7 +273,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 		// Get PV
 		pv := &corev1.PersistentVolume{}
-		if err := r.Get(ctx, types.NamespacedName{Name: pvcPrime.Spec.VolumeName}, pv); err != nil && !errors.IsNotFound(err) {
+		if err := r.Get(ctx, types.NamespacedName{Name: pvcPrime.Spec.VolumeName}, pv); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get pv for prime pvc %s: %w", pvcPrimeKey, err)
 		} else if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -343,6 +345,12 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 func makePopulatePodSpec(pvcName string) corev1.PodSpec {
 	return corev1.PodSpec{
+		//TODO: check appropriate SecurityContext settings
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsGroup: pointer.Int64(0),
+			RunAsUser:  pointer.Int64(0),
+			FSGroup:    pointer.Int64(0),
+		},
 		Containers: []corev1.Container{
 			{
 				Name:            populatorContainerName,

@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
-	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,15 +31,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	volumeFinalizer = "cephlet.onmetal.de/volume"
-	userIDKey       = "userID"
-	userKeyKey      = "userKey"
-	volumeDriver    = "ceph"
+	userIDKey    = "userID"
+	userKeyKey   = "userKey"
+	volumeDriver = "ceph"
 
 	pvPoolKey      = "pool"
 	pvImageNameKey = "imageName"
@@ -92,29 +91,28 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Volume")
 
-	if err := clientutils.PatchAddFinalizer(ctx, r.Client, volume, volumeFinalizer); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
-	switch {
-	case requeue:
-		return ctrl.Result{Requeue: true}, nil
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
 	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
+	}
 
-	pvc, err := r.applyPVC(ctx, log, volume, storageClass)
+	pvc, requeue, err := r.applyPVC(ctx, log, volume, storageClass)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
+	}
 
 	secretName, requeue, err := r.applyCephClient(ctx, log, volume)
-	switch {
-	case requeue:
-		return ctrl.Result{}, nil
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
@@ -179,7 +177,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	return fmt.Sprintf("%s/%s", pool, imageName), nil
 }
 
-func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, error) {
+func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, bool, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -194,27 +192,41 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
+			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
 			StorageClassName: &storageClass,
 		},
 	}
 
+	if volume.Spec.Image != "" {
+		pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+			APIGroup: pointer.StringPtr(storagev1alpha1.SchemeGroupVersion.String()),
+			Kind:     "Volume",
+			Name:     volume.Name,
+		}
+	}
+
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return nil, err
+		return nil, false, err
+	}
+
+	if pvc.Status.Phase != corev1.ClaimBound {
+		log.V(1).Info("pvc is not yet in ClaimBound state")
+		return nil, true, nil
 	}
 
 	// TODO: do proper status reporting
 	volumeBase := volume.DeepCopy()
 	volume.Status.State = storagev1alpha1.VolumeStateAvailable
 	if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
-		return nil, fmt.Errorf("failed to patch volume state: %w", err)
+		return nil, false, fmt.Errorf("failed to patch volume state: %w", err)
 	}
 
 	log.V(3).Info("volume provided.")
-	return pvc, nil
+	return pvc, false, nil
 }
 
 func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
