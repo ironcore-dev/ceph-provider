@@ -165,16 +165,20 @@ func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *
 		return ctrl.Result{}, fmt.Errorf("failed to gather available volume classes for volume pool: %w", err)
 	}
 
+	var requeue bool
 	poolBase := pool.DeepCopy()
 	switch {
 	case rookPool.Status == nil:
 		pool.Status.State = storagev1alpha1.VolumePoolStatePending
+		requeue = true
 	case rookPool.Status.Phase == rookv1.ConditionReady:
 		pool.Status.State = storagev1alpha1.VolumePoolStateAvailable
 	case rookPool.Status.Phase == rookv1.ConditionFailure:
 		pool.Status.State = storagev1alpha1.VolumePoolStateNotAvailable
+		requeue = true
 	default:
 		pool.Status.State = storagev1alpha1.VolumePoolStatePending
+		requeue = true
 	}
 
 	pool.Status.AvailableVolumeClasses = availableVolumeClasses
@@ -183,7 +187,7 @@ func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *
 		return ctrl.Result{}, fmt.Errorf("failed to patch status for volume pool: %w", err)
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: requeue}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

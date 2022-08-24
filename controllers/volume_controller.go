@@ -104,15 +104,18 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
 	}
 
-	pvc, err := r.applyPVC(ctx, log, volume, storageClass)
-	if err != nil {
+	pvc, requeue, err := r.applyPVC(ctx, log, volume, storageClass)
+	switch {
+	case requeue:
+		return ctrl.Result{Requeue: true}, nil
+	case err != nil:
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
 
 	secretName, requeue, err := r.applyCephClient(ctx, log, volume)
 	switch {
 	case requeue:
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true}, nil
 	case err != nil:
 		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
 	}
@@ -180,7 +183,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	return fmt.Sprintf("%s/%s", pool, imageName), nil
 }
 
-func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, error) {
+func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, bool, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -209,27 +212,27 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	//TODO: requeue if PVC is not bound
 	if pvc.Status.Phase != corev1.ClaimBound {
-		return nil, fmt.Errorf("pvc is not in ClaimBound state yet")
+		log.V(1).Info("pvc is not yet in ClaimBound state")
+		return nil, true, nil
 	}
 
 	// TODO: do proper status reporting
 	volumeBase := volume.DeepCopy()
 	volume.Status.State = storagev1alpha1.VolumeStateAvailable
 	if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
-		return nil, fmt.Errorf("failed to patch volume state: %w", err)
+		return nil, false, fmt.Errorf("failed to patch volume state: %w", err)
 	}
 
 	log.V(3).Info("volume provided.")
-	return pvc, nil
+	return pvc, false, nil
 }
 
 func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
