@@ -179,8 +179,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		// If the pod doesn't exist yet, create it
 		if pod == nil {
 			if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock != *pvc.Spec.VolumeMode {
-				//TODO: log wrong VolumeMode
-
+				log.Info(fmt.Sprintf("skipped pvc %s: volumeMode mode is not block", client.ObjectKeyFromObject(pvc)))
 				// ignore non block volumes
 				return ctrl.Result{}, nil
 			}
@@ -346,6 +345,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 func makePopulatePodSpec(pvcName string) corev1.PodSpec {
 	return corev1.PodSpec{
+		//TODO: check appropriate SecurityContext settings
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsGroup: pointer.Int64(0),
 			RunAsUser:  pointer.Int64(0),

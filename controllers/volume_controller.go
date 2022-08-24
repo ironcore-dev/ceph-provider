@@ -92,27 +92,27 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	log.V(1).Info("Reconciling Volume")
 
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
-	switch {
-	case requeue:
-		return ctrl.Result{Requeue: true}, nil
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	pvc, requeue, err := r.applyPVC(ctx, log, volume, storageClass)
-	switch {
-	case requeue:
-		return ctrl.Result{Requeue: true}, nil
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	secretName, requeue, err := r.applyCephClient(ctx, log, volume)
-	switch {
-	case requeue:
-		return ctrl.Result{Requeue: true}, nil
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
