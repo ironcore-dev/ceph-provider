@@ -37,10 +37,9 @@ import (
 )
 
 const (
-	volumeFinalizer = "cephlet.onmetal.de/volume"
-	userIDKey       = "userID"
-	userKeyKey      = "userKey"
-	volumeDriver    = "ceph"
+	userIDKey    = "userID"
+	userKeyKey   = "userKey"
+	volumeDriver = "ceph"
 
 	pvPoolKey      = "pool"
 	pvImageNameKey = "imageName"
@@ -91,10 +90,6 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 
 func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Volume")
-	//TODO: check if needed
-	//if err := clientutils.PatchAddFinalizer(ctx, r.Client, volume, volumeFinalizer); err != nil {
-	//	return ctrl.Result{}, err
-	//}
 
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
 	switch {
@@ -128,7 +123,6 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 }
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
-	//TODO: handle deletion of CephClient and CephRadosNamespace
 	return ctrl.Result{}, nil
 }
 
