@@ -180,7 +180,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(populatorPod.Spec.Containers[0]).To(Equal(corev1.Container{
 				Name:            populatorContainerName,
 				Image:           defaultPopulatorImage,
-				Args:            []string{"--image=" + vol.Spec.Image},
+				Args:            []string{"-image=" + vol.Spec.Image},
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				VolumeDevices: []corev1.VolumeDevice{
 					{

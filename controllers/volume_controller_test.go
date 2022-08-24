@@ -118,6 +118,10 @@ var _ = Describe("VolumeReconciler", func() {
 		pvc.Spec.VolumeName = pv.Name
 		Expect(k8sClient.Patch(ctx, pvc, client.MergeFrom(pvcBase)))
 
+		pvcBase = pvc.DeepCopy()
+		pvc.Status.Phase = corev1.ClaimBound
+		Expect(k8sClient.Status().Patch(ctx, pvc, client.MergeFrom(pvcBase)))
+
 		By("checking that the ceph client has been created")
 		cephClient := &rookv1.CephClient{}
 		cephClientKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
