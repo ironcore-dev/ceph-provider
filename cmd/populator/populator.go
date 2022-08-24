@@ -17,6 +17,7 @@ package main
 import (
 	"flag"
 	"io"
+	"log"
 	"os"
 
 	"github.com/onmetal/cephlet/pkg/image"
@@ -45,35 +46,34 @@ func main() {
 
 func populate(storePath string, ref string, devicePath string) {
 	ctx := ctrl.SetupSignalHandler()
-	//TODO: check if logger is there
-	log := ctrl.LoggerFrom(ctx)
 
+	log.Println("Starting image population")
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
-		log.Error(err, "Failed to initialize registry")
+		log.Fatal(err, "Failed to initialize registry")
 		os.Exit(1)
 	}
 	s, err := store.New(storePath)
 	if err != nil {
-		log.Error(err, "Failed to initialize image store")
+		log.Fatal(err, "Failed to initialize image store")
 		os.Exit(1)
 	}
 	img, err := image.Pull(ctx, reg, s, ref)
 	if err != nil {
-		log.Error(err, "Failed to pull image", "Image", ref)
+		log.Fatal(err, "Failed to pull image", "Image", ref)
 		os.Exit(1)
 	}
 
 	src, err := os.Open(img.RootFS.Path)
 	if err != nil {
-		log.Error(err, "Failed to open rootfs file", "RootFS", img.RootFS.Path)
+		log.Fatal(err, "Failed to open rootfs file", "RootFS", img.RootFS.Path)
 		os.Exit(1)
 	}
 	defer src.Close()
 
 	dst, err := os.OpenFile(devicePath, os.O_RDWR, 0755)
 	if err != nil {
-		log.Error(err, "Failed to open block device", "Device", devicePath)
+		log.Fatal(err, "Failed to open block device", "Device", devicePath)
 		os.Exit(1)
 	}
 	defer dst.Close()
@@ -81,8 +81,8 @@ func populate(storePath string, ref string, devicePath string) {
 	// TODO: stream oci image to block device (support both modes: copy and stream)
 	_, err = io.Copy(dst, src)
 	if err != nil {
-		log.Error(err, "Failed to copy rootfs to device", "RootFS", img.RootFS.Path, "Device", devicePath)
+		log.Fatal(err, "Failed to copy rootfs to device", "RootFS", img.RootFS.Path, "Device", devicePath)
 		os.Exit(1)
 	}
-	log.Info("Successfully populated device", "Device", devicePath)
+	log.Println("Successfully populated device", "Device", devicePath)
 }
