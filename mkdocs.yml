@@ -52,7 +52,8 @@ nav:
   - Usage: usage/README.md
   - Developer Guide:
     - Local Setup: development/setup.md
-  - OnMetal Documentation ⧉: https://onmetal.github.io/documentation/
+  - Main Documentation ⧉: https://onmetal.github.io/documentation/
+  - Landing Page ⧉: https://onmetal.github.io/
 
 extra:
   social:
