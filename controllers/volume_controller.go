@@ -28,6 +28,7 @@ import (
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -97,6 +98,14 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to patch state to pending: %w", err)
 		}
+	}
+
+	volumePool := &storagev1alpha1.VolumePool{}
+	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, volumePool); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
+	} else if errors.IsNotFound(err) {
+		log.V(1).Info("skipped reconcile: volume pool %s does not exist", volume.Spec.VolumePoolRef.Name)
+		return ctrl.Result{}, nil
 	}
 
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
@@ -224,13 +233,6 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	if pvc.Status.Phase != corev1.ClaimBound {
 		log.V(1).Info("pvc is not yet in ClaimBound state")
 		return nil, true, nil
-	}
-
-	// TODO: do proper status reporting
-	volumeBase := volume.DeepCopy()
-	volume.Status.State = storagev1alpha1.VolumeStateAvailable
-	if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
-		return nil, false, fmt.Errorf("failed to patch volume state: %w", err)
 	}
 
 	log.V(3).Info("volume provided.")

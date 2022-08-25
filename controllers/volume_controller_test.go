@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -153,7 +154,6 @@ var _ = Describe("VolumeReconciler", func() {
 	})
 
 	It("should reconcile volumes in the same customer ns", func() {
-		volumeSize := "1Gi"
 		By("checking that a Volume has been created")
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
@@ -168,19 +168,7 @@ var _ = Describe("VolumeReconciler", func() {
 				},
 			},
 		}
-		vol2 := &storagev1alpha1.Volume{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "volume-",
-				Namespace:    testNs.Name,
-			},
-			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
-				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
-				Resources: corev1.ResourceList{
-					"storage": resource.MustParse(volumeSize),
-				},
-			},
-		}
+		vol2 := vol.DeepCopy()
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 		Expect(k8sClient.Create(ctx, vol2)).To(Succeed())
 		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
@@ -266,6 +254,36 @@ var _ = Describe("VolumeReconciler", func() {
 
 			g.Expect(k8sClient.Get(ctx, volKey2, vol2)).To(Succeed())
 			g.Expect(vol2.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStateAvailable))
+		}).Should(Succeed())
+	})
+
+	It("should end reconcile volume if pool ref is not valid", func() {
+		By("checking that a Volume has been created")
+		vol := &storagev1alpha1.Volume{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "volume-",
+				Namespace:    testNs.Name,
+			},
+			Spec: storagev1alpha1.VolumeSpec{
+				VolumeClassRef: corev1.LocalObjectReference{Name: "not-there"},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: "not-there"},
+				Resources: corev1.ResourceList{
+					"storage": resource.MustParse(volumeSize),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
+
+		By("checking that the ceph namespace has not been created")
+		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
+		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
+		Eventually(func() bool { return errors.IsNotFound(k8sClient.Get(ctx, cephNsKey, cephNs)) }).Should(BeTrue())
+
+		By("checking that the volume status has been updated")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
+			g.Expect(vol.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStatePending))
 		}).Should(Succeed())
 	})
 })
