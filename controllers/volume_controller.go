@@ -91,6 +91,14 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Volume")
 
+	if volume.Status.State == "" {
+		volumeBase := volume.DeepCopy()
+		volume.Status.State = storagev1alpha1.VolumeStatePending
+		if err := r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to patch state to pending: %w", err)
+		}
+	}
+
 	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
@@ -278,6 +286,7 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 
 func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *corev1.PersistentVolumeClaim) error {
 	defer log.V(2).Info("applySecretAndUpdateVolumeStatus done")
+
 	cephClientSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookConfig.Namespace, Name: secretName}, cephClientSecret); err != nil {
 		return fmt.Errorf("unable to get secret: %w", err)
@@ -334,6 +343,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	}
 
 	volumeBase := volume.DeepCopy()
+	volume.Status.State = storagev1alpha1.VolumeStateAvailable
 	volume.Status.Access = &storagev1alpha1.VolumeAccess{
 		SecretRef: &corev1.LocalObjectReference{
 			Name: volume.Name,
@@ -411,13 +421,23 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 		return "", false, fmt.Errorf("no clusterId in status for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
 	}
 
-	storageClass := &storagev1.StorageClass{
+	storageClassKey := types.NamespacedName{Name: clusterID + "--" + volume.Spec.VolumePoolRef.Name}
+	storageClass := &storagev1.StorageClass{}
+	err := r.Get(ctx, storageClassKey, storageClass)
+	if err == nil {
+		return storageClass.Name, false, nil
+	}
+	if client.IgnoreNotFound(err) != nil {
+		return "", false, fmt.Errorf("failed to to get storageClass: %w", err)
+	}
+
+	storageClass = &storagev1.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "StorageClass",
 			APIVersion: "storage.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: clusterID + "--" + volume.Spec.VolumePoolRef.Name,
+			Name: storageClassKey.Name,
 		},
 		Provisioner: r.RookConfig.CSIDriverName,
 		Parameters: map[string]string{
