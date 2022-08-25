@@ -3,6 +3,9 @@
 CONTROLLER_IMG ?= controller:latest
 POPULATOR_IMG ?= populator:latest
 
+# Docker image name for the mkdocs based local development setup
+MKDOCS_IMG=onmetal/cephlet-docs
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -72,6 +75,17 @@ lint: ## Run golangci-lint against code.
 	golangci-lint run ./...
 
 check: manifests generate checklicense lint test
+
+##@ Documentation
+
+.PHONY: start-docs
+start-docs: ## Start the local mkdocs based development environment.
+	docker build -t ${MKDOCS_IMG} -f docs/Dockerfile .
+	docker run -p 8000:8000 -v `pwd`/:/docs ${MKDOCS_IMG}
+
+.PHONY: clean-docs
+clean-docs: ## Remove all local mkdocs Docker images (cleanup).
+	docker container prune --force --filter "label=project=cephlet_documentation"
 
 ##@ Build
 
