@@ -14,7 +14,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.1.5
 	github.com/onsi/gomega v1.20.1
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
-	github.com/rook/rook v1.9.9
+	github.com/rook/rook v1.9.10
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/zap v1.23.0
@@ -94,7 +94,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.8 // indirect
-	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20220420154035-5eb5ff03d30a // indirect
+	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20220811192603-abc54caa34ac // indirect
 	github.com/libopenstorage/secrets v0.0.0-20210709082113-dde442ea20ec // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
