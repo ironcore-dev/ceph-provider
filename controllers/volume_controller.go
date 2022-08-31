@@ -70,6 +70,17 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=ceph.rook.io,resources=cephblockpoolradosnamespaces,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=ceph.rook.io,resources=cephclients,verbs=get;list;watch;create;update;patch;delete
 
+//+kubebuilder:rbac:groups=,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=,resources=persistentvolumeclaims/status,verbs=get
+//+kubebuilder:rbac:groups=,resources=persistentvolumes,verbs=get;list;watch;delete
+//+kubebuilder:rbac:groups=,resources=persistentvolumes/status,verbs=get
+
+//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch;create;update;patch;delete
+
+//+kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch
+//+kubebuilder:rbac:groups=,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=,resources=namespaces,verbs=get;list;watch
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *VolumeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
