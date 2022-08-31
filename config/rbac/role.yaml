@@ -5,6 +5,53 @@ metadata:
   creationTimestamp: null
   name: manager-role
 rules:
+- resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- resources:
+  - persistentvolumeclaims/status
+  verbs:
+  - get
+- resources:
+  - persistentvolumes
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- resources:
+  - persistentvolumes/status
+  verbs:
+  - get
+- resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - ceph.rook.io
   resources:
@@ -101,3 +148,15 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
