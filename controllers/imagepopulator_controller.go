@@ -63,10 +63,10 @@ type ImagePopulatorReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/status,verbs=get
 
-//+kubebuilder:rbac:groups=,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=,resources=persistentvolumeclaims/status,verbs=get
-//+kubebuilder:rbac:groups=,resources=persistentvolumes,verbs=get;list;watch;delete
-//+kubebuilder:rbac:groups=,resources=persistentvolumes/status,verbs=get
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
+//+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumes/status,verbs=get
 
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
