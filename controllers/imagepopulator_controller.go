@@ -100,8 +100,12 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		// Ignore PVCs without a datasource
 		return ctrl.Result{}, nil
 	}
-
 	log.Info("Found datasource ref for PVC", "DataSourceRef", dataSourceRef)
+
+	if pvc.Spec.StorageClassName == nil {
+		// Ignore PVCs without a StorageClassName
+		return ctrl.Result{}, nil
+	}
 
 	if storagev1alpha1.SchemeGroupVersion.String() != *dataSourceRef.APIGroup || "Volume" != dataSourceRef.Kind || "" == dataSourceRef.Name {
 		// Ignore PVCs if the datasourceRef is not a Volume
@@ -120,29 +124,21 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 	log.Info("Found volume as datasource ref for PVC", "Volume", client.ObjectKeyFromObject(volume))
 
-	var waitForFirstConsumer bool
-	var nodeName string
-	if pvc.Spec.StorageClassName != nil {
-		storageClassName := *pvc.Spec.StorageClassName
-		storageClass := &storagev1.StorageClass{}
-		storageClassKey := types.NamespacedName{Name: storageClassName}
-		if err := r.Get(ctx, storageClassKey, storageClass); err != nil {
-			if !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to get storageclass %s for PVC: %w", storageClassKey, err)
-			}
-			// We'll get called again later when the storage class exists
-			return ctrl.Result{}, fmt.Errorf("storageclass %s for PVC does not exist: %w", storageClassKey, err)
+	storageClass := &storagev1.StorageClass{}
+	storageClassKey := types.NamespacedName{Name: *pvc.Spec.StorageClassName}
+	if err := r.Get(ctx, storageClassKey, storageClass); err != nil {
+		if !errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to get storageclass %s for PVC: %w", storageClassKey, err)
 		}
+		// We'll get called again later when the storage class exists
+		return ctrl.Result{}, fmt.Errorf("storageclass %s for PVC does not exist: %w", storageClassKey, err)
+	}
+	log.Info("Found StorageClass for PVC", "StorageClass", storageClassKey)
 
-		log.Info("Found StorageClass for PVC", "StorageClass", storageClassKey)
-
-		if storageClass.VolumeBindingMode != nil && storagev1.VolumeBindingWaitForFirstConsumer == *storageClass.VolumeBindingMode {
-			waitForFirstConsumer = true
-			nodeName = pvc.Annotations[annSelectedNode]
-			if nodeName == "" {
-				// Wait for the PVC to get a node name before continuing
-				return ctrl.Result{}, fmt.Errorf("PVC has not been assigned to a node yet")
-			}
+	if isStorageClassWaitingForConsumer(storageClass) {
+		if getPvcNodeName(pvc) == "" {
+			// Wait for the PVC to get a node name before continuing
+			return ctrl.Result{}, fmt.Errorf("PVC has not been assigned to a node yet")
 		}
 	}
 
@@ -170,7 +166,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	// *** Here is the first place we start to create/modify objects ***
 
 	// If the PVC is unbound, we need to perform the population
-	if "" == pvc.Spec.VolumeName {
+	if pvc.Spec.VolumeName == "" {
 		// Ensure the PVC has a finalizer on it, so we can clean up the stuff we create
 		if _, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, pvc, pvcFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer on PVC: %w", err)
@@ -184,74 +180,16 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				return ctrl.Result{}, nil
 			}
 
-			// Calculate the args for the populator pod
-			var args []string
-			args = append(args, "-image="+volume.Spec.Image)
-
-			// Make the pod
-			pod = &corev1.Pod{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Pod",
-					APIVersion: corev1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName,
-					Namespace: r.PopulatorNamespace,
-				},
-				Spec: makePopulatePodSpec(pvc.Name),
+			pod, err := r.createPopulatorPod(ctx, pvc, volume, isStorageClassWaitingForConsumer(storageClass))
+			if err != nil {
+				return ctrl.Result{}, err
 			}
-			pod.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName = pvcPrimeName
-			con := &pod.Spec.Containers[0]
-			con.Image = r.PopulatorImageName
-			con.Args = args
-			con.VolumeDevices = []corev1.VolumeDevice{
-				{
-					Name:       populatorPodVolumeName,
-					DevicePath: r.PopulatorPodDevicePath,
-				},
-			}
+			log.Info("Created populator Pod", "Pod", client.ObjectKeyFromObject(pod))
 
-			if waitForFirstConsumer {
-				pod.Spec.NodeName = nodeName
-			}
-
-			if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
-				return ctrl.Result{}, fmt.Errorf("could not create populator pod: %w", err)
-			}
-
-			log.Info("Created populator Pod", "Pod", podKey)
-
-			// If PVC' doesn't exist yet, create it
-			if pvcPrime == nil {
-
-				pvcPrime = &corev1.PersistentVolumeClaim{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       "PersistentVolumeClaim",
-						APIVersion: corev1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      pvcPrimeName,
-						Namespace: r.PopulatorNamespace,
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources:        pvc.Spec.Resources,
-						StorageClassName: pvc.Spec.StorageClassName,
-						VolumeMode:       pvc.Spec.VolumeMode,
-					},
-				}
-				if waitForFirstConsumer {
-					pvcPrime.Annotations = map[string]string{
-						annSelectedNode: nodeName,
-					}
-				}
-
-				if err := r.Patch(ctx, pvcPrime, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
-					return ctrl.Result{}, fmt.Errorf("could not create prime pvc %s: %w", pvcPrimeKey, err)
-				}
-
-				// We'll get called again later when the pod exists
-				return ctrl.Result{}, nil
+			// If PVC doesn't exist yet, create it
+			reconciled, err := r.createPvcPrimeIfNotExisting(ctx, log, pvc, pvcPrime, isStorageClassWaitingForConsumer(storageClass))
+			if err != nil || reconciled {
+				return ctrl.Result{}, err
 			}
 		}
 
@@ -439,6 +377,96 @@ func (r *ImagePopulatorReconciler) getUIDFromPrefixedName(name, prefix string) s
 
 func generateNameFromPrefixAndUID(prefix string, uid types.UID) string {
 	return fmt.Sprintf("%s%s", prefix, uid)
+}
+
+func (r *ImagePopulatorReconciler) createPopulatorPod(ctx context.Context, pvc *corev1.PersistentVolumeClaim, volume *storagev1alpha1.Volume, waitForFirstConsumer bool) (*corev1.Pod, error) {
+	// Calculate the args for the populator pod
+	var args []string
+	args = append(args, "-image="+volume.Spec.Image)
+
+	// Make the pod
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID),
+			Namespace: r.PopulatorNamespace,
+		},
+		Spec: makePopulatePodSpec(pvc.Name),
+	}
+	pod.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName = generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID)
+	con := &pod.Spec.Containers[0]
+	con.Image = r.PopulatorImageName
+	con.Args = args
+	con.VolumeDevices = []corev1.VolumeDevice{
+		{
+			Name:       populatorPodVolumeName,
+			DevicePath: r.PopulatorPodDevicePath,
+		},
+	}
+
+	if waitForFirstConsumer {
+		pod.Spec.NodeName = getPvcNodeName(pvc)
+	}
+
+	if err := r.Patch(ctx, pod, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
+		return nil, fmt.Errorf("could not create populator pod: %w", err)
+	}
+	return pod, nil
+}
+
+func (r *ImagePopulatorReconciler) createPvcPrimeIfNotExisting(ctx context.Context, log logr.Logger, pvc, pvcPrime *corev1.PersistentVolumeClaim, waitForFirstConsumer bool) (bool, error) {
+	if pvcPrime != nil {
+		log.Info("pvc is already there, skip creation.")
+		return false, nil
+	}
+
+	pvcPrime = &corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID),
+			Namespace: r.PopulatorNamespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources:        pvc.Spec.Resources,
+			StorageClassName: pvc.Spec.StorageClassName,
+			VolumeMode:       pvc.Spec.VolumeMode,
+		},
+	}
+	if waitForFirstConsumer {
+		pvcPrime.Annotations = map[string]string{
+			annSelectedNode: getPvcNodeName(pvc),
+		}
+	}
+
+	if err := r.Patch(ctx, pvcPrime, client.Apply, pvcFieldOwner, client.ForceOwnership); err != nil {
+		return false, fmt.Errorf("could not create prime pvc %s: %w", client.ObjectKeyFromObject(pvcPrime), err)
+	}
+
+	// We'll get called again later when the pod exists
+	return true, nil
+}
+
+func isStorageClassWaitingForConsumer(storageClass *storagev1.StorageClass) bool {
+	if storageClass == nil {
+		return false
+	}
+
+	return storageClass.VolumeBindingMode != nil && storagev1.VolumeBindingWaitForFirstConsumer == *storageClass.VolumeBindingMode
+}
+
+func getPvcNodeName(pvc *corev1.PersistentVolumeClaim) string {
+	if pvc == nil {
+		return ""
+	}
+
+	return pvc.Annotations[annSelectedNode]
 }
 
 func (r *ImagePopulatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
