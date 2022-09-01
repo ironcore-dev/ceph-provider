@@ -198,7 +198,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 
 			// Calculate the args for the populator pod
 			var args []string
-			args = append(args, "-image="+volume.Spec.Image)
+			args = append(args, "--image="+volume.Spec.Image)
 
 			// Make the pod
 			pod = &corev1.Pod{
