@@ -67,7 +67,7 @@ type ImagePopulatorReconciler struct {
 
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
-//+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes/status,verbs=get
 
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
