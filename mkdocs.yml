@@ -48,8 +48,7 @@ markdown_extensions:
 
 nav:
   - Home: README.md
-  - Architecture:
-    - Overview: architecture/README.md
+  - Architecture: architecture/README.md
   - Usage: usage/README.md
   - Developer Guide:
     - Local Setup: development/setup.md
