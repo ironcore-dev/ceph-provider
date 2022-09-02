@@ -231,6 +231,18 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 			Kind:     "Volume",
 			Name:     volume.Name,
 		}
+
+		// Needed steps to use ceph VolumeSnapshot
+
+		//	provide VolumeSnapshotClass
+		//	provide PVC
+		//	provide Volumesnapshot from pvc
+
+		//pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+		//	APIGroup: pointer.StringPtr("snapshot.storage.k8s.io"),
+		//	Kind:     "VolumeSnapshot",
+		//	Name:     volume.Spec.Image,
+		//}
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
