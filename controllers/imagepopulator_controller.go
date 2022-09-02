@@ -155,9 +155,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	}
 
 	// Look for the populator pod
-	podName := generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID)
 	pod := &corev1.Pod{}
-	podKey := types.NamespacedName{Name: podName, Namespace: r.PopulatorNamespace}
+	podKey := types.NamespacedName{Name: generateNameFromPrefixAndUID(populatorPodPrefix, pvc.UID), Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, podKey, pod); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get populator pod %s: %w", podKey, err)
 	} else if errors.IsNotFound(err) {
@@ -166,9 +165,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 	}
 
 	// Look for PVC'
-	pvcPrimeName := generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID)
 	pvcPrime := &corev1.PersistentVolumeClaim{}
-	pvcPrimeKey := types.NamespacedName{Name: pvcPrimeName, Namespace: r.PopulatorNamespace}
+	pvcPrimeKey := types.NamespacedName{Name: generateNameFromPrefixAndUID(populatorPvcPrefix, pvc.UID), Namespace: r.PopulatorNamespace}
 	if err := r.Get(ctx, pvcPrimeKey, pvcPrime); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get shadow PVC %s: %w", pvcPrimeKey, err)
 	} else if errors.IsNotFound(err) {
@@ -394,7 +392,7 @@ func generateNameFromPrefixAndUID(prefix string, uid types.UID) string {
 func (r *ImagePopulatorReconciler) createPopulatorPod(ctx context.Context, pvc *corev1.PersistentVolumeClaim, volume *storagev1alpha1.Volume, waitForFirstConsumer bool) (*corev1.Pod, error) {
 	// Calculate the args for the populator pod
 	var args []string
-	args = append(args, "-image="+volume.Spec.Image)
+	args = append(args, "--image="+volume.Spec.Image)
 
 	// Make the pod
 	pod := &corev1.Pod{
