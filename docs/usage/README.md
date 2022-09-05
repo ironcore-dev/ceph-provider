@@ -1,10 +1,10 @@
 # Usage Guides
 
-This section provides an overview on how onmetal Volumes can be created. 
+This section provides an overview on how `Volume`s from the [onmetal-api](https://github.com/onmetal/onmetal-api) project can be provisioned using the `cephlet` provider.
 
 ## Available Pools and Classes
-As a user you can request storage by creating a `Volume`. It will be placed in the defined `VolumePool`. 
-The `VolumeClasses` define the capabilities in terms of IOPS and BPS limits. 
+As a user you can request storage by creating a `Volume`. It will be allocated in the referenced `VolumePool`. 
+The `VolumeClasses` define the capabilities in terms of IOPS, BPS limits and other resource requirements. 
 
 Get the available `VolumePools` with the corresponding `VolumeClasses`
 ```shell
@@ -18,19 +18,15 @@ NAME   VOLUMECLASSES   AGE
 ceph   fast,slow       4d17h
 ```
 
-## Create a Volume
-A `Volume` is always placed in a generated namespace of the customer. 
-```shell
-kubectl create ns test-customer
-```
+## Creating a `Volume`
+A `Volume` is referencing a `VolumePool` and a matching `VolumeClass` which the `VolumePool` supports.
 
-The following `Volume` is located in the ceph `VolumePool` and uses the fast `VolumeClass`. 
 ```yaml
+# sample-volume.yaml
 apiVersion: storage.api.onmetal.de/v1alpha1
 kind: Volume
 metadata:
   name: sample-volume
-  namespace: test-customer
 spec:
   volumeClassRef:
     name: fast
@@ -39,21 +35,27 @@ spec:
   resources:
     storage: 1Gi
 ```
-## Volume Status
-Once the volume is provisioned the state will change to `Available`.
+
 ```shell
-kubectl get volumes -A
-NAMESPACE       NAME            VOLUMEPOOLREF   VOLUMECLASS   STATE       PHASE     AGE
-test-customer   sample-volume   ceph            fast          Available   Unbound   4m1s
+kubectl apply -f sample-volume.yaml 
+volume.storage.api.onmetal.de/sample-volume created
 ```
 
-The status of the volume will contain the information which is needed to be able to consume the volume with a ceph client.
+## `Volume` Status
+Once the `Volume` is provisioned the state will change to `Available`.
+```shell
+kubectl get volumes
+NAMESPACE       NAME            VOLUMEPOOLREF   VOLUMECLASS   STATE       PHASE     AGE
+default   sample-volume   ceph            fast          Available   Unbound   4m1s
+```
+
+The status of the `Volume` will contain the information which is needed to be able to consume the volume with a ceph client.
 ```yaml
 apiVersion: storage.api.onmetal.de/v1alpha1
 kind: Volume
 metadata:
   name: sample-volume
-  namespace: test-customer
+  namespace: default
 spec:
   ...
 status:
@@ -70,25 +72,25 @@ status:
   state: Available
 ```
 
-The `secretRef` in the status defines the `secret` with the  access credentials for the specific volume.
+The `secretRef` in the status defines the `secret` with the  access credentials for the specific `Volume`.
 ```shell
-kubectl get secrets -n test-customer 
+kubectl get secrets
 NAME            TYPE     DATA   AGE
 sample-volume   Opaque   2      93s
 ```
 
-## Low level resources
+## Rook resources
 Administrators can also observe the rook related resources. 
 Every (customer) namespace contain a `cephblockpoolradosnamespaces` and a `cephclients` resource. Under the hood rook 
 generates a rados namespace and granting access to it for the specific ceph client user.
 ```shell
-kubectl get cephblockpoolradosnamespaces -A
+kubectl get cephblockpoolradosnamespaces
 NAMESPACE   NAME            AGE
-rook-ceph   test-customer   94s
+rook-ceph   default   94s
 ```
 
 ```shell
-kubectl get cephclients.ceph.rook.io -A 
+kubectl get cephclients.ceph.rook.io 
 NAMESPACE   NAME            PHASE
-rook-ceph   test-customer   Ready
+rook-ceph   default   Ready
 ```
