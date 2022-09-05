@@ -27,6 +27,7 @@ apiVersion: storage.api.onmetal.de/v1alpha1
 kind: Volume
 metadata:
   name: sample-volume
+  namespace: default
 spec:
   volumeClassRef:
     name: fast
