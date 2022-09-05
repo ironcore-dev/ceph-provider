@@ -5,11 +5,13 @@
 * go >= 1.19
 * `git`, `make` and `kubectl`
 * [Kustomize](https://kustomize.io/)
-* [Minikube](https://minikube.sigs.k8s.io/docs/ or a real cluster
+* [Minikube](https://minikube.sigs.k8s.io/docs/) or a real cluster
 
 ## Preperation
 
 ### Setup Ceph Cluster
+
+[//]: # (https://rook.io/docs/rook/v1.9/Contributing/development-environment/?h=mini#minikube)
 
 ### Setup `onmetal-api`
 
