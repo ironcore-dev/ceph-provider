@@ -20,9 +20,8 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
-	"github.com/onmetal/cephlet/pkg/image"
+	onmetalimage "github.com/onmetal/onmetal-image"
 	"github.com/onmetal/onmetal-image/oci/remote"
-	"github.com/onmetal/onmetal-image/oci/store"
 	flag "github.com/spf13/pflag"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -59,23 +58,48 @@ func populate(log logr.Logger, storePath string, ref string, devicePath string) 
 		log.Error(err, "Failed to initialize registry")
 		os.Exit(1)
 	}
-	s, err := store.New(storePath)
+
+	i, err := reg.Resolve(ctx, ref)
 	if err != nil {
-		log.Error(err, "Failed to initialize image store")
+		log.Error(err, "Failed to resolve image ref in registry")
 		os.Exit(1)
 	}
-	img, err := image.Pull(ctx, reg, s, ref)
+	layers, err := i.Layers(ctx)
 	if err != nil {
-		log.Error(err, "Failed to pull image", "Image", ref)
+		log.Error(err, "Failed to get layers for image")
 		os.Exit(1)
+	}
+	var reader io.ReadCloser
+	for _, l := range layers {
+		if l.Descriptor().MediaType == onmetalimage.RootFSLayerMediaType {
+			// 1. get content reader for mediatype
+			// 2. pass reader to copy operator below
+			reader, err = l.Content(ctx)
+			if err != nil {
+				log.Error(err, "Failed to get content reader for layer")
+				os.Exit(1)
+			}
+		}
 	}
 
-	src, err := os.Open(img.RootFS.Path)
-	if err != nil {
-		log.Error(err, "Failed to open rootfs file", "RootFS", img.RootFS.Path)
-		os.Exit(1)
-	}
-	defer src.Close()
+	// this will be not needed anymore
+	//s, err := store.New(storePath)
+	//if err != nil {
+	//	log.Error(err, "Failed to initialize image store")
+	//	os.Exit(1)
+	//}
+	//img, err := image.Pull(ctx, reg, s, ref)
+	//if err != nil {
+	//	log.Error(err, "Failed to pull image", "Image", ref)
+	//	os.Exit(1)
+	//}
+	//
+	//src, err := os.Open(img.RootFS.Path)
+	//if err != nil {
+	//	log.Error(err, "Failed to open rootfs file", "RootFS", img.RootFS.Path)
+	//	os.Exit(1)
+	//}
+	//defer src.Close()
 
 	dst, err := os.OpenFile(devicePath, os.O_RDWR, 0755)
 	if err != nil {
@@ -84,9 +108,9 @@ func populate(log logr.Logger, storePath string, ref string, devicePath string) 
 	}
 	defer dst.Close()
 
-	_, err = io.Copy(dst, src)
+	_, err = io.Copy(dst, reader)
 	if err != nil {
-		log.Error(err, "Failed to copy rootfs to device", "RootFS", img.RootFS.Path, "Device", devicePath)
+		log.Error(err, "Failed to copy rootfs to device", "Device", devicePath)
 		os.Exit(1)
 	}
 	log.Info("Successfully populated device", "Device", devicePath)

@@ -26,6 +26,8 @@ import (
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// TODO: cleanup unneeded code
+
 type Image struct {
 	Config    onmetalimage.Config
 	RootFS    *FileLayer
