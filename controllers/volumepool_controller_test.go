@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,26 +43,6 @@ var _ = Describe("VolumePoolReconciler", func() {
 
 			Expect(rookPool.Spec.PoolSpec.Replicated.Size).To(HaveValue(Equal(uint(volumePoolReplication))))
 			Expect(rookPool.Spec.PoolSpec.EnableRBDStats).To(Equal(rook.EnableRBDStatsDefaultValue))
-		})
-	})
-
-	When("should reconcile", func() {
-		It("a valid custom created pool", func() {
-			volumePool := &storagev1alpha1.VolumePool{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "custom-pool-",
-					Namespace:    testNs.Name,
-				},
-				Spec: storagev1alpha1.VolumePoolSpec{
-					ProviderID: "custom://custom-pool",
-				},
-			}
-			Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
-
-			By("checking that a VolumePool has been created")
-			rookPool := &rookv1.CephBlockPool{}
-			rookPoolKey := types.NamespacedName{Name: volumePool.Name, Namespace: rookNs.Name}
-			Eventually(func() error { return k8sClient.Get(ctx, rookPoolKey, rookPool) }).Should(Succeed())
 
 			By("checking that a VolumePool reflect the rook status")
 			rookPoolBase := rookPool.DeepCopy()
@@ -70,7 +51,6 @@ var _ = Describe("VolumePoolReconciler", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
 
-			volumePoolKey := types.NamespacedName{Name: volumePool.Name, Namespace: volumePool.Namespace}
 			Eventually(func(g Gomega) error {
 				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
 					return err
@@ -102,6 +82,26 @@ var _ = Describe("VolumePoolReconciler", func() {
 				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateAvailable))
 				return nil
 			}).Should(Succeed())
+		})
+	})
+
+	When("should reconcile", func() {
+		It("a valid custom created pool", func() {
+			volumePool := &storagev1alpha1.VolumePool{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "custom-pool-",
+					Namespace:    testNs.Name,
+				},
+				Spec: storagev1alpha1.VolumePoolSpec{
+					ProviderID: "custom://custom-pool",
+				},
+			}
+			Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
+
+			By("checking that a VolumePool has not been created")
+			rookPool := &rookv1.CephBlockPool{}
+			rookPoolKey := types.NamespacedName{Name: volumePool.Name, Namespace: rookNs.Name}
+			Eventually(func() bool { return errors.IsNotFound(k8sClient.Get(ctx, rookPoolKey, rookPool)) }).Should(BeTrue())
 		})
 	})
 })
