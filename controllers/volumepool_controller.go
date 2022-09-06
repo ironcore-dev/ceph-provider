@@ -81,6 +81,12 @@ func (r *VolumePoolReconciler) reconcileExists(ctx context.Context, log logr.Log
 	if !pool.DeletionTimestamp.IsZero() {
 		return r.delete(ctx, log, pool)
 	}
+
+	if pool.Name != r.VolumePoolName {
+		log.V(1).Info("Skipping VolumePool, since it is not owned by us")
+		return ctrl.Result{}, nil
+	}
+
 	return r.reconcile(ctx, log, pool)
 }
 
