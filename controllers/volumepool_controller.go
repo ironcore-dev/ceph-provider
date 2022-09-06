@@ -83,7 +83,7 @@ func (r *VolumePoolReconciler) reconcileExists(ctx context.Context, log logr.Log
 	}
 
 	if pool.Name != r.VolumePoolName {
-		log.V(1).Info("Skipped pool, since it was not created by controller", "pool", client.ObjectKeyFromObject(pool))
+		log.V(1).Info("Skipping VolumePool, since it is not owned by us")
 		return ctrl.Result{}, nil
 	}
 
