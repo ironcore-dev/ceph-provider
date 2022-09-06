@@ -84,7 +84,6 @@ func populate(log logr.Logger, storePath string, ref string, devicePath string) 
 	}
 	defer dst.Close()
 
-	// TODO: stream oci image to block device (support both modes: copy and stream)
 	_, err = io.Copy(dst, src)
 	if err != nil {
 		log.Error(err, "Failed to copy rootfs to device", "RootFS", img.RootFS.Path, "Device", devicePath)
