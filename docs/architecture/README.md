@@ -44,8 +44,11 @@ The main task of the `cephlet` is to create Ceph block devices for every `Volume
     Kubernetes `Namespace`s as a tenant separation. All `Volumes` within a `Namespace` belong essentially to one tenant.
 
 Additionally, for every `Namespace` an own `CephClient` and a corresponding `StorageClass` are created. The `StorageClass` 
-is being used to create the `PersistentVolumeClaims` for a given `Namespace` later. The access credentials which are 
-being extracted from the `CephClient` are stored in a `Secret` which is then referenced in the status of the `Volume`.
+is being used to create the `PersistentVolumeClaims` for a given `Namespace` later. The actual block device is created
+in the Ceph user namespace which is being created through the `CephClient` resource. 
+
+The access credentials which are being extracted from the `CephClient` are stored in a `Secret` which is then referenced
+in the status of the `Volume`.
 
 The graph blow illustrates the relationships between the entities created in the reconciliation flow of a `Volume`.
 
