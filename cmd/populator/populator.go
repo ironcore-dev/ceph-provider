@@ -16,6 +16,7 @@ package main
 
 import (
 	goflag "flag"
+	"fmt"
 	"io"
 	"os"
 
@@ -45,31 +46,30 @@ func main() {
 	opts.BindFlags(goflag.CommandLine)
 	flag.Parse()
 
-	if err := populate(zap.New(zap.UseFlagOptions(&opts)), image, devicePath); err != nil {
+	log := zap.New(zap.UseFlagOptions(&opts))
+	if err := populate(log, image); err != nil {
+		log.Error(err, "Image population failed")
 		os.Exit(1)
 	}
 }
 
-func populate(log logr.Logger, ref string, devicePath string) error {
+func populate(log logr.Logger, ref string) error {
 	ctx := ctrl.SetupSignalHandler()
 	log.Info("Starting image population")
 
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
-		log.Error(err, "Failed to initialize registry")
-		return err
+		return fmt.Errorf("failed to initialize registry: %w", err)
 	}
 
 	img, err := reg.Resolve(ctx, ref)
 	if err != nil {
-		log.Error(err, "Failed to resolve image ref in registry")
-		return err
+		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
 	}
 
 	layers, err := img.Layers(ctx)
 	if err != nil {
-		log.Error(err, "Failed to get layers for image")
-		return err
+		return fmt.Errorf("failed to get layers for image: %w", err)
 	}
 
 	var rootFSLayer image.Layer
@@ -80,28 +80,24 @@ func populate(log logr.Logger, ref string, devicePath string) error {
 		}
 	}
 	if rootFSLayer == nil {
-		log.Error(err, "Failed to get rootFS layer for image")
-		return err
+		return fmt.Errorf("failed to get rootFS layer for image: %w", err)
 	}
 
 	src, err := rootFSLayer.Content(ctx)
 	if err != nil {
-		log.Error(err, "Failed to get content reader for layer")
-		return err
+		return fmt.Errorf("failed to get content reader for layer: %w", err)
 	}
 	defer src.Close()
 
 	dst, err := os.OpenFile(devicePath, os.O_RDWR, 0755)
 	if err != nil {
-		log.Error(err, "Failed to open block device", "Device", devicePath)
-		return err
+		return fmt.Errorf("failed to open block device (%s): %w", devicePath, err)
 	}
 	defer dst.Close()
 
 	_, err = io.Copy(dst, src)
 	if err != nil {
-		log.Error(err, "Failed to copy rootfs to device", "Device", devicePath)
-		return err
+		return fmt.Errorf("failed to copy rootfs to device (%s): %w", devicePath, err)
 	}
 	log.Info("Successfully populated device", "Device", devicePath)
 	return nil
