@@ -89,9 +89,9 @@ sample-volume   Opaque   2      93s
 
 ## Rook resources
 
-Administrators can also observe the rook related resources. 
-Every (customer) namespace contain a `cephblockpoolradosnamespaces` and a `cephclients` resource. Under the hood rook 
-generates a rados namespace and granting access to it for the specific ceph client user.
+Administrators can also observe the Rook related resources. Every `Namespace` contains a  
+`CephBlockPoolRadosNamespace` and a `CephClient` resource. Under the hood, Rook generates a RADOS namespace inside the 
+Ceph cluster and grants access to it for the specific Ceph client user.
 
 ```shell
 kubectl get cephblockpoolradosnamespaces

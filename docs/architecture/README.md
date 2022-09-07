@@ -43,9 +43,9 @@ The main task of the `cephlet` is to create Ceph block devices for every `Volume
     As Ceph does not support the creation of access secrets for each individual block devices, we chose to use 
     Kubernetes `Namespace`s as a tenant separation. All `Volumes` within a `Namespace` belong essentially to one tenant.
 
-Additionally, for every `Namespace` an own `CephClient` and a corresponding `StorageClass` is created. The `StorageClass` 
-is being used to later create the `PersistentVolumeClaims` for a given `Namespace`. The access credentials which are being 
-extracted from the `CephClient` are stored in a `Secret` which is then referenced in the status of the `Volume`.
+Additionally, for every `Namespace` an own `CephClient` and a corresponding `StorageClass` are created. The `StorageClass` 
+is being used to create the `PersistentVolumeClaims` for a given `Namespace` later. The access credentials which are 
+being extracted from the `CephClient` are stored in a `Secret` which is then referenced in the status of the `Volume`.
 
 The graph blow illustrates the relationships between the entities created in the reconciliation flow of a `Volume`.
 
@@ -71,13 +71,18 @@ graph TD
 
 ## Image Population
 
-Image population is a process in which we preload a certain payload onto a `PersistenVolume`. In our case the population
+Image population is a process in which we preload a certain payload onto a `PersistenVolume`. You can find more details 
+on the process in the Kubernetes blog post on [Volume Populators](https://kubernetes.io/blog/2021/08/30/volume-populators-redesigned/).
+Additionally, a sample implementation can be found in the [lib-volume-populator](https://github.com/kubernetes-csi/lib-volume-populator)
+project.
+
+In our case the population
 is performed to load a root file system of an operating system (OS). That way we can boot a `Machine` from this block device 
 later on.
 
 The source of an OS is stored in the OCI format and is served from an OCI compliant registry.
 
-Here is an example `Volume` manifest which references an OS image which should be populated
+Here is an example of a `Volume` manifest which references an OS image which should be populated
 
 ```yaml
 apiVersion: storage.api.onmetal.de/v1alpha1
@@ -119,7 +124,7 @@ spec:
 !!! note
     Only `volumeMode=block` is supported for image population as we will write the partition table and MBR. 
 
-As soon as the PVC has been created the `ImagePopulatorReconciler` starts the following flow to populate the underlying 
+As soon as the PVC has been created, the `ImagePopulatorReconciler` starts the following flow to populate the underlying
 `PersistenVolume` with the OS image root filesystem.
 
 ```mermaid
