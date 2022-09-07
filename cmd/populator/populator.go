@@ -20,9 +20,9 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
-	"github.com/onmetal/cephlet/pkg/image"
+	onmetalimage "github.com/onmetal/onmetal-image"
+	"github.com/onmetal/onmetal-image/oci/image"
 	"github.com/onmetal/onmetal-image/oci/remote"
-	"github.com/onmetal/onmetal-image/oci/store"
 	flag "github.com/spf13/pflag"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -34,60 +34,75 @@ const (
 
 func main() {
 	var (
-		image     string
-		storePath string
+		image string
 	)
 
 	// Populate args
 	flag.StringVar(&image, "image", "", "Image location which the PVC should be populated with")
-	flag.StringVar(&storePath, "storePath", "/tmp", "Location of the local image store")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(goflag.CommandLine)
 	flag.Parse()
 
-	populate(zap.New(zap.UseFlagOptions(&opts)), storePath, image, devicePath)
+	if err := populate(zap.New(zap.UseFlagOptions(&opts)), image, devicePath); err != nil {
+		os.Exit(1)
+	}
 }
 
-func populate(log logr.Logger, storePath string, ref string, devicePath string) {
+func populate(log logr.Logger, ref string, devicePath string) error {
 	ctx := ctrl.SetupSignalHandler()
 	log.Info("Starting image population")
 
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
 		log.Error(err, "Failed to initialize registry")
-		os.Exit(1)
-	}
-	s, err := store.New(storePath)
-	if err != nil {
-		log.Error(err, "Failed to initialize image store")
-		os.Exit(1)
-	}
-	img, err := image.Pull(ctx, reg, s, ref)
-	if err != nil {
-		log.Error(err, "Failed to pull image", "Image", ref)
-		os.Exit(1)
+		return err
 	}
 
-	src, err := os.Open(img.RootFS.Path)
+	img, err := reg.Resolve(ctx, ref)
 	if err != nil {
-		log.Error(err, "Failed to open rootfs file", "RootFS", img.RootFS.Path)
-		os.Exit(1)
+		log.Error(err, "Failed to resolve image ref in registry")
+		return err
+	}
+
+	layers, err := img.Layers(ctx)
+	if err != nil {
+		log.Error(err, "Failed to get layers for image")
+		return err
+	}
+
+	var rootFSLayer image.Layer
+	for _, l := range layers {
+		if l.Descriptor().MediaType == onmetalimage.RootFSLayerMediaType {
+			rootFSLayer = l
+			break
+		}
+	}
+	if rootFSLayer == nil {
+		log.Error(err, "Failed to get rootFS layer for image")
+		return err
+	}
+
+	src, err := rootFSLayer.Content(ctx)
+	if err != nil {
+		log.Error(err, "Failed to get content reader for layer")
+		return err
 	}
 	defer src.Close()
 
 	dst, err := os.OpenFile(devicePath, os.O_RDWR, 0755)
 	if err != nil {
 		log.Error(err, "Failed to open block device", "Device", devicePath)
-		os.Exit(1)
+		return err
 	}
 	defer dst.Close()
 
 	_, err = io.Copy(dst, src)
 	if err != nil {
-		log.Error(err, "Failed to copy rootfs to device", "RootFS", img.RootFS.Path, "Device", devicePath)
-		os.Exit(1)
+		log.Error(err, "Failed to copy rootfs to device", "Device", devicePath)
+		return err
 	}
 	log.Info("Successfully populated device", "Device", devicePath)
+	return nil
 }
