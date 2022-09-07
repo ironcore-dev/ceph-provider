@@ -157,6 +157,7 @@ require (
 
 replace (
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.1
+	github.com/hashicorp/vault => github.com/hashicorp/vault v1.10.6
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.20.4-openstorage-rc3
 	go.opentelemetry.io/contrib => go.opentelemetry.io/contrib v0.20.0
