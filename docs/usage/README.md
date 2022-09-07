@@ -3,10 +3,12 @@
 This section provides an overview on how `Volume`s from the [onmetal-api](https://github.com/onmetal/onmetal-api) project can be provisioned using the `cephlet` provider.
 
 ## Available Pools and Classes
+
 As a user you can request storage by creating a `Volume`. It will be allocated in the referenced `VolumePool`. 
 The `VolumeClasses` define the capabilities in terms of IOPS, BPS limits and other resource requirements. 
 
 Get the available `VolumePools` with the corresponding `VolumeClasses`
+
 ```shell
 kubectl get volumeclasses 
 NAME   AGE
@@ -19,6 +21,7 @@ ceph   fast,slow       4d17h
 ```
 
 ## Creating a `Volume`
+
 A `Volume` is referencing a `VolumePool` and a matching `VolumeClass` which the `VolumePool` supports.
 
 ```yaml
@@ -43,7 +46,9 @@ volume.storage.api.onmetal.de/sample-volume created
 ```
 
 ## `Volume` Status
+
 Once the `Volume` is provisioned the state will change to `Available`.
+
 ```shell
 kubectl get volumes
 NAMESPACE       NAME            VOLUMEPOOLREF   VOLUMECLASS   STATE       PHASE     AGE
@@ -51,6 +56,7 @@ default   sample-volume   ceph            fast          Available   Unbound   4m
 ```
 
 The status of the `Volume` will contain the information which is needed to be able to consume the volume with a ceph client.
+
 ```yaml
 apiVersion: storage.api.onmetal.de/v1alpha1
 kind: Volume
@@ -74,6 +80,7 @@ status:
 ```
 
 The `secretRef` in the status defines the `secret` with the  access credentials for the specific `Volume`.
+
 ```shell
 kubectl get secrets
 NAME            TYPE     DATA   AGE
@@ -81,9 +88,11 @@ sample-volume   Opaque   2      93s
 ```
 
 ## Rook resources
-Administrators can also observe the rook related resources. 
-Every (customer) namespace contain a `cephblockpoolradosnamespaces` and a `cephclients` resource. Under the hood rook 
-generates a rados namespace and granting access to it for the specific ceph client user.
+
+Administrators can also observe the Rook related resources. Every `Namespace` contains a  
+`CephBlockPoolRadosNamespace` and a `CephClient` resource. Under the hood, Rook generates a RADOS namespace inside the 
+Ceph cluster and grants access to it for the specific Ceph client user.
+
 ```shell
 kubectl get cephblockpoolradosnamespaces
 NAMESPACE   NAME            AGE
