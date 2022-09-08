@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	k8svolume "k8s.io/component-helpers/storage/volume"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +38,6 @@ import (
 )
 
 const (
-	annSelectedNode         = "volume.kubernetes.io/selected-node"
 	populatorPodPrefix      = "populate-"
 	populatorPvcPrefix      = "prime-"
 	pvcFinalizer            = "cephlet.onmetal.de/populate-target-protection"
@@ -44,7 +45,9 @@ const (
 	populatorPodVolumeName  = "target"
 	populatedFromAnnoSuffix = "populated-from"
 
-	metadataUIDFieldName = ".metadata.uid"
+	metadataUIDFieldName                         = ".metadata.uid"
+	provisionerDeletionSecretNameAnnotation      = "volume.kubernetes.io/provisioner-deletion-secret-name"
+	provisionerDeletionSecretNamespaceAnnotation = "volume.kubernetes.io/provisioner-deletion-secret-namespace"
 )
 
 var (
@@ -58,6 +61,7 @@ type ImagePopulatorReconciler struct {
 	PopulatorPodDevicePath string
 	PopulatorNamespace     string
 	Prefix                 string
+	RookConfig             *rook.Config
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch
@@ -239,7 +243,12 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				ResourceVersion: pvc.ResourceVersion,
 			}
 			populatedFromAnno := r.Prefix + "/" + populatedFromAnnoSuffix
-			pv.Annotations = map[string]string{populatedFromAnno: pvc.Namespace + "/" + dataSourceRef.Name}
+			pv.Annotations = map[string]string{
+				populatedFromAnno:                            pvc.Namespace + "/" + dataSourceRef.Name,
+				k8svolume.AnnDynamicallyProvisioned:          r.RookConfig.CSIDriverName,
+				provisionerDeletionSecretNameAnnotation:      r.RookConfig.CSIRBDProvisionerSecretName,
+				provisionerDeletionSecretNamespaceAnnotation: r.RookConfig.Namespace,
+			}
 
 			if err := r.Patch(ctx, pv, client.MergeFrom(pvBase)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to patch claimref of pv %s: %w", client.ObjectKeyFromObject(pv), err)
@@ -451,7 +460,7 @@ func (r *ImagePopulatorReconciler) createPvcPrimeIfNotExisting(ctx context.Conte
 	}
 	if waitForFirstConsumer {
 		pvcPrime.Annotations = map[string]string{
-			annSelectedNode: getPvcNodeName(pvc),
+			k8svolume.AnnSelectedNode: getPvcNodeName(pvc),
 		}
 	}
 
@@ -476,7 +485,7 @@ func getPvcNodeName(pvc *corev1.PersistentVolumeClaim) string {
 		return ""
 	}
 
-	return pvc.Annotations[annSelectedNode]
+	return pvc.Annotations[k8svolume.AnnSelectedNode]
 }
 
 func (r *ImagePopulatorReconciler) SetupWithManager(mgr ctrl.Manager) error {

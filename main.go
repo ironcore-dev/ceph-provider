@@ -150,6 +150,7 @@ func main() {
 		PopulatorPodDevicePath: populatorDevicePath,
 		PopulatorNamespace:     populatorNamespace,
 		Prefix:                 populatorPrefix,
+		RookConfig:             rookConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ImagePopulator")
 		os.Exit(1)

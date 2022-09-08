@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	k8svolume "k8s.io/component-helpers/storage/volume"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -108,7 +109,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "pvc-",
 				Namespace:    testNs.Name,
-				Annotations:  map[string]string{annSelectedNode: "node"},
+				Annotations:  map[string]string{k8svolume.AnnSelectedNode: "node"},
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -243,9 +244,11 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 		populatorPod.Status.Phase = corev1.PodSucceeded
 		Expect(k8sClient.Status().Patch(ctx, populatorPod, client.MergeFrom(populatorPodBase))).To(Succeed())
 
-		Expect("that PV of shadow PVC has been created and patched")
+		Expect("that PV of shadow PVC has been created and patched and has the correct annotations")
 		pv := &corev1.PersistentVolume{}
 		pvKey := types.NamespacedName{Name: pvPrime.Name}
+		populatedFromAnno := defaultPrefix + "/" + populatedFromAnnoSuffix
+
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, pvKey, pv)
 			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
@@ -255,6 +258,13 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			g.Expect(pv.Spec.ClaimRef.Name).To(Equal(pvc.Name))
 			g.Expect(pv.Spec.ClaimRef.UID).To(Equal(pvc.UID))
 			g.Expect(pv.Annotations).To(ContainElement(pvc.Namespace + "/" + pvc.Spec.DataSourceRef.Name))
+
+			g.Expect(pv.Annotations).To(Equal(map[string]string{
+				populatedFromAnno:                            pvc.Namespace + "/" + pvc.Spec.DataSourceRef.Name,
+				k8svolume.AnnDynamicallyProvisioned:          rookConfig.CSIDriverName,
+				provisionerDeletionSecretNameAnnotation:      rookConfig.CSIRBDProvisionerSecretName,
+				provisionerDeletionSecretNamespaceAnnotation: rookConfig.Namespace,
+			}))
 		}).Should(Succeed())
 
 		By("patching the shadow pvc claim status to Lost")
@@ -315,7 +325,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "pvc-",
 				Namespace:    testNs.Name,
-				Annotations:  map[string]string{annSelectedNode: "node"},
+				Annotations:  map[string]string{k8svolume.AnnSelectedNode: "node"},
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -406,7 +416,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "pvc-",
 				Namespace:    testNs.Name,
-				Annotations:  map[string]string{annSelectedNode: "node"},
+				Annotations:  map[string]string{k8svolume.AnnSelectedNode: "node"},
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
