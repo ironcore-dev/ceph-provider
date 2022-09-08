@@ -65,6 +65,7 @@ var (
 	testEnvExt *envtestutils.EnvironmentExtensions
 	cfg        *rest.Config
 	k8sClient  client.Client
+	rookConfig *rook.Config
 
 	volumeClassSelector = map[string]string{
 		"suitable-for": "testing",
@@ -196,7 +197,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 
 		// register reconciler here
 
-		rookConfig := rook.NewConfigWithDefaults()
+		rookConfig = rook.NewConfigWithDefaults()
 		rookConfig.Namespace = rookNamespace.Name
 
 		Expect((&VolumeReconciler{
@@ -225,6 +226,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			PopulatorPodDevicePath: defaultDevicePath,
 			PopulatorNamespace:     populatorNamespace.Name,
 			Prefix:                 defaultPrefix,
+			RookConfig:             rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		go func() {
