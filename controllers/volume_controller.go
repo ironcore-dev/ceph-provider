@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
@@ -225,24 +226,9 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 		},
 	}
 
-	if volume.Spec.Image != "" {
-		pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
-			APIGroup: pointer.StringPtr(storagev1alpha1.SchemeGroupVersion.String()),
-			Kind:     "Volume",
-			Name:     volume.Name,
-		}
-
-		// Needed steps to use ceph VolumeSnapshot
-
-		//	provide VolumeSnapshotClass
-		//	provide PVC
-		//	provide Volumesnapshot from pvc
-
-		//pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
-		//	APIGroup: pointer.StringPtr("snapshot.storage.k8s.io"),
-		//	Kind:     "VolumeSnapshot",
-		//	Name:     volume.Spec.Image,
-		//}
+	requeue, err := r.handleImagePopulation(ctx, log, volume, pvc, storageClass)
+	if requeue || err != nil {
+		return nil, requeue, err
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
@@ -262,6 +248,80 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	return pvc, false, nil
 }
 
+func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim, storageClassName string) (bool, error) {
+	if volume.Spec.Image == "" {
+		return false, nil
+	}
+
+	snapshot := &snapshotv1.VolumeSnapshot{}
+	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: volume.Spec.Image}, snapshot); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, fmt.Errorf("unable to get snapshot: %w", err)
+		}
+		log.V(1).Info("Requested snapshot not found: create image pvc and snapshot it.")
+		return true, r.createSnapshot(ctx, log, volume, storageClassName)
+	}
+
+	if snapshot.Status.ReadyToUse == nil || !*snapshot.Status.ReadyToUse {
+		return true, nil
+	}
+
+	pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+		APIGroup: pointer.StringPtr("snapshot.storage.k8s.io"),
+		Kind:     "VolumeSnapshot",
+		Name:     volume.Spec.Image,
+	}
+
+	return false, nil
+}
+
+func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClassName string) error {
+	imagePvc := &corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      volume.Spec.Image,
+			Namespace: volume.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
+			},
+			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
+			StorageClassName: &storageClassName,
+		},
+	}
+
+	if err := r.Patch(ctx, imagePvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("unable to patch image pvc: %w", err)
+	}
+
+	snapshot := &snapshotv1.VolumeSnapshot{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "",
+			APIVersion: "",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      volume.Spec.Image,
+			Namespace: volume.Namespace,
+		},
+		Spec: snapshotv1.VolumeSnapshotSpec{
+			Source: snapshotv1.VolumeSnapshotSource{
+				PersistentVolumeClaimName: &imagePvc.Name,
+			},
+			//ToDo
+			VolumeSnapshotClassName: nil,
+		},
+	}
+	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("unable to patch snapshot: %w", err)
+	}
+
+	return nil
+}
 func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
 	ns := &corev1.Namespace{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns)

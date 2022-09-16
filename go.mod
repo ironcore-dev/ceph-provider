@@ -6,6 +6,7 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/google/addlicense v1.0.0
 	github.com/google/uuid v1.3.0
+	github.com/kubernetes-csi/external-snapshotter/client/v6 v6.0.1
 	github.com/kubernetes-csi/volume-data-source-validator/client v0.0.0-20220805220032-cc2415d431f1
 	github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad
 	github.com/onmetal/onmetal-api v0.0.13-0.20220816071349-6a09b849a81a

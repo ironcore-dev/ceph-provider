@@ -20,6 +20,7 @@ import (
 	goflag "flag"
 	"os"
 
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/controllers"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
@@ -45,6 +46,7 @@ func init() {
 
 	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rookv1.AddToScheme(scheme))
+	utilruntime.Must(snapshotv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
