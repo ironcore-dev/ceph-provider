@@ -215,7 +215,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				}
 			}
 			// We'll get called again later when the pod succeeds
-			return ctrl.Result{}, nil
+			// throw error in order to increase backoff
+			return ctrl.Result{}, fmt.Errorf("populator pod %s failed", podKey)
 		}
 
 		// This would be bad
