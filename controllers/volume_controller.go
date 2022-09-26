@@ -120,7 +120,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, nil
 	}
 
-	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
+	clusterId, requeue, err := r.applyCephNs(ctx, log, volume)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
 	}
@@ -128,7 +128,19 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	pvc, requeue, err := r.applyPVC(ctx, log, volume, storageClass)
+	requeue, err = r.applyStorageClass(ctx, log, volume, clusterId)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if err := r.applyVolumeSnapshotClass(ctx, log, volume, clusterId); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create volume snapshot class for volume: %w", err)
+	}
+
+	pvc, requeue, err := r.applyPVC(ctx, log, volume, clusterId)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
@@ -206,7 +218,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	return fmt.Sprintf("%s/%s", pool, imageName), nil
 }
 
-func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, bool, error) {
+func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, clusterId string) (*corev1.PersistentVolumeClaim, bool, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -222,11 +234,11 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
-			StorageClassName: &storageClass,
+			StorageClassName: pointer.StringPtr(getStorageClassName(clusterId, volume.Spec.VolumePoolRef.Name)),
 		},
 	}
 
-	requeue, err := r.handleImagePopulation(ctx, log, volume, pvc, storageClass)
+	requeue, err := r.handleImagePopulation(ctx, log, volume, pvc, clusterId)
 	if requeue || err != nil {
 		return nil, requeue, err
 	}
@@ -248,9 +260,15 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	return pvc, false, nil
 }
 
-func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim, storageClassName string) (bool, error) {
+func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim, clusterId string) (bool, error) {
 	if volume.Spec.Image == "" {
 		return false, nil
+	}
+
+	pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+		APIGroup: pointer.StringPtr(storagev1alpha1.SchemeGroupVersion.String()),
+		Kind:     "Volume",
+		Name:     volume.Name,
 	}
 
 	snapshot := &snapshotv1.VolumeSnapshot{}
@@ -259,7 +277,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 			return false, fmt.Errorf("unable to get snapshot: %w", err)
 		}
 		log.V(1).Info("Requested snapshot not found: create image pvc and snapshot it.")
-		return true, r.createSnapshot(ctx, log, volume, storageClassName)
+		return true, r.createSnapshot(ctx, log, volume, clusterId)
 	}
 
 	if snapshot.Status.ReadyToUse == nil || !*snapshot.Status.ReadyToUse {
@@ -275,7 +293,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	return false, nil
 }
 
-func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClassName string) error {
+func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, clusterId string) error {
 	imagePvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -291,7 +309,12 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
-			StorageClassName: &storageClassName,
+			StorageClassName: pointer.StringPtr(getStorageClassName(clusterId, volume.Spec.VolumePoolRef.Name)),
+			DataSourceRef: &corev1.TypedLocalObjectReference{
+				APIGroup: pointer.StringPtr(storagev1alpha1.SchemeGroupVersion.String()),
+				Kind:     "Volume",
+				Name:     volume.Name,
+			},
 		},
 	}
 
@@ -301,8 +324,8 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 
 	snapshot := &snapshotv1.VolumeSnapshot{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "",
-			APIVersion: "",
+			Kind:       "VolumeSnapshot",
+			APIVersion: snapshotv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      volume.Spec.Image,
@@ -312,8 +335,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			Source: snapshotv1.VolumeSnapshotSource{
 				PersistentVolumeClaimName: &imagePvc.Name,
 			},
-			//ToDo
-			VolumeSnapshotClassName: nil,
+			VolumeSnapshotClassName: pointer.StringPtr(getVolumeSnapshotClassName(clusterId, volume.Spec.VolumePoolRef.Name)),
 		},
 	}
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
@@ -468,7 +490,7 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 	return monitors, nil
 }
 
-func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
+func (r *VolumeReconciler) applyCephNs(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
 	ns := &corev1.Namespace{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns); err != nil {
 		return "", false, err
@@ -506,14 +528,22 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 		return "", false, fmt.Errorf("no clusterId in status for cephNS %s for volume %s", client.ObjectKeyFromObject(cephNs), client.ObjectKeyFromObject(volume))
 	}
 
-	storageClassKey := types.NamespacedName{Name: clusterID + "--" + volume.Spec.VolumePoolRef.Name}
+	return clusterID, false, nil
+}
+
+func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, clusterID string) (bool, error) {
+	ns := &corev1.Namespace{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns); err != nil {
+		return false, err
+	}
+	storageClassKey := types.NamespacedName{Name: getStorageClassName(clusterID, volume.Spec.VolumePoolRef.Name)}
 	storageClass := &storagev1.StorageClass{}
 	err := r.Get(ctx, storageClassKey, storageClass)
 	if err == nil {
-		return storageClass.Name, false, nil
+		return false, nil
 	}
 	if client.IgnoreNotFound(err) != nil {
-		return "", false, fmt.Errorf("failed to to get storageClass: %w", err)
+		return false, fmt.Errorf("failed to to get storageClass: %w", err)
 	}
 
 	storageClass = &storagev1.StorageClass{
@@ -544,16 +574,70 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 	}
 
 	if err := ctrl.SetControllerReference(ns, storageClass, r.Scheme); err != nil {
-		return "", false, fmt.Errorf("failed to set controller reference for storageClass %s: %w", client.ObjectKeyFromObject(storageClass), err)
+		return false, fmt.Errorf("failed to set controller reference for storageClass %s: %w", client.ObjectKeyFromObject(storageClass), err)
 	}
 
 	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", false, fmt.Errorf("failed to patch storageClass %s for volume %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(volume), err)
+		return false, fmt.Errorf("failed to patch storageClass %s for volume %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(volume), err)
 	}
 
 	log.V(1).Info("Applied StorageClass")
 
-	return storageClass.Name, false, nil
+	return false, nil
+}
+
+func (r *VolumeReconciler) applyVolumeSnapshotClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, clusterID string) error {
+	ns := &corev1.Namespace{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns); err != nil {
+		return err
+	}
+
+	volumeSnapshotClassKey := types.NamespacedName{Name: getVolumeSnapshotClassName(clusterID, volume.Spec.VolumePoolRef.Name)}
+	volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
+	err := r.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass)
+	if err == nil {
+		return nil
+	}
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to to get volumeSnapshotClass: %w", err)
+	}
+
+	volumeSnapshotClass = &snapshotv1.VolumeSnapshotClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "VolumeSnapshotClass",
+			APIVersion: snapshotv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: volumeSnapshotClassKey.Name,
+		},
+		Driver: r.RookConfig.CSIDriverName,
+		Parameters: map[string]string{
+			"clusterID": clusterID,
+			"csi.storage.k8s.io/snapshotter-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/snapshotter-secret-namespace": r.RookConfig.Namespace,
+		},
+		DeletionPolicy: snapshotv1.VolumeSnapshotContentDelete,
+	}
+
+	if err := ctrl.SetControllerReference(ns, volumeSnapshotClass, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for volumeSnapshotClass %s: %w", client.ObjectKeyFromObject(volumeSnapshotClass), err)
+	}
+
+	if err := r.Patch(ctx, volumeSnapshotClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to patch volumeSnapshotClass %s for volume %s: %w", client.ObjectKeyFromObject(volumeSnapshotClass), client.ObjectKeyFromObject(volume), err)
+	}
+
+	log.V(1).Info("Applied VolumeSnapshotClass")
+
+	return nil
+}
+
+func getVolumeSnapshotClassName(clusterId, volumePoolName string) string {
+	return clusterId + "--" + volumePoolName
+}
+
+func getStorageClassName(clusterId, volumePoolName string) string {
+	return clusterId + "--" + volumePoolName
 }
 
 // SetupWithManager sets up the controller with the Manager.
