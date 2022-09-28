@@ -8,18 +8,6 @@ rules:
 - apiGroups:
   - ceph.rook.io
   resources:
-  - cephblockpoolradosnamespaces
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ceph.rook.io
-  resources:
   - cephblockpools
   verbs:
   - create
