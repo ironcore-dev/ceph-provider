@@ -21,7 +21,7 @@ import (
 
 type ClusterList map[string]ClusterEntry
 
-type ClusterSlice []ClusterEntry
+type Clusters []ClusterEntry
 
 type ClusterEntry struct {
 	ClusterID      string   `json:"clusterID"`
@@ -44,7 +44,7 @@ func (l ClusterList) Remove(clusterID string) {
 }
 
 func (l ClusterList) MarshalJSON() ([]byte, error) {
-	list := make(ClusterSlice, 0, len(l))
+	list := make(Clusters, 0, len(l))
 	for _, e := range l {
 		list = append(list, e)
 	}
@@ -53,7 +53,7 @@ func (l ClusterList) MarshalJSON() ([]byte, error) {
 }
 
 func (l *ClusterList) UnmarshalJSON(bytes []byte) error {
-	var list ClusterSlice
+	var list Clusters
 	if err := json.Unmarshal(bytes, &list); err != nil {
 		return err
 	}
@@ -64,8 +64,8 @@ func (l *ClusterList) UnmarshalJSON(bytes []byte) error {
 	return nil
 }
 
-var _ sort.Interface = ClusterSlice{}
+var _ sort.Interface = Clusters{}
 
-func (s ClusterSlice) Len() int           { return len(s) }
-func (s ClusterSlice) Less(i, j int) bool { return s[i].ClusterID < s[j].ClusterID }
-func (s ClusterSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Clusters) Len() int           { return len(s) }
+func (s Clusters) Less(i, j int) bool { return s[i].ClusterID < s[j].ClusterID }
+func (s Clusters) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }

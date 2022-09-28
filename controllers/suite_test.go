@@ -150,9 +150,11 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 	var (
 		cancel context.CancelFunc
 	)
+
 	testNamespace := &corev1.Namespace{}
 	rookNamespace := &corev1.Namespace{}
 	populatorNamespace := &corev1.Namespace{}
+
 	BeforeEach(func() {
 		var mgrCtx context.Context
 		mgrCtx, cancel = context.WithCancel(ctx)
@@ -238,7 +240,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 		cancel()
 		Expect(k8sClient.Delete(ctx, testNamespace)).To(Succeed(), "failed to delete test namespace")
 		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete rook namespace")
-		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete populator namespace")
+		Expect(k8sClient.Delete(ctx, populatorNamespace)).To(Succeed(), "failed to delete populator namespace")
 	})
 
 	return testNamespace, rookNamespace, populatorNamespace
