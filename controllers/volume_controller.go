@@ -42,8 +42,9 @@ const (
 	userKeyKey   = "userKey"
 	volumeDriver = "ceph"
 
-	pvPoolKey      = "pool"
-	pvImageNameKey = "imageName"
+	pvPoolKey           = "pool"
+	pvImageNameKey      = "imageName"
+	pvRadosNamespaceKey = "radosNamespace"
 
 	// worldwide number key
 	wwnKey string = "WWN"
@@ -193,16 +194,28 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 		return "", fmt.Errorf("unable to get pv: %w", err)
 	}
 
+	var parts []string
+
 	pool, ok := pv.Spec.CSI.VolumeAttributes[pvPoolKey]
 	if !ok {
 		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvPoolKey)
 	}
+
+	parts = append(parts, pool)
+
+	radosNamespace, ok := pv.Spec.CSI.VolumeAttributes[pvRadosNamespaceKey]
+	if ok {
+		parts = append(parts, radosNamespace)
+	}
+
 	imageName, ok := pv.Spec.CSI.VolumeAttributes[pvImageNameKey]
 	if !ok {
 		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvImageNameKey)
 	}
 
-	return fmt.Sprintf("%s/%s", pool, imageName), nil
+	parts = append(parts, imageName)
+
+	return strings.Join(parts, "/"), nil
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, bool, error) {
