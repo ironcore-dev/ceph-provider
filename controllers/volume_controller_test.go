@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -77,21 +76,6 @@ var _ = Describe("VolumeReconciler", func() {
 			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
 			g.Expect(vol.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStatePending))
 		}).Should(Succeed())
-
-		By("checking that the ceph namespace has been created")
-		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
-		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
-		Eventually(func() error { return k8sClient.Get(ctx, cephNsKey, cephNs) }).Should(Succeed())
-
-		By("updating the ceph namespace status to ready")
-		cephNsBase := cephNs.DeepCopy()
-		cephNs.Status = &rookv1.CephBlockPoolRadosNamespaceStatus{
-			Phase: rookv1.ConditionReady,
-			Info: map[string]string{
-				"clusterID": "test-cluster-id",
-			},
-		}
-		Expect(k8sClient.Status().Patch(ctx, cephNs, client.MergeFrom(cephNsBase))).To(Succeed())
 
 		By("checking that the pvc has been created")
 		pvc := &corev1.PersistentVolumeClaim{}
@@ -173,21 +157,6 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Create(ctx, vol2)).To(Succeed())
 		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
 		volKey2 := types.NamespacedName{Namespace: vol2.Namespace, Name: vol2.Name}
-
-		By("checking that the ceph namespace has been created and updating it to ready")
-		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
-		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cephNsKey, cephNs)).To(Succeed())
-			cephNsBase := cephNs.DeepCopy()
-			cephNs.Status = &rookv1.CephBlockPoolRadosNamespaceStatus{
-				Phase: rookv1.ConditionReady,
-				Info: map[string]string{
-					"clusterID": "test-cluster-id",
-				},
-			}
-			g.Expect(k8sClient.Status().Patch(ctx, cephNs, client.MergeFrom(cephNsBase))).To(Succeed())
-		}).Should(Succeed())
 
 		By("checking that the pvc1 has been created and creating corresponding pv ")
 		pv := &corev1.PersistentVolume{}
@@ -274,11 +243,6 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
-
-		By("checking that the ceph namespace has not been created")
-		cephNs := &rookv1.CephBlockPoolRadosNamespace{}
-		cephNsKey := types.NamespacedName{Namespace: rookNs.Name, Name: testNs.Name}
-		Eventually(func() bool { return errors.IsNotFound(k8sClient.Get(ctx, cephNsKey, cephNs)) }).Should(BeTrue())
 
 		By("checking that the volume status has been updated")
 		Eventually(func(g Gomega) {
