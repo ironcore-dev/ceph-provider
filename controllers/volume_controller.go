@@ -409,9 +409,8 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 }
 
 func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
-	clusterID := r.RookConfig.ClusterId + "--" + volume.Spec.VolumePoolRef.Name
-	storageClassKey := types.NamespacedName{Name: clusterID}
 	storageClass := &storagev1.StorageClass{}
+	storageClassKey := types.NamespacedName{Name: r.RookConfig.ClusterId + "--" + volume.Spec.VolumePoolRef.Name}
 	err := r.Get(ctx, storageClassKey, storageClass)
 	if err == nil {
 		return storageClass.Name, false, nil
@@ -430,7 +429,7 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 		},
 		Provisioner: r.RookConfig.CSIDriverName,
 		Parameters: map[string]string{
-			"clusterID":     clusterID,
+			"clusterID":     r.RookConfig.ClusterId,
 			"pool":          r.VolumePoolName,
 			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
 			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
