@@ -281,9 +281,9 @@ func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger,
 		Spec: rookv1.ClientSpec{
 			Name: "",
 			Caps: map[string]string{
-				"mgr": fmt.Sprintf("profile rbd pool=%s namespace=%s", r.VolumePoolName, volume.Namespace),
+				"mgr": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
 				"mon": "profile rbd",
-				"osd": fmt.Sprintf("profile rbd pool=%s namespace=%s", r.VolumePoolName, volume.Namespace),
+				"osd": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
 			},
 		},
 	}
