@@ -49,6 +49,11 @@ type Config struct {
 	StorageClassVolumeBindingMode    string
 	CSIDriverName                    string
 	EnableRBDStats                   bool
+
+	DashboardInsecureSkipVerify bool
+	DashboardUser               string
+	DashboardSecretName         string
+	DashboardEndpoint           string
 }
 
 func NewConfigWithDefaults() *Config {

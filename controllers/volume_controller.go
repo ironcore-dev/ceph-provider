@@ -62,6 +62,7 @@ type VolumeReconciler struct {
 	Scheme         *runtime.Scheme
 	VolumePoolName string
 	RookConfig     *rook.Config
+	CephClient     ceph.Client
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
@@ -457,6 +458,14 @@ func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logge
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	var err error
+	if r.CephClient == nil {
+		r.CephClient, err = ceph.NewClient(mgr.GetClient(), r.RookConfig)
+		if err != nil {
+			return err
+		}
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
