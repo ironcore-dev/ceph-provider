@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/kubernetes-csi/volume-data-source-validator/client v0.0.0-20220805220032-cc2415d431f1
 	github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad
-	github.com/onmetal/onmetal-api v0.0.13-0.20220919185247-413b30bfd162
+	github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
 	github.com/onsi/ginkgo/v2 v2.2.0
 	github.com/onsi/gomega v1.20.2
