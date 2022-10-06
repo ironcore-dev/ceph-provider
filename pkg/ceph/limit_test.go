@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/onmetal/cephlet/pkg/ceph"
-	"github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,18 +32,18 @@ const (
 )
 
 func TestCalculateRelativeLimits(t *testing.T) {
-	volume := &storage.Volume{Spec: storage.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
+	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
 	}}}
-	volumeClass := &storage.VolumeClass{
+	volumeClass := &storagev1alpha1.VolumeClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				ceph.LabelLimitsPerGB: "true",
 			},
 		},
 		Capabilities: map[corev1.ResourceName]resource.Quantity{
-			storage.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
-			storage.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+			storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+			storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
 		},
 	}
 
@@ -78,16 +78,16 @@ func TestCalculateRelativeLimits(t *testing.T) {
 }
 
 func TestCalculateAbsoluteLimits(t *testing.T) {
-	volume := &storage.Volume{Spec: storage.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
+	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
 	}}}
-	volumeClass := &storage.VolumeClass{
+	volumeClass := &storagev1alpha1.VolumeClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{},
 		},
 		Capabilities: map[corev1.ResourceName]resource.Quantity{
-			storage.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
-			storage.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+			storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+			storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
 		},
 	}
 

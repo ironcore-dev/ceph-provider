@@ -152,7 +152,7 @@ func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, vol
 
 	limits, err := ceph.CalculateLimits(volume, volumeClass)
 	if err != nil {
-		return fmt.Errorf("unable to caluclate volume limits: %w", err)
+		return fmt.Errorf("unable to calculate volume limits: %w", err)
 	}
 
 	for limit, limitValue := range limits {
