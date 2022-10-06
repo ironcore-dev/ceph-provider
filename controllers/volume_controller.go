@@ -144,11 +144,36 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if err := r.applyLimits(ctx, log, volume); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
+	}
+
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+	volumeClass := &storagev1alpha1.VolumeClass{}
+	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumeClassRef.Name}, volumeClass); err != nil {
+		return fmt.Errorf("unable to get VolumeClass: %w", err)
+	}
+
+	limits, err := ceph.CalculateLimits(volume, volumeClass)
+	if err != nil {
+		return fmt.Errorf("unable to caluclate volume limits: %w", err)
+	}
+
+	for limit, limitValue := range limits {
+		if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, volume.Name, "", limit, limitValue.Value()); err != nil {
+			return fmt.Errorf("unable to apply limit (%s): %w", limit, err)
+		}
+	}
+
+	log.Info("Successfully applied limits")
+	return nil
 }
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {

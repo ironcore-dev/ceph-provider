@@ -17,7 +17,7 @@ package ceph
 import (
 	"fmt"
 
-	"github.com/onmetal/onmetal-api/apis/storage"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -31,7 +31,7 @@ func DefaultLimits() Limits {
 
 type Limits map[LimitType]*resource.Quantity
 
-func CalculateLimits(volume *storage.Volume, volumeClass *storage.VolumeClass) (Limits, error) {
+func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha1.VolumeClass) (Limits, error) {
 	limits := DefaultLimits()
 
 	var scale int64 = 1
@@ -45,7 +45,7 @@ func CalculateLimits(volume *storage.Volume, volumeClass *storage.VolumeClass) (
 		scale = size.ScaledValue(resource.Giga)
 	}
 
-	if iops, ok := volumeClass.Capabilities[storage.ResourceIOPS]; ok {
+	if iops, ok := volumeClass.Capabilities[storagev1alpha1.ResourceIOPS]; ok {
 		value := iops.DeepCopy()
 		value.Set(scale * iops.Value())
 
@@ -54,7 +54,7 @@ func CalculateLimits(volume *storage.Volume, volumeClass *storage.VolumeClass) (
 		limits[WriteIOPSLimit] = &value
 	}
 
-	if tps, ok := volumeClass.Capabilities[storage.ResourceTPS]; ok {
+	if tps, ok := volumeClass.Capabilities[storagev1alpha1.ResourceTPS]; ok {
 		value := tps.DeepCopy()
 		value.Set(scale * tps.Value())
 
