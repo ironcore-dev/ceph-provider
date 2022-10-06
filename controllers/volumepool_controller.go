@@ -26,8 +26,10 @@ import (
 	"github.com/onmetal/onmetal-api/equality"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,6 +64,7 @@ type VolumePoolReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools/finalizers,verbs=update
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumeclasses,verbs=get;list;watch
+//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch;create;update;patch;delete
 
 //+kubebuilder:rbac:groups=ceph.rook.io,resources=cephblockpools,verbs=get;list;watch;create;update;patch;delete
 
@@ -119,7 +122,15 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, fmt.Errorf("failed to apply ceph volume pool %s: %w", client.ObjectKeyFromObject(rookPool), err)
 	}
 
+	if err := r.applyStorageClass(ctx, log, pool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to apply storage class: %w", err)
+	}
+
 	return r.patchVolumePoolStatus(ctx, pool, rookPool)
+}
+
+func GetStorageClassName(clusterId, poolName string) string {
+	return fmt.Sprintf("%s--%s", clusterId, poolName)
 }
 
 func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) (ctrl.Result, error) {
@@ -147,6 +158,56 @@ func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool
 
 	log.V(1).Info("Successfully released finalizer")
 	return ctrl.Result{}, nil
+}
+
+func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
+	storageClass := &storagev1.StorageClass{}
+	storageClassKey := types.NamespacedName{Name: GetStorageClassName(r.RookConfig.ClusterId, pool.Name)}
+	err := r.Get(ctx, storageClassKey, storageClass)
+	if err == nil {
+		return nil
+	}
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to to get storageClass: %w", err)
+	}
+
+	storageClass = &storagev1.StorageClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StorageClass",
+			APIVersion: "storage.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: storageClassKey.Name,
+		},
+		Provisioner: r.RookConfig.CSIDriverName,
+		Parameters: map[string]string{
+			"clusterID":     r.RookConfig.ClusterId,
+			"pool":          r.VolumePoolName,
+			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
+			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookConfig.Namespace,
+			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/controller-expand-secret-namespace": r.RookConfig.Namespace,
+			"csi.storage.k8s.io/node-stage-secret-name":             r.RookConfig.CSIRBDNodeSecretName,
+			"csi.storage.k8s.io/node-stage-secret-namespace":        r.RookConfig.Namespace,
+			"csi.storage.k8s.io/fstype":                             r.RookConfig.StorageClassFSType,
+		},
+		ReclaimPolicy:        (*corev1.PersistentVolumeReclaimPolicy)(&r.RookConfig.StorageClassReclaimPolicy),
+		MountOptions:         r.RookConfig.StorageClassMountOptions,
+		AllowVolumeExpansion: &r.RookConfig.StorageClassAllowVolumeExpansion,
+		VolumeBindingMode:    (*storagev1.VolumeBindingMode)(&r.RookConfig.StorageClassVolumeBindingMode),
+	}
+
+	if err := ctrl.SetControllerReference(pool, storageClass, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownerreference for storage class %s: %w", client.ObjectKeyFromObject(storageClass), err)
+	}
+
+	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to patch storageClass %s for volumepool %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(pool), err)
+	}
+
+	log.V(1).Info("Applied StorageClass")
+	return nil
 }
 
 func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev1.LocalObjectReference, error) {
