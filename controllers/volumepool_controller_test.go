@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,6 +60,14 @@ var _ = Describe("VolumePoolReconciler", func() {
 				return nil
 			}).Should(Succeed())
 
+			By("checking that a StorageClass has been created")
+			storageClass := &storagev1.StorageClass{}
+			storageClassKey := types.NamespacedName{Name: GetStorageClassName(rookConfig.ClusterId, volumePoolName)}
+			Eventually(func() error { return k8sClient.Get(ctx, storageClassKey, storageClass) }).Should(Succeed())
+
+			Expect(storageClass.Provisioner).To(BeEquivalentTo(rookConfig.CSIDriverName))
+
+			By("checking that a VolumePool reflect the rook status")
 			rookPoolBase = rookPool.DeepCopy()
 			rookPool.Status.Phase = rookv1.ConditionFailure
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
