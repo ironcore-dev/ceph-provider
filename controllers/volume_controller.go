@@ -27,7 +27,6 @@ import (
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,8 +75,6 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes/status,verbs=get
 
-//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch;create;update;patch;delete
-
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
@@ -120,15 +117,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, nil
 	}
 
-	storageClass, requeue, err := r.applyStorageClass(ctx, log, volume)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create storage class for volume: %w", err)
-	}
-	if requeue {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	pvc, requeue, err := r.applyPVC(ctx, log, volume, storageClass)
+	pvc, requeue, err := r.applyPVC(ctx, log, volume)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
 	}
@@ -243,7 +232,8 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	return strings.Join(parts, "/"), nil
 }
 
-func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, storageClass string) (*corev1.PersistentVolumeClaim, bool, error) {
+func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
+	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumeClassRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -432,53 +422,6 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 		return nil, fmt.Errorf("no monitors provided for clusterID %s in configMap %s", r.RookConfig.ClusterId, client.ObjectKeyFromObject(rookConfigMap))
 	}
 	return monitors, nil
-}
-
-func (r *VolumeReconciler) applyStorageClass(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
-	storageClass := &storagev1.StorageClass{}
-	storageClassKey := types.NamespacedName{Name: r.RookConfig.ClusterId + "--" + volume.Spec.VolumePoolRef.Name}
-	err := r.Get(ctx, storageClassKey, storageClass)
-	if err == nil {
-		return storageClass.Name, false, nil
-	}
-	if client.IgnoreNotFound(err) != nil {
-		return "", false, fmt.Errorf("failed to to get storageClass: %w", err)
-	}
-
-	storageClass = &storagev1.StorageClass{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StorageClass",
-			APIVersion: "storage.k8s.io/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: storageClassKey.Name,
-		},
-		Provisioner: r.RookConfig.CSIDriverName,
-		Parameters: map[string]string{
-			"clusterID":     r.RookConfig.ClusterId,
-			"pool":          r.VolumePoolName,
-			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
-			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
-			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookConfig.Namespace,
-			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
-			"csi.storage.k8s.io/controller-expand-secret-namespace": r.RookConfig.Namespace,
-			"csi.storage.k8s.io/node-stage-secret-name":             r.RookConfig.CSIRBDNodeSecretName,
-			"csi.storage.k8s.io/node-stage-secret-namespace":        r.RookConfig.Namespace,
-			"csi.storage.k8s.io/fstype":                             r.RookConfig.StorageClassFSType,
-		},
-		ReclaimPolicy:        (*corev1.PersistentVolumeReclaimPolicy)(&r.RookConfig.StorageClassReclaimPolicy),
-		MountOptions:         r.RookConfig.StorageClassMountOptions,
-		AllowVolumeExpansion: &r.RookConfig.StorageClassAllowVolumeExpansion,
-		VolumeBindingMode:    (*storagev1.VolumeBindingMode)(&r.RookConfig.StorageClassVolumeBindingMode),
-	}
-
-	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", false, fmt.Errorf("failed to patch storageClass %s for volume %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(volume), err)
-	}
-
-	log.V(1).Info("Applied StorageClass")
-
-	return storageClass.Name, false, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
