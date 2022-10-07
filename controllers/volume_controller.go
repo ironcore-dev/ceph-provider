@@ -113,7 +113,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, volumePool); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
 	} else if errors.IsNotFound(err) {
-		log.V(1).Info("skipped reconcile: volume pool %s does not exist", volume.Spec.VolumePoolRef.Name)
+		log.V(1).Info("skipped reconcile: volume pool %s does not exist", "pool", volume.Spec.VolumePoolRef.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -233,7 +233,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumeClassRef.Name)
+	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",

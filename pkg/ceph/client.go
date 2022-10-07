@@ -127,7 +127,6 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 }
 
 func NewClient(k8sClient k8s.Client, rookConfig *rook.Config) (Client, error) {
-
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: rookConfig.DashboardInsecureSkipVerify},

@@ -26,10 +26,10 @@ const (
 )
 
 func DefaultLimits() Limits {
-	return map[LimitType]*resource.Quantity{}
+	return map[LimitType]resource.Quantity{}
 }
 
-type Limits map[LimitType]*resource.Quantity
+type Limits map[LimitType]resource.Quantity
 
 func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha1.VolumeClass) (Limits, error) {
 	limits := DefaultLimits()
@@ -49,18 +49,18 @@ func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha
 		value := iops.DeepCopy()
 		value.Set(scale * iops.Value())
 
-		limits[IOPSlLimit] = &value
-		limits[ReadIOPSLimit] = &value
-		limits[WriteIOPSLimit] = &value
+		limits[IOPSlLimit] = value
+		limits[ReadIOPSLimit] = value
+		limits[WriteIOPSLimit] = value
 	}
 
 	if tps, ok := volumeClass.Capabilities[storagev1alpha1.ResourceTPS]; ok {
 		value := tps.DeepCopy()
 		value.Set(scale * tps.Value())
 
-		limits[BPSLimit] = &value
-		limits[ReadBPSLimit] = &value
-		limits[WriteBPSLimit] = &value
+		limits[BPSLimit] = value
+		limits[ReadBPSLimit] = value
+		limits[WriteBPSLimit] = value
 	}
 
 	return limits, nil
