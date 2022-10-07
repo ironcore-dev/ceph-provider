@@ -98,6 +98,10 @@ func main() {
 	flag.StringVar(&rookConfig.StorageClassReclaimPolicy, "ceph-sc-reclaim-policy", rook.StorageClassReclaimPolicyDefaultValue, "Ceph StorageClass: value for 'reclaimPolicy' field")
 	flag.StringVar(&rookConfig.StorageClassVolumeBindingMode, "ceph-sc-volume-binding-mode", rook.StorageClassVolumeBindingModeDefaultValue, "Ceph StorageClass: value for 'volumeBindingMode' field")
 	flag.StringVar(&rookConfig.CSIDriverName, "ceph-csi-driver", rook.CSIDriverNameDefaultValue, "Name of Ceph CSI driver")
+	flag.StringVar(&rookConfig.DashboardEndpoint, "rook-dashboard-endpoint", "https://rook-ceph-mgr-dashboard.rook-ceph.svc.cluster.local:8443", "Endpoint pointing to the ceph dashboard")
+	flag.BoolVar(&rookConfig.DashboardInsecureSkipVerify, "rook-dashboard-insecure-skip-verify", false, "DashboardInsecureSkipVerify controls whether a client verifies the ceph dashboard's certificate chain and host name")
+	flag.StringVar(&rookConfig.DashboardUser, "rook-dashboard-user", "admin", "user name which is used talk to the ceph dashboard api")
+	flag.StringVar(&rookConfig.DashboardSecretName, "rook-dashboard-secret-name", "rook-ceph-dashboard-password", "Secret name containing password for the dashboard user")
 
 	opts := zap.Options{
 		Development: true,

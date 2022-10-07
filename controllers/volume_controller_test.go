@@ -49,6 +49,9 @@ var _ = Describe("VolumeReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "sc-",
 			},
+			Capabilities: map[corev1.ResourceName]resource.Quantity{
+				storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
+			},
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 	})
