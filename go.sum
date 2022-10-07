@@ -1329,8 +1329,8 @@ github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5/go.mod h1:v
 github.com/olekukonko/tablewriter v0.0.0-20180130162743-b8a9be070da4/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad h1:PA3jaJUpNRvYxWyHzqhoHo3UiVj/gtFq7Un8IegTWsc=
 github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad/go.mod h1:9PNXJu86RzopXVLlzg47LYSFOIe8eHUxhlmYoRuArGI=
-github.com/onmetal/onmetal-api v0.0.13-0.20220919185247-413b30bfd162 h1:oHZjNHAEVaYfqcMvgqjKan7w2aNbAIy+vERAFa8/GDI=
-github.com/onmetal/onmetal-api v0.0.13-0.20220919185247-413b30bfd162/go.mod h1:O5aMZ3EE5jSFbDvUYjslmllDyG8Yl5z0VmVmuJ00ylw=
+github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d h1:0268q1g43TDQ+FyreQFjJznARSOPYigKhBE/8topclw=
+github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d/go.mod h1:6n8cwHk/AXctTFLTUzUJbRCHux4G7SDweePLe2HMKjU=
 github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660 h1:hqXcxP06lWGmbaFcMbIA4XwrPWG17/t6I21M3xDiRLA=
 github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660/go.mod h1:OM2WHTh6I0jVWlgn9VW18bANrwt7fyUy/MdF7nig8eg=
 github.com/onsi/ginkgo v0.0.0-20151202141238-7f8ab55aaf3b/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

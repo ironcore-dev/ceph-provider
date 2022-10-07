@@ -21,6 +21,7 @@ import (
 	"time"
 
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
+	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
@@ -207,6 +208,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			Scheme:         k8sManager.GetScheme(),
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
+			CephClient:     &cephMock{},
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&VolumePoolReconciler{
@@ -244,4 +246,10 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 	})
 
 	return testNamespace, rookNamespace, populatorNamespace
+}
+
+type cephMock struct{}
+
+func (c *cephMock) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limitType ceph.LimitType, value int64) error {
+	return nil
 }

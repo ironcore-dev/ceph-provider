@@ -61,6 +61,7 @@ type VolumeReconciler struct {
 	Scheme         *runtime.Scheme
 	VolumePoolName string
 	RookConfig     *rook.Config
+	CephClient     ceph.Client
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
@@ -112,7 +113,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, volumePool); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
 	} else if errors.IsNotFound(err) {
-		log.V(1).Info("skipped reconcile: volume pool %s does not exist", volume.Spec.VolumePoolRef.Name)
+		log.V(1).Info("skipped reconcile: volume pool %s does not exist", "pool", volume.Spec.VolumePoolRef.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -132,11 +133,36 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if err := r.applyLimits(ctx, log, volume); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
+	}
+
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+	volumeClass := &storagev1alpha1.VolumeClass{}
+	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumeClassRef.Name}, volumeClass); err != nil {
+		return fmt.Errorf("unable to get VolumeClass: %w", err)
+	}
+
+	limits, err := ceph.CalculateLimits(volume, volumeClass)
+	if err != nil {
+		return fmt.Errorf("unable to calculate volume limits: %w", err)
+	}
+
+	for limit, limitValue := range limits {
+		if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, volume.Name, "", limit, limitValue.Value()); err != nil {
+			return fmt.Errorf("unable to apply limit (%s): %w", limit, err)
+		}
+	}
+
+	log.Info("Successfully applied limits")
+	return nil
 }
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
@@ -207,7 +233,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumeClassRef.Name)
+	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -400,6 +426,14 @@ func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	var err error
+	if r.CephClient == nil {
+		r.CephClient, err = ceph.NewClient(mgr.GetClient(), r.RookConfig)
+		if err != nil {
+			return err
+		}
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
