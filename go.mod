@@ -11,7 +11,7 @@ require (
 	github.com/onmetal/onmetal-api v0.0.13-0.20220919185247-413b30bfd162
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
 	github.com/onsi/ginkgo/v2 v2.2.0
-	github.com/onsi/gomega v1.20.2
+	github.com/onsi/gomega v1.21.1
 	github.com/rook/rook v1.9.10
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
