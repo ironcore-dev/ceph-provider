@@ -73,7 +73,7 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 	defer cancel()
 
 	secret := &corev1.Secret{}
-	if err := t.Get(context.TODO(), types.NamespacedName{Namespace: t.rookConfig.Namespace, Name: t.rookConfig.DashboardSecretName}, secret); err != nil {
+	if err := t.Get(ctx, types.NamespacedName{Namespace: t.rookConfig.Namespace, Name: t.rookConfig.DashboardSecretName}, secret); err != nil {
 		return nil, fmt.Errorf("unable to get ceph dashboard password: %w", err)
 	}
 
