@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -162,10 +161,12 @@ func (c *client) SetVolumeLimit(ctx context.Context, poolName, volumeName, volum
 		return fmt.Errorf("unable to marshal limitRequest: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/api/block/image/%s",
-		c.rookConfig.DashboardEndpoint,
-		url.PathEscape(fmt.Sprintf("%s/%s/%s", poolName, volumeNamespace, volumeName)),
-	), bytes.NewBuffer(data))
+	var endpoint = fmt.Sprintf("%s/api/block/image/%s/%s/%s", c.rookConfig.DashboardEndpoint, poolName, volumeNamespace, volumeName)
+	if volumeNamespace == "" {
+		endpoint = fmt.Sprintf("%s/api/block/image/%s/%s", c.rookConfig.DashboardEndpoint, poolName, volumeName)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("unable to create limitRequest request: %w", err)
 	}
@@ -174,10 +175,10 @@ func (c *client) SetVolumeLimit(ctx context.Context, poolName, volumeName, volum
 
 	response, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to do limitRequest request: %w", err)
+		return fmt.Errorf("unable to do limitRequest request (endpoint: %s): %w", endpoint, err)
 	}
 	if isFailed(response) {
-		return errors.New("limitRequest failed with code: %s " + response.Status)
+		return fmt.Errorf("limitRequest (endpoint: %s) failed with code: %s ", endpoint, response.Status)
 	}
 
 	return nil
