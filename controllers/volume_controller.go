@@ -133,7 +133,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if err := r.applyLimits(ctx, log, volume); err != nil {
+	if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
 	}
 
@@ -144,7 +144,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	return ctrl.Result{}, nil
 }
 
-func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) error {
 	volumeClass := &storagev1alpha1.VolumeClass{}
 	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumeClassRef.Name}, volumeClass); err != nil {
 		return fmt.Errorf("unable to get VolumeClass: %w", err)
@@ -155,8 +155,23 @@ func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, vol
 		return fmt.Errorf("unable to calculate volume limits: %w", err)
 	}
 
+	if len(limits) == 0 {
+		log.Info("No limits to apply.")
+		return nil
+	}
+
+	pv := &corev1.PersistentVolume{}
+	if err := r.Get(ctx, client.ObjectKey{Name: pvc.Spec.VolumeName}, pv); err != nil {
+		return fmt.Errorf("unable to get pv: %w", err)
+	}
+
+	imageName, ok := pv.Spec.CSI.VolumeAttributes["imageName"]
+	if !ok || imageName == "" {
+		return fmt.Errorf("csi volume attribute 'imageName' is missing")
+	}
+
 	for limit, limitValue := range limits {
-		if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, volume.Name, "", limit, limitValue.Value()); err != nil {
+		if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, imageName, "", limit, limitValue.Value()); err != nil {
 			return fmt.Errorf("unable to apply limit (%s): %w", limit, err)
 		}
 	}
