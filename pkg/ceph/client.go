@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -161,11 +162,12 @@ func (c *client) SetVolumeLimit(ctx context.Context, poolName, volumeName, volum
 		return fmt.Errorf("unable to marshal limitRequest: %w", err)
 	}
 
-	var endpoint = fmt.Sprintf("%s/api/block/image/%s/%s/%s", c.rookConfig.DashboardEndpoint, poolName, volumeNamespace, volumeName)
+	var volumeIdentifier = fmt.Sprintf("%s/%s/%s", poolName, volumeNamespace, volumeName)
 	if volumeNamespace == "" {
-		endpoint = fmt.Sprintf("%s/api/block/image/%s/%s", c.rookConfig.DashboardEndpoint, poolName, volumeName)
+		volumeIdentifier = fmt.Sprintf("%s/%s", poolName, volumeName)
 	}
 
+	endpoint := fmt.Sprintf("%s/api/block/image/%s", c.rookConfig.DashboardEndpoint, url.PathEscape(volumeIdentifier))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("unable to create limitRequest request: %w", err)
