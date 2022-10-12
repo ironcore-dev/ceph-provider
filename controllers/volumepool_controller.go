@@ -137,6 +137,9 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 func GetStorageClassName(clusterId, poolName string) string {
 	return fmt.Sprintf("%s--%s", clusterId, poolName)
 }
+func GetVolumeSnapshotClassName(clusterId, poolName string) string {
+	return fmt.Sprintf("%s--%s", clusterId, poolName)
+}
 
 func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(pool, volumePoolFinalizer) {
@@ -217,7 +220,7 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 
 func (r *VolumePoolReconciler) applyVolumeSnapshotClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
 	volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
-	volumeSnapshotClassKey := types.NamespacedName{Name: GetStorageClassName(r.RookConfig.ClusterId, pool.Name)}
+	volumeSnapshotClassKey := types.NamespacedName{Name: GetVolumeSnapshotClassName(r.RookConfig.ClusterId, pool.Name)}
 	err := r.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass)
 	if err == nil {
 		return nil
