@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -102,6 +103,7 @@ var _ = BeforeSuite(func() {
 		CRDDirectoryPaths: []string{
 			modutils.Dir("github.com/rook/rook", "deploy", "examples", "crds.yaml"),
 			modutils.Dir("github.com/kubernetes-csi/volume-data-source-validator/client", "config", "crd", "populator.storage.k8s.io_volumepopulators.yaml"),
+			modutils.Dir("github.com/kubernetes-csi/external-snapshotter/client/v6", "config", "crd", "kustomization.yaml"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -124,6 +126,7 @@ var _ = BeforeSuite(func() {
 	Expect(rookv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(storagev1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(popv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(snapshotv1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// Init package-level k8sClient
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
