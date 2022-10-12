@@ -10,7 +10,7 @@ require (
 	github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad
 	github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
-	github.com/onsi/ginkgo/v2 v2.2.0
+	github.com/onsi/ginkgo/v2 v2.3.0
 	github.com/onsi/gomega v1.21.1
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.9.10
