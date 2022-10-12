@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/google/addlicense v1.0.0
 	github.com/google/uuid v1.3.0
-	github.com/kubernetes-csi/external-snapshotter/client/v6 v6.1.0
+	github.com/kubernetes-csi/external-snapshotter/client/v6 v6.0.0
 	github.com/kubernetes-csi/volume-data-source-validator/client v0.0.0-20220805220032-cc2415d431f1
 	github.com/onmetal/controller-utils v0.6.4-0.20220801130953-84241c3814ad
 	github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d
@@ -19,11 +19,11 @@ require (
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/zap v1.23.0
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
-	k8s.io/api v0.25.2
-	k8s.io/apimachinery v0.25.2
-	k8s.io/client-go v0.25.2
+	k8s.io/api v0.24.4
+	k8s.io/apimachinery v0.24.4
+	k8s.io/client-go v0.24.4
 	k8s.io/component-helpers v0.24.4
-	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.12.3
 )
 
@@ -130,7 +130,7 @@ require (
 	go4.org/netipx v0.0.0-20220812043211-3cc044ffd68d // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
-	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
