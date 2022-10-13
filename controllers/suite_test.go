@@ -103,7 +103,9 @@ var _ = BeforeSuite(func() {
 		CRDDirectoryPaths: []string{
 			modutils.Dir("github.com/rook/rook", "deploy", "examples", "crds.yaml"),
 			modutils.Dir("github.com/kubernetes-csi/volume-data-source-validator/client", "config", "crd", "populator.storage.k8s.io_volumepopulators.yaml"),
-			modutils.Dir("github.com/kubernetes-csi/external-snapshotter/client/v6", "config", "crd", "kustomization.yaml"),
+			modutils.Dir("github.com/kubernetes-csi/external-snapshotter/client/v6", "config", "crd", "snapshot.storage.k8s.io_volumesnapshotclasses.yaml"),
+			modutils.Dir("github.com/kubernetes-csi/external-snapshotter/client/v6", "config", "crd", "snapshot.storage.k8s.io_volumesnapshotcontents.yaml"),
+			modutils.Dir("github.com/kubernetes-csi/external-snapshotter/client/v6", "config", "crd", "snapshot.storage.k8s.io_volumesnapshots.yaml"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}

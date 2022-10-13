@@ -303,7 +303,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 		return true, r.createSnapshot(ctx, log, volume)
 	}
 
-	if snapshot.Status.ReadyToUse == nil || !*snapshot.Status.ReadyToUse {
+	if snapshot.Status == nil || snapshot.Status.ReadyToUse == nil || !*snapshot.Status.ReadyToUse {
 		return true, nil
 	}
 
