@@ -99,6 +99,12 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 	return r.reconcile(ctx, log, volume)
 }
 
+func GetNameFromImage(image string) string {
+	image = strings.ReplaceAll(image, "/", "-")
+	image = strings.ReplaceAll(image, ":", "-")
+	return strings.ReplaceAll(image, "@", "-")
+}
+
 func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Volume")
 
@@ -295,7 +301,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	}
 
 	snapshot := &snapshotv1.VolumeSnapshot{}
-	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: volume.Spec.Image}, snapshot); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: GetNameFromImage(volume.Spec.Image)}, snapshot); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, fmt.Errorf("unable to get snapshot: %w", err)
 		}
@@ -303,14 +309,14 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 		return true, r.createSnapshot(ctx, log, volume)
 	}
 
-	if snapshot.Status == nil || snapshot.Status.ReadyToUse == nil || !*snapshot.Status.ReadyToUse {
+	if snapshot.Status == nil || !pointer.BoolDeref(snapshot.Status.ReadyToUse, false) {
 		return true, nil
 	}
 
 	pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
 		APIGroup: pointer.String("snapshot.storage.k8s.io"),
 		Kind:     "VolumeSnapshot",
-		Name:     volume.Spec.Image,
+		Name:     GetNameFromImage(volume.Spec.Image),
 	}
 
 	return false, nil
@@ -323,7 +329,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      volume.Spec.Image,
+			Name:      GetNameFromImage(volume.Spec.Image),
 			Namespace: volume.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -352,7 +358,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			APIVersion: snapshotv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      volume.Spec.Image,
+			Name:      GetNameFromImage(volume.Spec.Image),
 			Namespace: volume.Namespace,
 		},
 		Spec: snapshotv1.VolumeSnapshotSpec{
