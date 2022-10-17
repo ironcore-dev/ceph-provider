@@ -534,6 +534,7 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&snapshotv1.VolumeSnapshot{}).
 		Owns(&rookv1.CephClient{}).
 		Complete(r)
 }
