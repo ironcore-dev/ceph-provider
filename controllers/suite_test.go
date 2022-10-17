@@ -33,6 +33,7 @@ import (
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -250,6 +251,6 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 
 type cephMock struct{}
 
-func (c *cephMock) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limitType ceph.LimitType, value int64) error {
+func (c *cephMock) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limits map[ceph.LimitType]resource.Quantity) error {
 	return nil
 }
