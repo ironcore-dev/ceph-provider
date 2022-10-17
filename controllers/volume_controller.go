@@ -170,10 +170,8 @@ func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, vol
 		return fmt.Errorf("csi volume attribute 'imageName' is missing")
 	}
 
-	for limit, limitValue := range limits {
-		if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, imageName, "", limit, limitValue.Value()); err != nil {
-			return fmt.Errorf("unable to apply limit (%s): %w", limit, err)
-		}
+	if err := r.CephClient.SetVolumeLimit(ctx, volume.Spec.VolumePoolRef.Name, imageName, "", limits); err != nil {
+		return fmt.Errorf("unable to apply limits (%+v): %w", limits, err)
 	}
 
 	log.Info("Successfully applied limits")

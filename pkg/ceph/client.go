@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,8 +59,8 @@ type LimitType string
 
 // Client - an interface to ceph CLI.
 type Client interface {
-	// SetVolumeLimit - sets IOPS limit to ceph rbd images.
-	SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limitType LimitType, value int64) error
+	// SetVolumeLimit - sets limits to ceph rbd images.
+	SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limits map[LimitType]resource.Quantity) error
 }
 
 type tokenSource struct {
@@ -152,12 +153,17 @@ type client struct {
 	httpClient *http.Client
 }
 
-func (c *client) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limitType LimitType, value int64) error {
-	data, err := json.Marshal(limitRequest{
-		Configuration: map[string]string{
-			string(limitType): fmt.Sprintf("%d", value),
-		},
-	})
+func (c *client) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limits map[LimitType]resource.Quantity) error {
+	if len(limits) == 0 {
+		return nil
+	}
+
+	limitData := map[string]string{}
+	for limit, limitValue := range limits {
+		limitData[(string(limit))] = fmt.Sprintf("%d", limitValue.Value())
+	}
+
+	data, err := json.Marshal(limitRequest{Configuration: limitData})
 	if err != nil {
 		return fmt.Errorf("unable to marshal limitRequest: %w", err)
 	}
