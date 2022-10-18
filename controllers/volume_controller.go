@@ -99,7 +99,8 @@ func (r *VolumeReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 	return r.reconcile(ctx, log, volume)
 }
 
-func GetNameFromImage(image string) string {
+func GetSanitizedImageNameFromVolume(volume *storagev1alpha1.Volume) string {
+	image := volume.Spec.Image
 	image = strings.ReplaceAll(image, "/", "-")
 	image = strings.ReplaceAll(image, ":", "-")
 	return strings.ReplaceAll(image, "@", "-")
@@ -301,7 +302,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	}
 
 	snapshot := &snapshotv1.VolumeSnapshot{}
-	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: GetNameFromImage(volume.Spec.Image)}, snapshot); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: GetSanitizedImageNameFromVolume(volume)}, snapshot); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, fmt.Errorf("unable to get snapshot: %w", err)
 		}
@@ -316,7 +317,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
 		APIGroup: pointer.String("snapshot.storage.k8s.io"),
 		Kind:     "VolumeSnapshot",
-		Name:     GetNameFromImage(volume.Spec.Image),
+		Name:     GetSanitizedImageNameFromVolume(volume),
 	}
 
 	return false, nil
@@ -329,7 +330,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetNameFromImage(volume.Spec.Image),
+			Name:      GetSanitizedImageNameFromVolume(volume),
 			Namespace: volume.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -358,7 +359,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			APIVersion: snapshotv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetNameFromImage(volume.Spec.Image),
+			Name:      GetSanitizedImageNameFromVolume(volume),
 			Namespace: volume.Namespace,
 		},
 		Spec: snapshotv1.VolumeSnapshotSpec{
