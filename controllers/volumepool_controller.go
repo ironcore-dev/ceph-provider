@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
@@ -123,13 +124,20 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 	}
 
 	if err := r.applyStorageClass(ctx, log, pool); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply storage class: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to apply StorageClass: %w", err)
+	}
+
+	if err := r.applyVolumeSnapshotClass(ctx, log, pool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to apply VolumeSnapshotClass: %w", err)
 	}
 
 	return r.patchVolumePoolStatus(ctx, pool, rookPool)
 }
 
 func GetStorageClassName(clusterId, poolName string) string {
+	return fmt.Sprintf("%s--%s", clusterId, poolName)
+}
+func GetVolumeSnapshotClassName(clusterId, poolName string) string {
 	return fmt.Sprintf("%s--%s", clusterId, poolName)
 }
 
@@ -207,6 +215,46 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 	}
 
 	log.V(1).Info("Applied StorageClass")
+	return nil
+}
+
+func (r *VolumePoolReconciler) applyVolumeSnapshotClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
+	volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
+	volumeSnapshotClassKey := types.NamespacedName{Name: GetVolumeSnapshotClassName(r.RookConfig.ClusterId, pool.Name)}
+	err := r.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass)
+	if err == nil {
+		return nil
+	}
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to to get volumeSnapshotClass: %w", err)
+	}
+
+	volumeSnapshotClass = &snapshotv1.VolumeSnapshotClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "VolumeSnapshotClass",
+			APIVersion: snapshotv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: volumeSnapshotClassKey.Name,
+		},
+		Driver: r.RookConfig.CSIDriverName,
+		Parameters: map[string]string{
+			"clusterID": r.RookConfig.ClusterId,
+			"csi.storage.k8s.io/snapshotter-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
+			"csi.storage.k8s.io/snapshotter-secret-namespace": r.RookConfig.Namespace,
+		},
+		DeletionPolicy: snapshotv1.VolumeSnapshotContentDelete,
+	}
+
+	if err := ctrl.SetControllerReference(pool, volumeSnapshotClass, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for volumeSnapshotClass %s: %w", client.ObjectKeyFromObject(volumeSnapshotClass), err)
+	}
+
+	if err := r.Patch(ctx, volumeSnapshotClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to patch volumeSnapshotClass %s for volumepool %s: %w", client.ObjectKeyFromObject(volumeSnapshotClass), client.ObjectKeyFromObject(pool), err)
+	}
+
+	log.V(1).Info("Applied VolumeSnapshotClass")
 	return nil
 }
 

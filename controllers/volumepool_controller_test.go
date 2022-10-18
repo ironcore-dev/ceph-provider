@@ -15,6 +15,7 @@
 package controllers
 
 import (
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
@@ -66,6 +67,13 @@ var _ = Describe("VolumePoolReconciler", func() {
 			Eventually(func() error { return k8sClient.Get(ctx, storageClassKey, storageClass) }).Should(Succeed())
 
 			Expect(storageClass.Provisioner).To(BeEquivalentTo(rookConfig.CSIDriverName))
+
+			By("checking that a VolumeSnapshotClass has been created")
+			volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
+			volumeSnapshotClassKey := types.NamespacedName{Name: GetVolumeSnapshotClassName(rookConfig.ClusterId, volumePoolName)}
+			Eventually(func() error { return k8sClient.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass) }).Should(Succeed())
+
+			Expect(volumeSnapshotClass.Driver).To(BeEquivalentTo(rookConfig.CSIDriverName))
 
 			By("checking that a VolumePool reflect the rook status")
 			rookPoolBase = rookPool.DeepCopy()
