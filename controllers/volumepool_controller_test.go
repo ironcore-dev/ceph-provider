@@ -61,16 +61,27 @@ var _ = Describe("VolumePoolReconciler", func() {
 				return nil
 			}).Should(Succeed())
 
+			By("checking that a CephClient has been created")
+			cephClient := &rookv1.CephClient{}
+			cephClientKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName), Namespace: rookNs.Name}
+			Eventually(func() error { return k8sClient.Get(ctx, cephClientKey, cephClient) }).Should(Succeed())
+
+			cephClientBase := cephClient.DeepCopy()
+			cephClient.Status = &rookv1.CephClientStatus{
+				Phase: rookv1.ConditionReady,
+			}
+			Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
+
 			By("checking that a StorageClass has been created")
 			storageClass := &storagev1.StorageClass{}
-			storageClassKey := types.NamespacedName{Name: GetStorageClassName(rookConfig.ClusterId, volumePoolName)}
+			storageClassKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName)}
 			Eventually(func() error { return k8sClient.Get(ctx, storageClassKey, storageClass) }).Should(Succeed())
 
 			Expect(storageClass.Provisioner).To(BeEquivalentTo(rookConfig.CSIDriverName))
 
 			By("checking that a VolumeSnapshotClass has been created")
 			volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
-			volumeSnapshotClassKey := types.NamespacedName{Name: GetVolumeSnapshotClassName(rookConfig.ClusterId, volumePoolName)}
+			volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName)}
 			Eventually(func() error { return k8sClient.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass) }).Should(Succeed())
 
 			Expect(volumeSnapshotClass.Driver).To(BeEquivalentTo(rookConfig.CSIDriverName))

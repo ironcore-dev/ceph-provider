@@ -254,7 +254,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
+	storageClass := GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -337,7 +337,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
-			StorageClassName: pointer.String(GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			StorageClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 			//set DataSourceRef that populator picks up the pvc
 			DataSourceRef: &corev1.TypedLocalObjectReference{
 				APIGroup: pointer.String(storagev1alpha1.SchemeGroupVersion.String()),
@@ -364,7 +364,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			Source: snapshotv1.VolumeSnapshotSource{
 				PersistentVolumeClaimName: &imagePvc.Name,
 			},
-			VolumeSnapshotClassName: pointer.String(GetVolumeSnapshotClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			VolumeSnapshotClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 		},
 	}
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
