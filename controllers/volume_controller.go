@@ -68,11 +68,12 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/finalizers,verbs=update
 
+//+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;watch;create;update;patch;delete
+
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes/status,verbs=get
-
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
@@ -218,13 +219,12 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 		return "", fmt.Errorf("unable to get pv: %w", err)
 	}
 
-	var parts []string
-
 	pool, ok := pv.Spec.CSI.VolumeAttributes[pvPoolKey]
 	if !ok {
 		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvPoolKey)
 	}
 
+	var parts []string
 	parts = append(parts, pool)
 
 	radosNamespace, ok := pv.Spec.CSI.VolumeAttributes[pvRadosNamespaceKey]
@@ -239,7 +239,10 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 
 	parts = append(parts, imageName)
 
-	return strings.Join(parts, "/"), nil
+	result := strings.Join(parts, "/")
+	log.V(1).Info("get image key %s from pv %s", result, client.ObjectKeyFromObject(pv))
+
+	return result, nil
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
@@ -339,6 +342,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 	if err := r.Patch(ctx, imagePvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch image pvc: %w", err)
 	}
+	log.V(1).Info("created image pvc %s", client.ObjectKeyFromObject(imagePvc))
 
 	snapshot := &snapshotv1.VolumeSnapshot{
 		TypeMeta: metav1.TypeMeta{
@@ -359,6 +363,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch snapshot: %w", err)
 	}
+	log.V(1).Info("created snapshot %s for image pvc %s", client.ObjectKeyFromObject(snapshot), client.ObjectKeyFromObject(imagePvc))
 
 	return nil
 }
@@ -409,7 +414,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 		return fmt.Errorf("failed to apply volume secret %s: %w", client.ObjectKeyFromObject(volumeSecret), err)
 	}
 
-	monitors, err := r.getMonitorListForVolume(ctx, volume)
+	monitors, err := r.getMonitorList(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get monitor list for volume: %w", err)
 	}
@@ -443,7 +448,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	return r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase))
 }
 
-func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *storagev1alpha1.Volume) ([]string, error) {
+func (r *VolumeReconciler) getMonitorList(ctx context.Context) ([]string, error) {
 	rookConfigMap := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{Name: r.RookConfig.MonitorConfigMapName, Namespace: r.RookConfig.Namespace}, rookConfigMap); err != nil {
 		return nil, fmt.Errorf("failed to get ceph monitors configMap %s: %w", client.ObjectKeyFromObject(rookConfigMap), err)
