@@ -119,7 +119,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, volumePool); client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
 	} else if errors.IsNotFound(err) {
-		log.V(1).Info("skipped reconcile: volume pool %s does not exist", "pool", volume.Spec.VolumePoolRef.Name)
+		log.V(1).Info("skipped reconcile: volume pool does not exist", "pool", volume.Spec.VolumePoolRef.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -240,7 +240,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	parts = append(parts, imageName)
 
 	result := strings.Join(parts, "/")
-	log.V(1).Info("get image key %s from pv %s", result, client.ObjectKeyFromObject(pv))
+	log.V(1).Info(fmt.Sprintf("get image key %s from pv %s", result, client.ObjectKeyFromObject(pv)))
 
 	return result, nil
 }
@@ -342,7 +342,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 	if err := r.Patch(ctx, imagePvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch image pvc: %w", err)
 	}
-	log.V(1).Info("created image pvc %s", client.ObjectKeyFromObject(imagePvc))
+	log.V(1).Info(fmt.Sprintf("created image pvc %s", client.ObjectKeyFromObject(imagePvc)))
 
 	snapshot := &snapshotv1.VolumeSnapshot{
 		TypeMeta: metav1.TypeMeta{
@@ -363,7 +363,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch snapshot: %w", err)
 	}
-	log.V(1).Info("created snapshot %s for image pvc %s", client.ObjectKeyFromObject(snapshot), client.ObjectKeyFromObject(imagePvc))
+	log.V(1).Info(fmt.Sprintf("created snapshot %s for image pvc %s", client.ObjectKeyFromObject(snapshot), client.ObjectKeyFromObject(imagePvc)))
 
 	return nil
 }
