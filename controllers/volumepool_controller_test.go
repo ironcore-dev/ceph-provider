@@ -17,10 +17,12 @@ package controllers
 import (
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/rook"
+	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
+	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,16 +63,34 @@ var _ = Describe("VolumePoolReconciler", func() {
 				return nil
 			}).Should(Succeed())
 
-			By("checking that a CephClient has been created")
+			By("checking that the ceph client has been created and updating it to ready")
 			cephClient := &rookv1.CephClient{}
 			cephClientKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName), Namespace: rookNs.Name}
-			Eventually(func() error { return k8sClient.Get(ctx, cephClientKey, cephClient) }).Should(Succeed())
+			cephClientSecret := &corev1.Secret{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, cephClientKey, cephClient)).To(Succeed())
 
-			cephClientBase := cephClient.DeepCopy()
-			cephClient.Status = &rookv1.CephClientStatus{
-				Phase: rookv1.ConditionReady,
-			}
-			Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
+				cephClientSecret = getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
+				g.Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
+
+				cephClientBase := cephClient.DeepCopy()
+				cephClient.Status = &rookv1.CephClientStatus{
+					Phase: rookv1.ConditionReady,
+					Info: map[string]string{
+						cephClientSecretKey: cephClientSecret.Name,
+					},
+				}
+				g.Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
+			}).Should(Succeed())
+
+			By("checking that a VolumePool annotations has been updated")
+			Eventually(func(g Gomega) error {
+				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
+					return err
+				}
+				g.Expect(volumePool.Annotations[volumePoolSecretAnnotation]).To(BeEquivalentTo(cephClientSecret.Name))
+				return nil
+			}).Should(Succeed())
 
 			By("checking that a StorageClass has been created")
 			storageClass := &storagev1.StorageClass{}
@@ -133,3 +153,15 @@ var _ = Describe("VolumePoolReconciler", func() {
 		})
 	})
 })
+
+func getCephClientSecret(rookNs, dataKey, secret string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "secret-",
+			Namespace:    rookNs,
+		},
+		Data: map[string][]byte{
+			dataKey: []byte(secret),
+		},
+	}
+}

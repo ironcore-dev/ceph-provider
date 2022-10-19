@@ -40,7 +40,9 @@ import (
 )
 
 const (
-	volumePoolFinalizer = "cephlet.onmetal.de/volumepool"
+	volumePoolFinalizer        = "cephlet.onmetal.de/volumepool"
+	volumePoolSecretAnnotation = "ceph-client-secret-name"
+	cephClientSecretKey        = "secretName"
 )
 
 var (
@@ -68,6 +70,7 @@ type VolumePoolReconciler struct {
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch;create;update;patch;delete
 
 //+kubebuilder:rbac:groups=ceph.rook.io,resources=cephblockpools,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ceph.rook.io,resources=cephclients,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -294,6 +297,20 @@ func (r *VolumePoolReconciler) applyCephClient(ctx context.Context, log logr.Log
 	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
 		log.V(1).Info("ceph client is not ready yet", "client", client.ObjectKeyFromObject(cephClient))
 		return true, nil
+	}
+
+	secretName, found := cephClient.Status.Info[cephClientSecretKey]
+	if !found {
+		return false, fmt.Errorf("failed to get secret name from ceph client %s", client.ObjectKeyFromObject(cephClient))
+	}
+
+	poolBase := pool.DeepCopy()
+	if pool.Annotations == nil {
+		pool.Annotations = map[string]string{}
+	}
+	pool.Annotations[volumePoolSecretAnnotation] = secretName
+	if err := r.Patch(ctx, pool, client.MergeFrom(poolBase)); err != nil {
+		return false, fmt.Errorf("failed to patch volume pool %s annotations: %w", client.ObjectKeyFromObject(pool), err)
 	}
 
 	return false, nil
