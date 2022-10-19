@@ -26,7 +26,6 @@ import (
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
-	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,13 +68,12 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/finalizers,verbs=update
 
-//+kubebuilder:rbac:groups=ceph.rook.io,resources=cephclients,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;watch;create;update;patch;delete
 
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumes/status,verbs=get
-
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
@@ -133,19 +131,11 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	secretName, requeue, err := r.applyCephClient(ctx, log, volume)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to provide secrets for volume: %w", err)
-	}
-	if requeue {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
 	if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
 	}
 
-	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, secretName, pvc); err != nil {
+	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, volumePool, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
 	}
 
@@ -229,13 +219,12 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 		return "", fmt.Errorf("unable to get pv: %w", err)
 	}
 
-	var parts []string
-
 	pool, ok := pv.Spec.CSI.VolumeAttributes[pvPoolKey]
 	if !ok {
 		return "", fmt.Errorf("missing PV volumeAttribute: %s", pvPoolKey)
 	}
 
+	var parts []string
 	parts = append(parts, pool)
 
 	radosNamespace, ok := pv.Spec.CSI.VolumeAttributes[pvRadosNamespaceKey]
@@ -250,11 +239,14 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 
 	parts = append(parts, imageName)
 
-	return strings.Join(parts, "/"), nil
+	result := strings.Join(parts, "/")
+	log.V(1).Info("get image key %s from pv %s", result, client.ObjectKeyFromObject(pv))
+
+	return result, nil
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	storageClass := GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
+	storageClass := GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -337,7 +329,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
-			StorageClassName: pointer.String(GetStorageClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			StorageClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 			//set DataSourceRef that populator picks up the pvc
 			DataSourceRef: &corev1.TypedLocalObjectReference{
 				APIGroup: pointer.String(storagev1alpha1.SchemeGroupVersion.String()),
@@ -350,6 +342,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 	if err := r.Patch(ctx, imagePvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch image pvc: %w", err)
 	}
+	log.V(1).Info("created image pvc %s", client.ObjectKeyFromObject(imagePvc))
 
 	snapshot := &snapshotv1.VolumeSnapshot{
 		TypeMeta: metav1.TypeMeta{
@@ -364,65 +357,24 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			Source: snapshotv1.VolumeSnapshotSource{
 				PersistentVolumeClaimName: &imagePvc.Name,
 			},
-			VolumeSnapshotClassName: pointer.String(GetVolumeSnapshotClassName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			VolumeSnapshotClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 		},
 	}
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("unable to patch snapshot: %w", err)
 	}
+	log.V(1).Info("created snapshot %s for image pvc %s", client.ObjectKeyFromObject(snapshot), client.ObjectKeyFromObject(imagePvc))
 
 	return nil
 }
 
-func (r *VolumeReconciler) applyCephClient(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (string, bool, error) {
-	ns := &corev1.Namespace{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: volume.Namespace}, ns)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to get namespace for volume: %w", err)
-	}
-
-	cephClient := &rookv1.CephClient{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "CephClient",
-			APIVersion: "ceph.rook.io/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: r.RookConfig.Namespace,
-			Name:      volume.Namespace,
-		},
-		Spec: rookv1.ClientSpec{
-			Name: "",
-			Caps: map[string]string{
-				"mgr": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
-				"mon": "profile rbd",
-				"osd": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
-			},
-		},
-	}
-
-	if err := ctrl.SetControllerReference(ns, cephClient, r.Scheme); err != nil {
-		return "", false, fmt.Errorf("failed to set ownerreference for ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
-	}
-
-	if err := r.Patch(ctx, cephClient, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return "", false, fmt.Errorf("failed to patch ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
-	}
-
-	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
-		log.V(1).Info("ceph client is not ready yet", "client", client.ObjectKeyFromObject(cephClient))
-		return "", true, nil
-	}
-
-	secretName, found := cephClient.Status.Info["secretName"]
-	if !found {
-		return "", false, fmt.Errorf("failed to get secret name from ceph client %s status: %w", client.ObjectKeyFromObject(cephClient), err)
-	}
-
-	return secretName, false, nil
-}
-
-func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, secretName string, pvc *corev1.PersistentVolumeClaim) error {
+func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pool *storagev1alpha1.VolumePool, pvc *corev1.PersistentVolumeClaim) error {
 	defer log.V(2).Info("applySecretAndUpdateVolumeStatus done")
+
+	secretName, ok := pool.Annotations[volumePoolSecretAnnotation]
+	if !ok {
+		return fmt.Errorf("volume pool %s does not contain '%s' annotation", client.ObjectKeyFromObject(pool), volumePoolSecretAnnotation)
+	}
 
 	cephClientSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.RookConfig.Namespace, Name: secretName}, cephClientSecret); err != nil {
@@ -432,7 +384,8 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 		return fmt.Errorf("secret %s data empty", client.ObjectKeyFromObject(cephClientSecret))
 	}
 
-	credentials, ok := cephClientSecret.Data[volume.Namespace]
+	// Data key of secret is equivalent to CephClient name
+	credentials, ok := cephClientSecret.Data[GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)]
 	if !ok {
 		return fmt.Errorf("secret %s does not contain data key %s", client.ObjectKeyFromObject(cephClientSecret), volume.Namespace)
 	}
@@ -461,7 +414,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 		return fmt.Errorf("failed to apply volume secret %s: %w", client.ObjectKeyFromObject(volumeSecret), err)
 	}
 
-	monitors, err := r.getMonitorListForVolume(ctx, volume)
+	monitors, err := r.getMonitorList(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get monitor list for volume: %w", err)
 	}
@@ -495,7 +448,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	return r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase))
 }
 
-func (r *VolumeReconciler) getMonitorListForVolume(ctx context.Context, volume *storagev1alpha1.Volume) ([]string, error) {
+func (r *VolumeReconciler) getMonitorList(ctx context.Context) ([]string, error) {
 	rookConfigMap := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{Name: r.RookConfig.MonitorConfigMapName, Namespace: r.RookConfig.Namespace}, rookConfigMap); err != nil {
 		return nil, fmt.Errorf("failed to get ceph monitors configMap %s: %w", client.ObjectKeyFromObject(rookConfigMap), err)
@@ -534,6 +487,5 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&snapshotv1.VolumeSnapshot{}).
-		Owns(&rookv1.CephClient{}).
 		Complete(r)
 }
