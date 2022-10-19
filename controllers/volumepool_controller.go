@@ -40,7 +40,9 @@ import (
 )
 
 const (
-	volumePoolFinalizer = "cephlet.onmetal.de/volumepool"
+	volumePoolFinalizer        = "cephlet.onmetal.de/volumepool"
+	volumePoolSecretAnnotation = "ceph-client-secret-name"
+	cephClientSecretKey        = "secretName"
 )
 
 var (
@@ -63,11 +65,14 @@ type VolumePoolReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools/finalizers,verbs=update
-
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumeclasses,verbs=get;list;watch
+
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch;create;update;patch;delete
 
+//+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshotclasses,verbs=get;list;watch;create;update;patch;delete
+
 //+kubebuilder:rbac:groups=ceph.rook.io,resources=cephblockpools,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ceph.rook.io,resources=cephclients,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -100,6 +105,10 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, err
 	}
 
+	if err := r.updateStateToPendingIfEmtpy(ctx, pool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to patch status for volume pool: %w", err)
+	}
+
 	rookPool := &rookv1.CephBlockPool{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CephBlockPool",
@@ -123,6 +132,10 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, fmt.Errorf("failed to apply ceph volume pool %s: %w", client.ObjectKeyFromObject(rookPool), err)
 	}
 
+	if waitUntilReady, err := r.applyCephClient(ctx, log, pool); err != nil || waitUntilReady {
+		return ctrl.Result{}, err
+	}
+
 	if err := r.applyStorageClass(ctx, log, pool); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply StorageClass: %w", err)
 	}
@@ -134,10 +147,7 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 	return r.patchVolumePoolStatus(ctx, pool, rookPool)
 }
 
-func GetStorageClassName(clusterId, poolName string) string {
-	return fmt.Sprintf("%s--%s", clusterId, poolName)
-}
-func GetVolumeSnapshotClassName(clusterId, poolName string) string {
+func GetClusterPoolName(clusterId, poolName string) string {
 	return fmt.Sprintf("%s--%s", clusterId, poolName)
 }
 
@@ -170,7 +180,7 @@ func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool
 
 func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
 	storageClass := &storagev1.StorageClass{}
-	storageClassKey := types.NamespacedName{Name: GetStorageClassName(r.RookConfig.ClusterId, pool.Name)}
+	storageClassKey := types.NamespacedName{Name: GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)}
 	err := r.Get(ctx, storageClassKey, storageClass)
 	if err == nil {
 		return nil
@@ -220,7 +230,7 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 
 func (r *VolumePoolReconciler) applyVolumeSnapshotClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
 	volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
-	volumeSnapshotClassKey := types.NamespacedName{Name: GetVolumeSnapshotClassName(r.RookConfig.ClusterId, pool.Name)}
+	volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)}
 	err := r.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass)
 	if err == nil {
 		return nil
@@ -258,6 +268,56 @@ func (r *VolumePoolReconciler) applyVolumeSnapshotClass(ctx context.Context, log
 	return nil
 }
 
+func (r *VolumePoolReconciler) applyCephClient(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) (bool, error) {
+	cephClient := &rookv1.CephClient{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CephClient",
+			APIVersion: "ceph.rook.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: r.RookConfig.Namespace,
+			Name:      GetClusterPoolName(r.RookConfig.ClusterId, pool.Name),
+		},
+		Spec: rookv1.ClientSpec{
+			Name: "",
+			Caps: map[string]string{
+				"mgr": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
+				"mon": "profile rbd",
+				"osd": fmt.Sprintf("profile rbd pool=%s", r.VolumePoolName),
+			},
+		},
+	}
+
+	if err := ctrl.SetControllerReference(pool, cephClient, r.Scheme); err != nil {
+		return false, fmt.Errorf("failed to set ownerreference for ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
+	}
+
+	if err := r.Patch(ctx, cephClient, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return false, fmt.Errorf("failed to patch ceph client %s: %w", client.ObjectKeyFromObject(cephClient), err)
+	}
+
+	if cephClient.Status == nil || cephClient.Status.Phase != rookv1.ConditionReady {
+		log.V(1).Info("ceph client is not ready yet", "client", client.ObjectKeyFromObject(cephClient))
+		return true, nil
+	}
+
+	secretName, found := cephClient.Status.Info[cephClientSecretKey]
+	if !found {
+		return false, fmt.Errorf("failed to get secret name from ceph client %s", client.ObjectKeyFromObject(cephClient))
+	}
+
+	poolBase := pool.DeepCopy()
+	if pool.Annotations == nil {
+		pool.Annotations = map[string]string{}
+	}
+	pool.Annotations[volumePoolSecretAnnotation] = secretName
+	if err := r.Patch(ctx, pool, client.MergeFrom(poolBase)); err != nil {
+		return false, fmt.Errorf("failed to patch volume pool %s annotations: %w", client.ObjectKeyFromObject(pool), err)
+	}
+
+	return false, nil
+}
+
 func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev1.LocalObjectReference, error) {
 	list := &storagev1alpha1.VolumeClassList{}
 	if err := r.List(ctx, list, client.MatchingLabels(r.VolumeClassSelector)); err != nil {
@@ -272,6 +332,15 @@ func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev
 		return availableVolumeClasses[i].Name < availableVolumeClasses[j].Name
 	})
 	return availableVolumeClasses, nil
+}
+
+func (r *VolumePoolReconciler) updateStateToPendingIfEmtpy(ctx context.Context, pool *storagev1alpha1.VolumePool) error {
+	if pool.Status.State != "" {
+		return nil
+	}
+	poolBase := pool.DeepCopy()
+	pool.Status.State = storagev1alpha1.VolumePoolStatePending
+	return r.Status().Patch(ctx, pool, client.MergeFrom(poolBase))
 }
 
 func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *storagev1alpha1.VolumePool, rookPool *rookv1.CephBlockPool) (ctrl.Result, error) {
@@ -327,6 +396,7 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		})).
 		//TODO: check if we get called once the CephBlockPool is being changed
 		Owns(&rookv1.CephBlockPool{}).
+		Owns(&rookv1.CephClient{}).
 		Complete(r)
 }
 

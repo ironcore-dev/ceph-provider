@@ -60,6 +60,8 @@ const (
 	defaultDevicePath     = "/dev/block"
 	defaultPopulatorImage = "populator-image"
 	defaultPrefix         = "my-prefix"
+
+	cephClientSecretValue = "test"
 )
 
 var (
