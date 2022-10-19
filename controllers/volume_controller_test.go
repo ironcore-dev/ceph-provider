@@ -21,7 +21,6 @@ import (
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,46 +53,20 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 
-		By("checking that the ceph client has been created and updating it to ready")
-		cephClientSecretValue := "test"
-		cephClient := &rookv1.CephClient{}
-		cephClientKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName), Namespace: rookNs.Name}
-		cephClientSecret := &corev1.Secret{}
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cephClientKey, cephClient)).To(Succeed())
-
-			cephClientSecret = getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
-			g.Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
-
-			cephClientBase := cephClient.DeepCopy()
-			cephClient.Status = &rookv1.CephClientStatus{
-				Phase: rookv1.ConditionReady,
-				Info: map[string]string{
-					cephClientSecretKey: cephClientSecret.Name,
-				},
-			}
-			g.Expect(k8sClient.Status().Patch(ctx, cephClient, client.MergeFrom(cephClientBase))).To(Succeed())
-		}).Should(Succeed())
-
-		By("checking that a CephBlockPool has been created")
-		rookPool := &rookv1.CephBlockPool{}
-		rookPoolKey := types.NamespacedName{Name: volumePoolName, Namespace: rookNs.Name}
-		Eventually(func() error { return k8sClient.Get(ctx, rookPoolKey, rookPool) }).Should(Succeed())
-
-		rookPoolBase := rookPool.DeepCopy()
-		rookPool.Status = &rookv1.CephBlockPoolStatus{Phase: rookv1.ConditionReady}
-		Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
-
+		By("checking that a VolumePool has been created")
 		volumePool := &storagev1alpha1.VolumePool{}
 		volumePoolKey := types.NamespacedName{Name: volumePoolName}
-		Eventually(func(g Gomega) error {
-			if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
-				return err
-			}
-			g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateAvailable))
-			return nil
-		}).Should(Succeed())
+		Eventually(func() error { return k8sClient.Get(ctx, volumePoolKey, volumePool) }).Should(Succeed())
 
+		cephClientSecret := getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
+		Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
+
+		volumePoolBase := volumePool.DeepCopy()
+		if volumePool.Annotations == nil {
+			volumePool.Annotations = map[string]string{}
+		}
+		volumePool.Annotations[volumePoolSecretAnnotation] = cephClientSecret.Name
+		Expect(k8sClient.Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
 	})
 
 	It("should reconcile volume", func() {
