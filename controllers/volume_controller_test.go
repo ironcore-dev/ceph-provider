@@ -130,7 +130,7 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Get(ctx, accessSecretKey, accessSecret)).To(Succeed())
 
 		Expect(accessSecret.Data).NotTo(BeNil())
-		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(testNs.Name))
+		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePoolName)))
 		Expect(accessSecret.Data["userKey"]).To(BeEquivalentTo(cephClientSecretValue))
 	})
 

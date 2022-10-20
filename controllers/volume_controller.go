@@ -400,7 +400,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 			Namespace: volume.Namespace,
 		},
 		Data: map[string][]byte{
-			userIDKey:  []byte(volume.Namespace),
+			userIDKey:  []byte(GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)),
 			userKeyKey: credentials,
 		},
 		Type: corev1.SecretTypeOpaque,
