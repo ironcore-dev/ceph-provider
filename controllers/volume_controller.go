@@ -123,12 +123,13 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, nil
 	}
 
-	pvc, requeue, err := r.applyPVC(ctx, log, volume)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply PVC for volume: %w", err)
+	if err := r.handleImagePopulation(ctx, log, volume); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to initiate image population: %w", err)
 	}
-	if requeue {
-		return ctrl.Result{Requeue: true}, nil
+
+	pvc, waitUntilClaimBound, err := r.applyPVC(ctx, log, volume)
+	if err != nil || waitUntilClaimBound {
+		return ctrl.Result{}, err
 	}
 
 	if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
@@ -240,7 +241,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 	parts = append(parts, imageName)
 
 	result := strings.Join(parts, "/")
-	log.V(1).Info(fmt.Sprintf("get image key %s from pv %s", result, client.ObjectKeyFromObject(pv)))
+	log.V(3).Info(fmt.Sprintf("Get image key %s from pv %s", result, client.ObjectKeyFromObject(pv)))
 
 	return result, nil
 }
@@ -266,51 +267,45 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 		},
 	}
 
-	if requeue, err := r.handleImagePopulation(ctx, log, volume, pvc); requeue || err != nil {
-		return nil, requeue, err
+	if volume.Spec.Image != "" {
+		pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+			APIGroup: pointer.String("snapshot.storage.k8s.io"),
+			Kind:     "VolumeSnapshot",
+			Name:     GetSanitizedImageNameFromVolume(volume),
+		}
 	}
 
 	if err := ctrl.SetControllerReference(volume, pvc, r.Scheme); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("failed to set ownerref for volume pvc %s: %w", client.ObjectKeyFromObject(pvc), err)
 	}
 
 	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("failed to apply volume pvc %s: %w", client.ObjectKeyFromObject(pvc), err)
 	}
 
 	if pvc.Status.Phase != corev1.ClaimBound {
-		log.V(1).Info("pvc is not yet in ClaimBound state")
+		log.V(1).Info("Pvc is not yet in ClaimBound state")
 		return nil, true, nil
 	}
 
-	log.V(3).Info("volume provided.")
+	log.V(3).Info("Volume provided.")
 	return pvc, false, nil
 }
-func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) (bool, error) {
+func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
 	if volume.Spec.Image == "" {
-		return false, nil
+		return nil
 	}
 
 	snapshot := &snapshotv1.VolumeSnapshot{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: GetSanitizedImageNameFromVolume(volume)}, snapshot); err != nil {
 		if !errors.IsNotFound(err) {
-			return false, fmt.Errorf("unable to get snapshot: %w", err)
+			return fmt.Errorf("unable to get snapshot: %w", err)
 		}
 		log.V(1).Info("Requested snapshot not found: create image pvc and snapshot it.")
-		return true, r.createSnapshot(ctx, log, volume)
+		return r.createSnapshot(ctx, log, volume)
 	}
 
-	if snapshot.Status == nil || !pointer.BoolDeref(snapshot.Status.ReadyToUse, false) {
-		return true, nil
-	}
-
-	pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
-		APIGroup: pointer.String("snapshot.storage.k8s.io"),
-		Kind:     "VolumeSnapshot",
-		Name:     GetSanitizedImageNameFromVolume(volume),
-	}
-
-	return false, nil
+	return nil
 }
 
 func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
