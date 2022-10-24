@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -116,11 +117,9 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	}
 
 	volumePool := &storagev1alpha1.VolumePool{}
-	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, volumePool); client.IgnoreNotFound(err) != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
-	} else if errors.IsNotFound(err) {
-		log.V(1).Info("skipped reconcile: volume pool does not exist", "pool", volume.Spec.VolumePoolRef.Name)
-		return ctrl.Result{}, nil
+	waitUntilRefIsPresent, err := r.checkVolumePoolRef(ctx, log, volume, volumePool)
+	if err != nil || waitUntilRefIsPresent {
+		return ctrl.Result{}, err
 	}
 
 	if err := r.handleImagePopulation(ctx, log, volume); err != nil {
@@ -141,6 +140,22 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VolumeReconciler) checkVolumePoolRef(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pool *storagev1alpha1.VolumePool) (bool, error) {
+	if volume.Spec.VolumePoolRef == nil {
+		log.V(1).Info("Skipped reconcile: volume pool ref not present")
+		return true, nil
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, pool); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
+	} else if errors.IsNotFound(err) {
+		log.V(1).Info("Skipped reconcile: volume pool does not exist", "pool", volume.Spec.VolumePoolRef.Name)
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pvc *corev1.PersistentVolumeClaim) error {
@@ -247,19 +262,8 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	pvc := &corev1.PersistentVolumeClaim{}
-	if err := r.Get(ctx, types.NamespacedName{Name: volume.Name, Namespace: volume.Namespace}, pvc); err == nil {
-		if pvc.Status.Phase != corev1.ClaimBound {
-			log.V(1).Info("Pvc is not yet in ClaimBound state")
-			return nil, true, nil
-		}
-		return pvc, false, nil
-	} else if client.IgnoreNotFound(err) != nil {
-		return nil, false, fmt.Errorf("unable to get pvc: %w", err)
-	}
-
 	storageClass := GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
-	pvc = &corev1.PersistentVolumeClaim{
+	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -290,8 +294,13 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 		return nil, false, fmt.Errorf("failed to set ownerref for volume pvc %s: %w", client.ObjectKeyFromObject(pvc), err)
 	}
 
-	if err := r.Patch(ctx, pvc, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+	if _, err := controllerutil.CreateOrPatch(ctx, r.Client, pvc, func() error { return nil }); err != nil {
 		return nil, false, fmt.Errorf("failed to apply volume pvc %s: %w", client.ObjectKeyFromObject(pvc), err)
+	}
+
+	if pvc.Status.Phase != corev1.ClaimBound {
+		log.V(1).Info("Pvc is not yet in ClaimBound state")
+		return nil, true, nil
 	}
 
 	log.V(3).Info("Volume provided.")
