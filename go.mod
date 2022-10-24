@@ -11,7 +11,7 @@ require (
 	github.com/onmetal/controller-utils v0.6.3
 	github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
-	github.com/onsi/ginkgo/v2 v2.3.1
+	github.com/onsi/ginkgo/v2 v2.4.0
 	github.com/onsi/gomega v1.22.1
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.9.10
@@ -129,11 +129,11 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go4.org/netipx v0.0.0-20220812043211-3cc044ffd68d // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
-	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
+	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
-	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/term v0.1.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/api v0.91.0 // indirect
