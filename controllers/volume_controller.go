@@ -247,8 +247,19 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := r.Get(ctx, types.NamespacedName{Name: volume.Name, Namespace: volume.Namespace}, pvc); err == nil {
+		if pvc.Status.Phase != corev1.ClaimBound {
+			log.V(1).Info("Pvc is not yet in ClaimBound state")
+			return nil, true, nil
+		}
+		return pvc, false, nil
+	} else if client.IgnoreNotFound(err) != nil {
+		return nil, false, fmt.Errorf("unable to get pvc: %w", err)
+	}
+
 	storageClass := GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
-	pvc := &corev1.PersistentVolumeClaim{
+	pvc = &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -283,13 +294,8 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 		return nil, false, fmt.Errorf("failed to apply volume pvc %s: %w", client.ObjectKeyFromObject(pvc), err)
 	}
 
-	if pvc.Status.Phase != corev1.ClaimBound {
-		log.V(1).Info("Pvc is not yet in ClaimBound state")
-		return nil, true, nil
-	}
-
 	log.V(3).Info("Volume provided.")
-	return pvc, false, nil
+	return pvc, true, nil
 }
 func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
 	if volume.Spec.Image == "" {
