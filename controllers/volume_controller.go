@@ -304,7 +304,7 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	}
 
 	log.V(3).Info("Volume provided.")
-	return pvc, true, nil
+	return pvc, false, nil
 }
 func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
 	if volume.Spec.Image == "" {
