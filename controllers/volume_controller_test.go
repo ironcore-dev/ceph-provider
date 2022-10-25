@@ -67,6 +67,11 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		volumePool.Annotations[volumePoolSecretAnnotation] = cephClientSecret.Name
 		Expect(k8sClient.Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+
+		volumePoolBase = volumePool.DeepCopy()
+		volumePool.Status.State = storagev1alpha1.VolumePoolStateAvailable
+		Expect(k8sClient.Status().Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+
 	})
 
 	It("should reconcile volume", func() {
