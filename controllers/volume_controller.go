@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -501,11 +500,8 @@ func (r *VolumeReconciler) getMonitorList(ctx context.Context) ([]string, error)
 }
 
 func (r *VolumeReconciler) findObjectsForVolumePool(pool client.Object) []reconcile.Request {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	volumes := &storagev1alpha1.VolumeList{}
-	if err := r.List(ctx, volumes, &client.ListOptions{
+	if err := r.List(context.TODO(), volumes, &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector(volumePoolRefIndex, pool.GetName()),
 	}); err != nil {
 		return nil
@@ -531,7 +527,7 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &storagev1alpha1.Volume{}, volumePoolRefIndex, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &storagev1alpha1.Volume{}, volumePoolRefIndex, func(rawObj client.Object) []string {
 		configDeployment := rawObj.(*storagev1alpha1.Volume)
 		if configDeployment.Spec.VolumePoolRef == nil || configDeployment.Spec.VolumePoolRef.Name == "" {
 			return nil
