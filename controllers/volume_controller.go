@@ -29,12 +29,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -50,6 +57,8 @@ const (
 	wwnKey string = "WWN"
 	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
 	wwnPrefix string = ""
+
+	volumePoolRefIndex = ".spec.volumePoolRef.name"
 )
 
 var (
@@ -68,6 +77,8 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools,verbs=get;list;watch
+//+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumepools/status,verbs=get
 
 //+kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;watch;create;update;patch;delete
 
@@ -144,14 +155,19 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 
 func (r *VolumeReconciler) checkVolumePoolRef(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume, pool *storagev1alpha1.VolumePool) (bool, error) {
 	if volume.Spec.VolumePoolRef == nil {
-		log.V(1).Info("Skipped reconcile: volume pool ref not present")
+		log.V(1).Info("Skipped reconcile: VolumePoolRef not present")
 		return true, nil
 	}
 
 	if err := r.Get(ctx, types.NamespacedName{Name: volume.Spec.VolumePoolRef.Name}, pool); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("failed to get volume pool %s : %w", volume.Spec.VolumePoolRef.Name, err)
 	} else if errors.IsNotFound(err) {
-		log.V(1).Info("Skipped reconcile: volume pool does not exist", "pool", volume.Spec.VolumePoolRef.Name)
+		log.V(1).Info("Skipped reconcile: VolumePool does not exist", "pool", volume.Spec.VolumePoolRef.Name)
+		return true, nil
+	}
+
+	if pool.Status.State != storagev1alpha1.VolumePoolStateAvailable {
+		log.V(1).Info("Skipped reconcile: VolumePool is not ready")
 		return true, nil
 	}
 
@@ -483,6 +499,24 @@ func (r *VolumeReconciler) getMonitorList(ctx context.Context) ([]string, error)
 	return monitors, nil
 }
 
+func (r *VolumeReconciler) findObjectsForVolumePool(pool client.Object) []reconcile.Request {
+	volumes := &storagev1alpha1.VolumeList{}
+	if err := r.List(context.TODO(), volumes, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(volumePoolRefIndex, pool.GetName()),
+	}); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, volume := range volumes.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: volume.Namespace,
+			Name:      volume.Name,
+		}})
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var err error
@@ -493,9 +527,29 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}
 
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &storagev1alpha1.Volume{}, volumePoolRefIndex, func(rawObj client.Object) []string {
+		configDeployment := rawObj.(*storagev1alpha1.Volume)
+		if configDeployment.Spec.VolumePoolRef == nil || configDeployment.Spec.VolumePoolRef.Name == "" {
+			return nil
+		}
+		return []string{configDeployment.Spec.VolumePoolRef.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Volume{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&snapshotv1.VolumeSnapshot{}).
+		Watches(&source.Kind{Type: &storagev1alpha1.VolumePool{}}, handler.EnqueueRequestsFromMapFunc(r.findObjectsForVolumePool), builder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(event event.UpdateEvent) bool {
+				oldPool := event.ObjectOld.(*storagev1alpha1.VolumePool)
+				newPool := event.ObjectNew.(*storagev1alpha1.VolumePool)
+				if oldPool.Status.State == newPool.Status.State {
+					return false
+				}
+				return newPool.Status.State == storagev1alpha1.VolumePoolStateAvailable
+			},
+		})).
 		Complete(r)
 }

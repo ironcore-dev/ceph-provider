@@ -33,6 +33,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	var (
 		volumeClass *storagev1alpha1.VolumeClass
+		volumePool  *storagev1alpha1.VolumePool
 	)
 
 	const (
@@ -54,11 +55,18 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 
 		By("checking that a VolumePool has been created")
-		volumePool := &storagev1alpha1.VolumePool{}
-		volumePoolKey := types.NamespacedName{Name: volumePoolName}
-		Eventually(func() error { return k8sClient.Get(ctx, volumePoolKey, volumePool) }).Should(Succeed())
+		volumePool = &storagev1alpha1.VolumePool{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "custom-pool-",
+				Namespace:    testNs.Name,
+			},
+			Spec: storagev1alpha1.VolumePoolSpec{
+				ProviderID: "custom://custom-pool",
+			},
+		}
+		Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
 
-		cephClientSecret := getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
+		cephClientSecret := getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePool.Name), cephClientSecretValue)
 		Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
 
 		volumePoolBase := volumePool.DeepCopy()
@@ -67,6 +75,11 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		volumePool.Annotations[volumePoolSecretAnnotation] = cephClientSecret.Name
 		Expect(k8sClient.Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+
+		volumePoolBase = volumePool.DeepCopy()
+		volumePool.Status.State = storagev1alpha1.VolumePoolStateAvailable
+		Expect(k8sClient.Status().Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+
 	})
 
 	It("should reconcile volume", func() {
@@ -78,7 +91,7 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
-				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
 				},
@@ -130,7 +143,7 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Get(ctx, accessSecretKey, accessSecret)).To(Succeed())
 
 		Expect(accessSecret.Data).NotTo(BeNil())
-		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePoolName)))
+		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePool.Name)))
 		Expect(accessSecret.Data["userKey"]).To(BeEquivalentTo(cephClientSecretValue))
 	})
 
@@ -143,7 +156,7 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
-				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
 				},
