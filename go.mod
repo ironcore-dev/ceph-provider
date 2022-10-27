@@ -12,7 +12,7 @@ require (
 	github.com/onmetal/onmetal-api v0.0.13-0.20221005074815-73d31d977d2d
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
 	github.com/onsi/ginkgo/v2 v2.4.0
-	github.com/onsi/gomega v1.22.1
+	github.com/onsi/gomega v1.23.0
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.9.10
 	github.com/spf13/pflag v1.0.5
@@ -69,7 +69,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/gnostic v0.6.9 // indirect
-	github.com/google/go-cmp v0.5.8 // indirect
+	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
