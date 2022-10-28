@@ -104,6 +104,7 @@ func main() {
 	flag.BoolVar(&rookConfig.DashboardInsecureSkipVerify, "rook-dashboard-insecure-skip-verify", false, "DashboardInsecureSkipVerify controls whether a client verifies the ceph dashboard's certificate chain and host name")
 	flag.StringVar(&rookConfig.DashboardUser, "rook-dashboard-user", "admin", "user name which is used talk to the ceph dashboard api")
 	flag.StringVar(&rookConfig.DashboardSecretName, "rook-dashboard-secret-name", "rook-ceph-dashboard-password", "Secret name containing password for the dashboard user")
+	flag.IntVar(&rookConfig.DashboardTokenRefreshInMinutes, "rook-dashboard-token-refresh", 7*60, "Defines when the ceph dashboard token should be refreshed")
 
 	opts := zap.Options{
 		Development: true,
