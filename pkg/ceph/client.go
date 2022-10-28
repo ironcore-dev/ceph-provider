@@ -125,7 +125,7 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 		AccessToken: result.Token,
 		TokenType:   "Bearer",
 		// the ceph token lasts for 8 hours. just take a static value instead of parsing the token
-		Expiry: time.Now().Add(7 * time.Hour),
+		Expiry: time.Now().Add(time.Duration(t.rookConfig.DashboardTokenRefreshInMinutes) * time.Minute),
 	}, nil
 }
 

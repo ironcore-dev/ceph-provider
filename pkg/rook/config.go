@@ -50,10 +50,11 @@ type Config struct {
 	CSIDriverName                    string
 	EnableRBDStats                   bool
 
-	DashboardInsecureSkipVerify bool
-	DashboardUser               string
-	DashboardSecretName         string
-	DashboardEndpoint           string
+	DashboardInsecureSkipVerify    bool
+	DashboardUser                  string
+	DashboardSecretName            string
+	DashboardEndpoint              string
+	DashboardTokenRefreshInMinutes int
 }
 
 func NewConfigWithDefaults() *Config {
