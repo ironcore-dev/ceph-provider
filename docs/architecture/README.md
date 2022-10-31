@@ -38,39 +38,44 @@ Which `VolumeClasses` should be supported by the announced `VolumePool` can be c
 ## Volume Provisioning
 
 The main task of the `cephlet` is to create Ceph block devices for every `Volume` in a given namespace.
+[Rook](https://rook.io) provisions the `PVC` by creating in the background a ceph volume. 
 
-!!! note
-    As Ceph does not support the creation of access secrets for each individual block devices, we chose to use 
-    Kubernetes `Namespace`s as a tenant separation. All `Volumes` within a `Namespace` belong essentially to one tenant.
-
-Additionally, for every `Namespace` an own `CephClient` and a corresponding `StorageClass` are created. The `StorageClass` 
-is being used to create the `PersistentVolumeClaims` for a given `Namespace` later. The actual block device is created
-in the Ceph user namespace which is being created through the `CephClient` resource. 
-
-The access credentials which are being extracted from the `CephClient` are stored in a `Secret` which is then referenced
+The access credentials which are being extracted from the `CephClient`, created by the `VolumePool` controller, are stored in a `Secret` which is then referenced
 in the status of the `Volume`.
 
 The graph blow illustrates the relationships between the entities created in the reconciliation flow of a `Volume`.
 
 ```mermaid
 graph TD
-    NS -- one per namespace --> SC[StorageClass]
-    NS[Namespace] -- contains --> V
+    PVC -- references --> SC[StorageClass]
     V[Volume] -- creates  --> PVC[PersistentVolumeClaim]
-    NS -- one per namespace --> CC[CephClient]
-    CC -- creates --> S[Access Secret]
-    V -- references --> S
+    PVC -- references --> S
+    V -- creates --> S[Access Secret]
 ```
 
 The `VolumePool` is indicating the consumer of the storage API where a `Volume` can be created. The `cephlet` is announcing
 its pool as configured and accumulates all supported `VolumeClasses` in the pool status. The mapping between a `VolumePool`
-and Ceph is done via the creation of a `CephBlockPool`.
+and Ceph is done via the creation of a `CephBlockPool`. 
+The `cephlet` also creates a `StorageClass`, `VolumeSnapshotClass` and a `CephClient` for every `VolumePool`
 
 ```mermaid
 graph TD
     VP[VolumePool] -- creates --> CephBlockPool
-    VP -- announce in status --> VC[VolumeClass]
+    VP -- ceates --> SC[StorageClass]
+    VP -- ceates --> VSC[VolumeSnapshotClass]
+    VP -- ceates --> CC[CephClient]
 ```
+
+
+## Limiting and pool utilization 
+
+The `cephlet` support *absolute* and *relative* limits based on the `Volume` size. 
+
+*Relative* limits: If the `Volume` has the `cephlet.onmetal.de/limitsPerGB` annotation the limits are calculated according the `Volume` size. Limits are taken from `VolumeClass` referenced by the `Volume` and multiplied by the `Volume` size. 
+
+*Absolute* limits: Limits are taken from `VolumeClass` referenced by the `Volume` and applied with no further calculation.
+
+The utilization of a `VolumePool` is exposed by a metric endpoint. The requested `IOPS` and `TPS` per `VolumePool` are available. 
 
 ## Image Population
 
