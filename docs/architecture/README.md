@@ -61,6 +61,7 @@ The `cephlet` also creates a `StorageClass`, `VolumeSnapshotClass` and a `CephCl
 ```mermaid
 graph TD
     VP[VolumePool] -- creates --> CephBlockPool
+    VP -- announces in status --> VC[VolumeClass]
     VP -- ceates --> SC[StorageClass]
     VP -- ceates --> VSC[VolumeSnapshotClass]
     VP -- ceates --> CC[CephClient]
