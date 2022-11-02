@@ -145,9 +145,9 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, err
 	}
 
-	if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
-	}
+	//if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
+	//	return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
+	//}
 
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, volumePool, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
@@ -582,7 +582,7 @@ func (r *VolumeReconciler) updatePoolUsageMetrics(ctx context.Context, pool *sto
 	for k, v := range limits {
 		switch k {
 		case ceph.IOPSlLimit, ceph.BPSLimit:
-			r.PoolUsage.WithLabelValues(pool.Name, string(k)).Set(float64(v.Value()))
+			r.PoolUsage.WithLabelValues(pool.Name, string(k)).Set(v.AsApproximateFloat64())
 		}
 	}
 
