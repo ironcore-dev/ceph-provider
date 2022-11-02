@@ -120,3 +120,64 @@ func TestCalculateAbsoluteLimits(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestCalculateUsage(t *testing.T) {
+	volumes := &storagev1alpha1.VolumeList{
+		TypeMeta: metav1.TypeMeta{},
+		ListMeta: metav1.ListMeta{},
+		Items: []storagev1alpha1.Volume{
+			{
+				Spec: storagev1alpha1.VolumeSpec{
+					VolumeClassRef: corev1.LocalObjectReference{Name: "test1"},
+					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
+				},
+			},
+			{
+				Spec: storagev1alpha1.VolumeSpec{
+					VolumeClassRef: corev1.LocalObjectReference{Name: "test2"},
+					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
+				},
+			},
+		},
+	}
+
+	volumeClasses := &storagev1alpha1.VolumeClassList{
+		TypeMeta: metav1.TypeMeta{},
+		ListMeta: metav1.ListMeta{},
+		Items: []storagev1alpha1.VolumeClass{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test1",
+					Labels: map[string]string{},
+				},
+				Capabilities: map[corev1.ResourceName]resource.Quantity{
+					storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+					storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test2",
+					Labels: map[string]string{},
+				},
+				Capabilities: map[corev1.ResourceName]resource.Quantity{
+					storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops*2)),
+					storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps*2)),
+				},
+			},
+		},
+	}
+
+	usage, err := ceph.CalculateUsage(volumes, volumeClasses)
+	if err != nil {
+		t.Fail()
+	}
+
+	if l, ok := usage[ceph.IOPSlLimit]; !ok || l.Value() != iops*3 {
+		t.Fail()
+	}
+
+	if l, ok := usage[ceph.BPSLimit]; !ok || l.Value() != tps*3 {
+		t.Fail()
+	}
+}
