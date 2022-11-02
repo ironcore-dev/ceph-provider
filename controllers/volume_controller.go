@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -72,6 +73,8 @@ type VolumeReconciler struct {
 	VolumePoolName string
 	RookConfig     *rook.Config
 	CephClient     ceph.Client
+
+	PoolUsage *prometheus.GaugeVec
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
@@ -148,6 +151,10 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, volumePool, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
+	}
+
+	if err := r.updatePoolUsageMetrics(ctx, volumePool); err != nil {
+		log.Error(err, "unable to update pool usage metrics")
 	}
 
 	return ctrl.Result{}, nil
@@ -552,4 +559,32 @@ func (r *VolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		})).
 		Complete(r)
+}
+
+func (r *VolumeReconciler) updatePoolUsageMetrics(ctx context.Context, pool *storagev1alpha1.VolumePool) error {
+	volumeClassList := &storagev1alpha1.VolumeClassList{}
+	if err := r.List(ctx, volumeClassList); err != nil {
+		return fmt.Errorf("error listing volume classes: %w", err)
+	}
+
+	volumeList := &storagev1alpha1.VolumeList{}
+	if err := r.List(ctx, volumeList, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(volumePoolRefIndex, pool.GetName()),
+	}); err != nil {
+		return fmt.Errorf("error listing volume classes: %w", err)
+	}
+
+	limits, err := ceph.CalculateUsage(volumeList, volumeClassList)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range limits {
+		switch k {
+		case ceph.IOPSlLimit, ceph.BPSLimit:
+			r.PoolUsage.WithLabelValues(pool.Name, string(k)).Set(float64(v.Value()))
+		}
+	}
+
+	return nil
 }

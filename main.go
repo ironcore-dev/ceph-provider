@@ -18,7 +18,9 @@ package main
 
 import (
 	goflag "flag"
+	"github.com/prometheus/client_golang/prometheus"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/controllers"
@@ -37,8 +39,19 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme    = runtime.NewScheme()
+	setupLog  = ctrl.Log.WithName("setup")
+	poolUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "cephlet",
+			Name:      "pool_usage",
+			Help:      "Current pool usage, partitioned by pool and resource.",
+		},
+		[]string{
+			"pool",
+			"resource",
+		},
+	)
 )
 
 func init() {
@@ -48,6 +61,8 @@ func init() {
 	utilruntime.Must(rookv1.AddToScheme(scheme))
 	utilruntime.Must(snapshotv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	metrics.Registry.MustRegister(poolUsage)
 }
 
 func main() {
@@ -132,6 +147,7 @@ func main() {
 		Scheme:         mgr.GetScheme(),
 		VolumePoolName: volumePoolName,
 		RookConfig:     rookConfig,
+		PoolUsage:      poolUsage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
 		os.Exit(1)
