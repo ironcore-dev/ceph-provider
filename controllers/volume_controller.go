@@ -145,9 +145,9 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, err
 	}
 
-	//if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
-	//	return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
-	//}
+	if err := r.applyLimits(ctx, log, volume, pvc); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to limit volume: %w", err)
+	}
 
 	if err := r.applySecretAndUpdateVolumeStatus(ctx, log, volume, volumePool, pvc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to apply secret for volume: %w", err)
