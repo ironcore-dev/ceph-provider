@@ -44,7 +44,7 @@ var (
 	poolUsage = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: "cephlet",
-			Name:      "pool_usage",
+			Name:      "volume_pool_usage",
 			Help:      "Current pool usage, partitioned by pool and resource.",
 		},
 		[]string{
