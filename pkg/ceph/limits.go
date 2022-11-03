@@ -65,3 +65,29 @@ func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha
 
 	return limits, nil
 }
+
+func CalculateUsage(volumes *storagev1alpha1.VolumeList, volumeClasses *storagev1alpha1.VolumeClassList) (Limits, error) {
+	classes := map[string]*storagev1alpha1.VolumeClass{}
+
+	for i := range volumeClasses.Items {
+		volumeClass := volumeClasses.Items[i]
+		classes[volumeClass.Name] = &volumeClass
+	}
+
+	usage := DefaultLimits()
+	for _, volume := range volumes.Items {
+		class := classes[volume.Spec.VolumeClassRef.Name]
+		limits, err := CalculateLimits(&volume, class)
+		if err != nil {
+			continue
+		}
+
+		for k, v := range limits {
+			value := usage[k]
+			value.Add(v)
+			usage[k] = value
+		}
+	}
+
+	return usage, nil
+}

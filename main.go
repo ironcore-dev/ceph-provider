@@ -24,6 +24,7 @@ import (
 	"github.com/onmetal/cephlet/controllers"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	flag "github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,12 +34,24 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme    = runtime.NewScheme()
+	setupLog  = ctrl.Log.WithName("setup")
+	poolUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "cephlet",
+			Name:      "volume_pool_usage",
+			Help:      "Current pool usage, partitioned by pool and resource.",
+		},
+		[]string{
+			"pool",
+			"resource",
+		},
+	)
 )
 
 func init() {
@@ -48,6 +61,8 @@ func init() {
 	utilruntime.Must(rookv1.AddToScheme(scheme))
 	utilruntime.Must(snapshotv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	metrics.Registry.MustRegister(poolUsage)
 }
 
 func main() {
@@ -132,6 +147,7 @@ func main() {
 		Scheme:         mgr.GetScheme(),
 		VolumePoolName: volumePoolName,
 		RookConfig:     rookConfig,
+		PoolUsage:      poolUsage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
 		os.Exit(1)
