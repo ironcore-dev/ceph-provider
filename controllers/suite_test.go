@@ -31,6 +31,7 @@ import (
 	"github.com/onmetal/onmetal-api/envtestutils/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -211,12 +212,20 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 		rookConfig = rook.NewConfigWithDefaults()
 		rookConfig.Namespace = rookNamespace.Name
 
+		metrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "test",
+		}, []string{
+			"pool",
+			"resource",
+		})
+
 		Expect((&VolumeReconciler{
 			Client:         k8sManager.GetClient(),
 			Scheme:         k8sManager.GetScheme(),
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
 			CephClient:     &cephMock{},
+			PoolUsage:      metrics,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&VolumePoolReconciler{

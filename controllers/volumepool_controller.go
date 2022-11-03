@@ -320,8 +320,8 @@ func (r *VolumePoolReconciler) applyCephClient(ctx context.Context, log logr.Log
 
 func (r *VolumePoolReconciler) gatherVolumeClasses(ctx context.Context) ([]corev1.LocalObjectReference, error) {
 	list := &storagev1alpha1.VolumeClassList{}
-	if err := r.List(ctx, list, client.MatchingLabels(r.VolumeClassSelector)); err != nil {
-		return nil, fmt.Errorf("error listing machine classes: %w", err)
+	if err := r.List(ctx, list, r.VolumeClassSelector); err != nil {
+		return nil, fmt.Errorf("error listing volume classes: %w", err)
 	}
 
 	var availableVolumeClasses []corev1.LocalObjectReference
