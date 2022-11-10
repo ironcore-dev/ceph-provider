@@ -27,8 +27,8 @@ import (
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/envtestutils"
-	"github.com/onmetal/onmetal-api/envtestutils/apiserver"
+	"github.com/onmetal/onmetal-api/testutils/envtestutils"
+	"github.com/onmetal/onmetal-api/testutils/envtestutils/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,6 +42,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	//+kubebuilder:scaffold:imports
@@ -138,9 +139,10 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+	SetClient(k8sClient)
 
 	apiSrv, err := apiserver.New(cfg, apiserver.Options{
-		MainPath:     "github.com/onmetal/onmetal-api/cmd/apiserver",
+		MainPath:     "github.com/onmetal/onmetal-api/onmetal-apiserver/cmd/apiserver",
 		BuildOptions: []buildutils.BuildOption{buildutils.ModModeMod},
 		ETCDServers:  []string{testEnv.ControlPlane.Etcd.URL.String()},
 		Host:         testEnvExt.APIServiceInstallOptions.LocalServingHost,

@@ -55,7 +55,6 @@ const (
 	pvRadosNamespaceKey = "radosNamespace"
 
 	// worldwide number key
-	wwnKey string = "WWN"
 	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
 	wwnPrefix string = ""
 
@@ -220,16 +219,11 @@ func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *
 }
 
 func generateOrGetWWN(volumeStatus storagev1alpha1.VolumeStatus) (string, error) {
-	if volumeStatus.Access == nil {
+	if volumeStatus.Access == nil || volumeStatus.Access.Handle == "" {
 		return generateWWN()
 	}
 
-	wwn, found := volumeStatus.Access.VolumeAttributes[wwnKey]
-	if !found {
-		return generateWWN()
-	}
-
-	return wwn, nil
+	return volumeStatus.Access.Handle, nil
 }
 
 // generate WWN as hex string (16 chars)
@@ -467,15 +461,16 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 
 	volumeBase := volume.DeepCopy()
 	volume.Status.State = storagev1alpha1.VolumeStateAvailable
+
 	volume.Status.Access = &storagev1alpha1.VolumeAccess{
 		SecretRef: &corev1.LocalObjectReference{
 			Name: volume.Name,
 		},
 		Driver: volumeDriver,
+		Handle: wwn,
 		VolumeAttributes: map[string]string{
 			"monitors": strings.Join(monitors, ","),
 			"image":    imageKey,
-			wwnKey:     wwn,
 		},
 	}
 	return r.Status().Patch(ctx, volume, client.MergeFrom(volumeBase))
