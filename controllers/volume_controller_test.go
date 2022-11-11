@@ -19,6 +19,7 @@ import (
 
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +30,7 @@ import (
 )
 
 var _ = Describe("VolumeReconciler", func() {
+	ctx := testutils.SetupContext()
 	testNs, rookNs, _ := SetupTest(ctx)
 
 	var (

@@ -19,6 +19,7 @@ import (
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -31,6 +32,7 @@ import (
 )
 
 var _ = Describe("VolumePoolReconciler", func() {
+	ctx := testutils.SetupContext()
 	testNs, rookNs, _ := SetupTest(ctx)
 
 	When("is started", func() {
