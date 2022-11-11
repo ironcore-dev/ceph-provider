@@ -17,6 +17,7 @@ package controllers
 import (
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -30,6 +31,7 @@ import (
 )
 
 var _ = Describe("ImagePopulatorReconciler", func() {
+	ctx := testutils.SetupContext()
 	testNs, _, populatorNS := SetupTest(ctx)
 
 	var (
