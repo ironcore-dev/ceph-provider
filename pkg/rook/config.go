@@ -22,7 +22,7 @@ const (
 	CSIRBDNodeSecretNameDefaultValue             = "rook-csi-rbd-node"
 	StorageClassAllowVolumeExpansionDefaultValue = true
 	StorageClassFSTypeDefaultValue               = "ext4"
-	StorageClassImageFeaturesDefaultValue        = "layering"
+	StorageClassImageFeaturesDefaultValue        = "layering,exclusive-lock,object-map,fast-diff"
 	StorageClassReclaimPolicyDefaultValue        = "Delete"
 	StorageClassVolumeBindingModeDefaultValue    = "Immediate"
 	CSIDriverNameDefaultValue                    = "rook-ceph.rbd.csi.ceph.com"
