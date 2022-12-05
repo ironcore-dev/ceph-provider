@@ -26,9 +26,11 @@ import (
 )
 
 const (
-	iops int64 = 1000
-	tps  int64 = 100
-	size int64 = 5
+	iops          int64 = 1000
+	tps           int64 = 100
+	size          int64 = 5
+	burstFactor   int64 = 10
+	burstDuration int64 = 25
 )
 
 func TestCalculateRelativeLimits(t *testing.T) {
@@ -47,7 +49,7 @@ func TestCalculateRelativeLimits(t *testing.T) {
 		},
 	}
 
-	limits, err := ceph.CalculateLimits(volume, volumeClass)
+	limits, err := ceph.CalculateLimits(volume, volumeClass, burstFactor, burstDuration)
 	if err != nil {
 		t.Fail()
 	}
@@ -64,6 +66,22 @@ func TestCalculateRelativeLimits(t *testing.T) {
 		t.Fail()
 	}
 
+	if l, ok := limits[ceph.IOPSBurstLimit]; !ok || l.Value() != iops*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.WriteIOPSBurstLimit]; !ok || l.Value() != iops*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.ReadIOPSBurstLimit]; !ok || l.Value() != iops*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.IOPSBurstDurationLimit]; !ok || l.Value() != burstDuration {
+		t.Fail()
+	}
+
 	if l, ok := limits[ceph.BPSLimit]; !ok || l.Value() != tps*size {
 		t.Fail()
 	}
@@ -73,6 +91,22 @@ func TestCalculateRelativeLimits(t *testing.T) {
 	}
 
 	if l, ok := limits[ceph.ReadBPSLimit]; !ok || l.Value() != tps*size {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.BPSBurstLimit]; !ok || l.Value() != tps*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.WriteBPSBurstLimit]; !ok || l.Value() != tps*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.ReadBPSBurstLimit]; !ok || l.Value() != tps*size*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.BPSBurstDurationLimit]; !ok || l.Value() != burstDuration {
 		t.Fail()
 	}
 }
@@ -91,7 +125,7 @@ func TestCalculateAbsoluteLimits(t *testing.T) {
 		},
 	}
 
-	limits, err := ceph.CalculateLimits(volume, volumeClass)
+	limits, err := ceph.CalculateLimits(volume, volumeClass, burstFactor, burstDuration)
 	if err != nil {
 		t.Fail()
 	}
@@ -108,6 +142,22 @@ func TestCalculateAbsoluteLimits(t *testing.T) {
 		t.Fail()
 	}
 
+	if l, ok := limits[ceph.IOPSBurstLimit]; !ok || l.Value() != iops*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.WriteIOPSBurstLimit]; !ok || l.Value() != iops*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.ReadIOPSBurstLimit]; !ok || l.Value() != iops*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.IOPSBurstDurationLimit]; !ok || l.Value() != burstDuration {
+		t.Fail()
+	}
+
 	if l, ok := limits[ceph.BPSLimit]; !ok || l.Value() != tps {
 		t.Fail()
 	}
@@ -117,6 +167,22 @@ func TestCalculateAbsoluteLimits(t *testing.T) {
 	}
 
 	if l, ok := limits[ceph.ReadBPSLimit]; !ok || l.Value() != tps {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.BPSBurstLimit]; !ok || l.Value() != tps*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.WriteBPSBurstLimit]; !ok || l.Value() != tps*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.ReadBPSBurstLimit]; !ok || l.Value() != tps*burstFactor {
+		t.Fail()
+	}
+
+	if l, ok := limits[ceph.BPSBurstDurationLimit]; !ok || l.Value() != burstDuration {
 		t.Fail()
 	}
 }
@@ -168,7 +234,7 @@ func TestCalculateUsage(t *testing.T) {
 		},
 	}
 
-	usage, err := ceph.CalculateUsage(volumes, volumeClasses)
+	usage, err := ceph.CalculateUsage(volumes, volumeClasses, burstFactor, burstDuration)
 	if err != nil {
 		t.Fail()
 	}
