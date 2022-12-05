@@ -66,21 +66,27 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
+	var (
+		metricsAddr          string
+		enableLeaderElection bool
+		probeAddr            string
+	)
 
-	var volumePoolName string
-	var volumePoolReplication int
-	var providerID string
-	var volumeClassSelector map[string]string
-	var volumePoolLabels map[string]string
-	var volumePoolAnnotations map[string]string
+	var (
+		volumePoolName        string
+		volumePoolReplication int
+		providerID            string
+		volumeClassSelector   map[string]string
+		volumePoolLabels      map[string]string
+		volumePoolAnnotations map[string]string
+	)
 
-	var populatorImage string
-	var populatorDevicePath string
-	var populatorNamespace string
-	var populatorPrefix string
+	var (
+		populatorImage      string
+		populatorDevicePath string
+		populatorNamespace  string
+		populatorPrefix     string
+	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -120,6 +126,8 @@ func main() {
 	flag.StringVar(&rookConfig.DashboardUser, "rook-dashboard-user", "admin", "user name which is used talk to the ceph dashboard api")
 	flag.StringVar(&rookConfig.DashboardSecretName, "rook-dashboard-secret-name", "rook-ceph-dashboard-password", "Secret name containing password for the dashboard user")
 	flag.IntVar(&rookConfig.DashboardTokenRefreshInMinutes, "rook-dashboard-token-refresh", 7*60, "Defines when the ceph dashboard token should be refreshed")
+	flag.Int64Var(&rookConfig.BurstFactor, "burst-factor", 10, "Defines the factor to calculate the burst limits")
+	flag.Int64Var(&rookConfig.BurstDurationInSeconds, "burst-duration", 15, "Defines the duration how long a volume can burst")
 
 	opts := zap.Options{
 		Development: true,

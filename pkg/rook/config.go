@@ -28,6 +28,8 @@ const (
 	CSIDriverNameDefaultValue                    = "rook-ceph.rbd.csi.ceph.com"
 	NamespaceDefaultValue                        = "rook-ceph"
 	EnableRBDStatsDefaultValue                   = false
+	BurstFactorDefaultValue                      = 10
+	BurstDurationInSecondsDefaultValue           = 15
 )
 
 var (
@@ -55,6 +57,9 @@ type Config struct {
 	DashboardSecretName            string
 	DashboardEndpoint              string
 	DashboardTokenRefreshInMinutes int
+
+	BurstFactor            int64
+	BurstDurationInSeconds int64
 }
 
 func NewConfigWithDefaults() *Config {
@@ -73,5 +78,7 @@ func NewConfigWithDefaults() *Config {
 		StorageClassVolumeBindingMode:    StorageClassVolumeBindingModeDefaultValue,
 		CSIDriverName:                    CSIDriverNameDefaultValue,
 		EnableRBDStats:                   EnableRBDStatsDefaultValue,
+		BurstFactor:                      BurstFactorDefaultValue,
+		BurstDurationInSeconds:           BurstDurationInSecondsDefaultValue,
 	}
 }
