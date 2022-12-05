@@ -216,6 +216,15 @@ func (r *VolumeReconciler) applyLimits(ctx context.Context, log logr.Logger, vol
 }
 
 func (r *VolumeReconciler) delete(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (ctrl.Result, error) {
+	volumePool := &storagev1alpha1.VolumePool{}
+	if waitUntilRefIsPresent, err := r.checkVolumePoolRef(ctx, log, volume, volumePool); err != nil || waitUntilRefIsPresent {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.updatePoolUsageMetrics(ctx, volumePool); err != nil {
+		log.Error(err, "unable to update pool usage metrics")
+	}
+
 	return ctrl.Result{}, nil
 }
 
