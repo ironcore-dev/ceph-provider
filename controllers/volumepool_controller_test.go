@@ -37,7 +37,7 @@ var _ = Describe("VolumePoolReconciler", func() {
 	testNs, rookNs, _ := SetupTest(ctx)
 
 	When("is started", func() {
-		FIt("should announce a VolumePool", func() {
+		It("should announce a VolumePool", func() {
 			By("checking that a VolumePool has been created")
 			volumePool := &storagev1alpha1.VolumePool{}
 			volumePoolKey := types.NamespacedName{Name: volumePoolName}
