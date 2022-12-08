@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/onmetal/controller-utils/clientutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 var _ = Describe("VolumeReconciler", func() {
@@ -52,6 +53,7 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 			Capabilities: map[corev1.ResourceName]resource.Quantity{
 				storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
@@ -92,7 +94,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
@@ -100,18 +102,19 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
-		volKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
 
 		By("checking that the ceph volume is pending")
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
-			g.Expect(vol.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStatePending))
-		}).Should(Succeed())
+		Eventually(Object(vol)).Should(
+			HaveField("Status.State", Equal(storagev1alpha1.VolumeStatePending)))
 
 		By("checking that the pvc has been created")
-		pvc := &corev1.PersistentVolumeClaim{}
-		pvcKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Name}
-		Eventually(func() error { return k8sClient.Get(ctx, pvcKey, pvc) }).Should(Succeed())
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      vol.Name,
+				Namespace: vol.Namespace,
+			},
+		}
+		Eventually(Get(pvc)).Should(Succeed())
 
 		By("creating the pv for pvc")
 		pv := getPVSpec(pvc, resource.MustParse("1Gi"), cephPoolName, cephImageName)
@@ -126,27 +129,26 @@ var _ = Describe("VolumeReconciler", func() {
 		Expect(k8sClient.Status().Patch(ctx, pvc, client.MergeFrom(pvcBase)))
 
 		By("checking that the volume status has been updated")
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, volKey, vol)).To(Succeed())
-			g.Expect(vol.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStateAvailable))
-			g.Expect(vol.Status.Access).NotTo(BeNil())
-			g.Expect(vol.Status.Access.SecretRef).NotTo(BeNil())
-		}).Should(Succeed())
+		Eventually(Object(vol)).
+			Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.VolumeStateAvailable)),
+				HaveField("Status.Access.SecretRef", Not(BeNil())),
+				HaveField("Status.Access.Handle", Not(BeEmpty())),
+				HaveField("Status.Access.Driver", Equal("ceph")),
+				HaveField("Status.Access.VolumeAttributes", HaveKeyWithValue("image", fmt.Sprintf("%s/%s", cephPoolName, cephImageName))),
+				HaveField("Status.Access.VolumeAttributes", HaveKey("monitors")),
+			))
 
-		By("checking that the volume access attributes are correct")
-		Expect(vol.Status.Access.Driver).To(BeEquivalentTo("ceph"))
-		Expect(vol.Status.Access.VolumeAttributes).NotTo(BeNil())
-		Expect(vol.Status.Access.VolumeAttributes["image"]).To(BeEquivalentTo(fmt.Sprintf("%s/%s", cephPoolName, cephImageName)))
-		Expect(vol.Status.Access.VolumeAttributes["monitors"]).NotTo(BeEmpty())
-		Expect(vol.Status.Access.VolumeAttributes["WWN"]).NotTo(BeEmpty())
-
-		accessSecret := &corev1.Secret{}
-		accessSecretKey := types.NamespacedName{Namespace: vol.Namespace, Name: vol.Status.Access.SecretRef.Name}
-		Expect(k8sClient.Get(ctx, accessSecretKey, accessSecret)).To(Succeed())
-
-		Expect(accessSecret.Data).NotTo(BeNil())
-		Expect(accessSecret.Data["userID"]).To(BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePool.Name)))
-		Expect(accessSecret.Data["userKey"]).To(BeEquivalentTo(cephClientSecretValue))
+		accessSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      vol.Status.Access.SecretRef.Name,
+				Namespace: vol.Namespace,
+			},
+		}
+		Eventually(Object(accessSecret)).Should(SatisfyAll(
+			HaveField("Data", HaveKeyWithValue("userID", BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePool.Name)))),
+			HaveField("Data", HaveKeyWithValue("userKey", BeEquivalentTo(cephClientSecretValue))),
+		))
 	})
 
 	It("should reconcile volumes in the same customer ns", func() {
@@ -157,7 +159,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
@@ -226,7 +228,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: "not-there"},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: "not-there"},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: "not-there"},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
