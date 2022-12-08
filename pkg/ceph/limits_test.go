@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/onmetal/cephlet/pkg/ceph"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -194,13 +194,13 @@ func TestCalculateUsage(t *testing.T) {
 		Items: []storagev1alpha1.Volume{
 			{
 				Spec: storagev1alpha1.VolumeSpec{
-					VolumeClassRef: corev1.LocalObjectReference{Name: "test1"},
+					VolumeClassRef: &corev1.LocalObjectReference{Name: "test1"},
 					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
 				},
 			},
 			{
 				Spec: storagev1alpha1.VolumeSpec{
-					VolumeClassRef: corev1.LocalObjectReference{Name: "test2"},
+					VolumeClassRef: &corev1.LocalObjectReference{Name: "test2"},
 					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
 				},
 			},

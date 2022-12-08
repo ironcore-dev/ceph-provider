@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/onmetal/controller-utils/clientutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,6 +53,7 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 			Capabilities: map[corev1.ResourceName]resource.Quantity{
 				storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
@@ -93,7 +94,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
@@ -158,7 +159,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),
@@ -227,7 +228,7 @@ var _ = Describe("VolumeReconciler", func() {
 				Namespace:    testNs.Name,
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: corev1.LocalObjectReference{Name: "not-there"},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: "not-there"},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: "not-there"},
 				Resources: corev1.ResourceList{
 					"storage": resource.MustParse(volumeSize),

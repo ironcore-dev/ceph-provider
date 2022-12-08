@@ -25,7 +25,7 @@ import (
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/apis/storage/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
