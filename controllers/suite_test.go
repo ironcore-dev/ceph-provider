@@ -67,7 +67,6 @@ const (
 )
 
 var (
-	ctx        = context.Background()
 	testEnv    *envtest.Environment
 	testEnvExt *envtestutils.EnvironmentExtensions
 	cfg        *rest.Config
@@ -86,8 +85,6 @@ var (
 )
 
 func TestAPIs(t *testing.T) {
-	_, reporterConfig := GinkgoConfiguration()
-	reporterConfig.SlowSpecThreshold = slowSpecThreshold
 	SetDefaultConsistentlyPollingInterval(pollingInterval)
 	SetDefaultEventuallyPollingInterval(pollingInterval)
 	SetDefaultEventuallyTimeout(eventuallyTimeout)

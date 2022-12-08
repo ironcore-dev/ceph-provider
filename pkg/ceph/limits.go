@@ -31,8 +31,9 @@ func DefaultLimits() Limits {
 
 type Limits map[LimitType]resource.Quantity
 
-func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha1.VolumeClass) (Limits, error) {
+func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha1.VolumeClass, burstFactor, burstDurationInSeconds int64) (Limits, error) {
 	limits := DefaultLimits()
+	burstDuration := resource.NewQuantity(burstDurationInSeconds, resource.DecimalSI)
 
 	var scale int64 = 1
 	// if not true: absolute limits
@@ -46,27 +47,43 @@ func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha
 	}
 
 	if iops, ok := volumeClass.Capabilities[storagev1alpha1.ResourceIOPS]; ok {
-		value := iops.DeepCopy()
-		value.Set(scale * iops.Value())
+		limit := iops.DeepCopy()
+		limit.Set(scale * iops.Value())
 
-		limits[IOPSlLimit] = value
-		limits[ReadIOPSLimit] = value
-		limits[WriteIOPSLimit] = value
+		limits[IOPSlLimit] = limit
+		limits[ReadIOPSLimit] = limit
+		limits[WriteIOPSLimit] = limit
+
+		burstLimit := limit.DeepCopy()
+		burstLimit.Set(burstFactor * limit.Value())
+		limits[IOPSBurstLimit] = burstLimit
+		limits[ReadIOPSBurstLimit] = burstLimit
+		limits[WriteIOPSBurstLimit] = burstLimit
+
+		limits[IOPSBurstDurationLimit] = *burstDuration
 	}
 
 	if tps, ok := volumeClass.Capabilities[storagev1alpha1.ResourceTPS]; ok {
-		value := tps.DeepCopy()
-		value.Set(scale * tps.Value())
+		limit := tps.DeepCopy()
+		limit.Set(scale * tps.Value())
 
-		limits[BPSLimit] = value
-		limits[ReadBPSLimit] = value
-		limits[WriteBPSLimit] = value
+		limits[BPSLimit] = limit
+		limits[ReadBPSLimit] = limit
+		limits[WriteBPSLimit] = limit
+
+		burstLimit := limit.DeepCopy()
+		burstLimit.Set(burstFactor * limit.Value())
+		limits[BPSBurstLimit] = burstLimit
+		limits[ReadBPSBurstLimit] = burstLimit
+		limits[WriteBPSBurstLimit] = burstLimit
+
+		limits[BPSBurstDurationLimit] = *burstDuration
 	}
 
 	return limits, nil
 }
 
-func CalculateUsage(volumes *storagev1alpha1.VolumeList, volumeClasses *storagev1alpha1.VolumeClassList) (Limits, error) {
+func CalculateUsage(volumes *storagev1alpha1.VolumeList, volumeClasses *storagev1alpha1.VolumeClassList, burstFactor, burstDurationInSeconds int64) (Limits, error) {
 	classes := map[string]*storagev1alpha1.VolumeClass{}
 
 	for i := range volumeClasses.Items {
@@ -77,7 +94,7 @@ func CalculateUsage(volumes *storagev1alpha1.VolumeList, volumeClasses *storagev
 	usage := DefaultLimits()
 	for _, volume := range volumes.Items {
 		class := classes[volume.Spec.VolumeClassRef.Name]
-		limits, err := CalculateLimits(&volume, class)
+		limits, err := CalculateLimits(&volume, class, burstFactor, burstDurationInSeconds)
 		if err != nil {
 			continue
 		}
