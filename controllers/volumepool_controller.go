@@ -36,7 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -383,7 +386,6 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// TODO: setup watch for VolumeClasses in order to reconcile availableVolumeClasses in Pool Status
 	return ctrl.NewControllerManagedBy(mgr).
 		//TODO: remove once API Server is fixed
 		For(&storagev1alpha1.VolumePool{}, builder.WithPredicates(predicate.Funcs{
@@ -397,6 +399,14 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		//TODO: check if we get called once the CephBlockPool is being changed
 		Owns(&rookv1.CephBlockPool{}).
 		Owns(&rookv1.CephClient{}).
+		Watches(
+			&source.Kind{Type: &storagev1alpha1.VolumeClass{}},
+			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{
+					Name: r.VolumePoolName,
+				}}}
+			}),
+		).
 		Complete(r)
 }
 
