@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -130,6 +131,47 @@ var _ = Describe("VolumePoolReconciler", func() {
 					return err
 				}
 				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateAvailable))
+				g.Expect(volumePool.Status.AvailableVolumeClasses).To(BeNil())
+				return nil
+			}).Should(Succeed())
+
+			By("creating a VolumeClass")
+			volumeClass := &storagev1alpha1.VolumeClass{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "sc-",
+					Labels:       volumeClassSelector,
+				},
+				Capabilities: map[corev1.ResourceName]resource.Quantity{
+					storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
+					storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
+
+			By("creating a second VolumeClass")
+			Expect(k8sClient.Create(ctx, &storagev1alpha1.VolumeClass{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "sc-",
+					Labels: map[string]string{
+						"suitable-for": "production",
+					},
+				},
+				Capabilities: map[corev1.ResourceName]resource.Quantity{
+					storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
+					storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
+				},
+			})).To(Succeed())
+
+			By("checking that the VolumePool status includes the correct VolumeClass")
+			Eventually(func(g Gomega) error {
+				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
+					return err
+				}
+				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateAvailable))
+				g.Expect(volumePool.Status.AvailableVolumeClasses).To(HaveLen(1))
+				g.Expect(volumePool.Status.AvailableVolumeClasses).To(ContainElement(corev1.LocalObjectReference{Name: volumeClass.Name}))
 				return nil
 			}).Should(Succeed())
 		})
