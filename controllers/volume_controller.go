@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -26,6 +27,9 @@ import (
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
+	onmetalimage "github.com/onmetal/onmetal-image"
+	"github.com/onmetal/onmetal-image/oci/image"
+	"github.com/onmetal/onmetal-image/oci/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -350,6 +354,38 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 }
 
 func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+	reg, err := remote.DockerRegistry(nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize registry: %w", err)
+	}
+
+	img, err := reg.Resolve(ctx, volume.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
+	}
+
+	layers, err := img.Layers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get layers for image: %w", err)
+	}
+
+	var rootFSLayer image.Layer
+	for _, l := range layers {
+		if l.Descriptor().MediaType == onmetalimage.RootFSLayerMediaType {
+			rootFSLayer = l
+			break
+		}
+	}
+	if rootFSLayer == nil {
+		return fmt.Errorf("failed to get rootFS layer")
+	}
+
+	//layer size with a bit extra space
+	size := resource.NewQuantity(rootFSLayer.Descriptor().Size+100, resource.DecimalSI)
+	if size == nil {
+		return fmt.Errorf("failed to get size of rootFS layer")
+	}
+
 	imagePvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -362,7 +398,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
+				Requests: corev1.ResourceList{corev1.ResourceStorage: *size},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
 			StorageClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
