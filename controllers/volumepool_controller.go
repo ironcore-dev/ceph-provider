@@ -396,7 +396,6 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return !equality.Semantic.DeepEqual(old.Spec, new.Spec)
 			},
 		})).
-		//TODO: check if we get called once the CephBlockPool is being changed
 		Owns(&rookv1.CephBlockPool{}).
 		Owns(&rookv1.CephClient{}).
 		Watches(
