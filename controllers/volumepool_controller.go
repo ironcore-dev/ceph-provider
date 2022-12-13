@@ -387,6 +387,7 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		//TODO: remove once API Server is fixed
 		For(&storagev1alpha1.VolumePool{}, builder.WithPredicates(predicate.Funcs{
 			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
 				old := updateEvent.ObjectOld.(*storagev1alpha1.VolumePool)
