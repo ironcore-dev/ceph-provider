@@ -380,8 +380,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 		return fmt.Errorf("failed to get rootFS layer")
 	}
 
-	//layer size with a bit extra space
-	size := resource.NewQuantity(rootFSLayer.Descriptor().Size+100, resource.DecimalSI)
+	size := resource.NewQuantity(rootFSLayer.Descriptor().Size, resource.BinarySI)
 	if size == nil {
 		return fmt.Errorf("failed to get size of rootFS layer")
 	}

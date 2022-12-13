@@ -24,6 +24,7 @@ import (
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
+	"github.com/onmetal/onmetal-api/apiutils/equality"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -31,9 +32,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -383,7 +387,14 @@ func (r *VolumePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&storagev1alpha1.VolumePool{}).
+		For(&storagev1alpha1.VolumePool{}, builder.WithPredicates(predicate.Funcs{
+			UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+				old := updateEvent.ObjectOld.(*storagev1alpha1.VolumePool)
+				new := updateEvent.ObjectNew.(*storagev1alpha1.VolumePool)
+
+				return !equality.Semantic.DeepEqual(old.Spec, new.Spec)
+			},
+		})).
 		Owns(&rookv1.CephBlockPool{}).
 		Owns(&rookv1.CephClient{}).
 		Watches(
