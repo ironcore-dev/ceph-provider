@@ -353,20 +353,20 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	return nil
 }
 
-func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+func getImageSize(ctx context.Context, volume *storagev1alpha1.Volume) (*resource.Quantity, error) {
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
-		return fmt.Errorf("failed to initialize registry: %w", err)
+		return nil, fmt.Errorf("failed to initialize registry: %w", err)
 	}
 
 	img, err := reg.Resolve(ctx, volume.Spec.Image)
 	if err != nil {
-		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
+		return nil, fmt.Errorf("failed to resolve image ref in registry: %w", err)
 	}
 
 	layers, err := img.Layers(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get layers for image: %w", err)
+		return nil, fmt.Errorf("failed to get layers for image: %w", err)
 	}
 
 	var rootFSLayer image.Layer
@@ -377,12 +377,21 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 		}
 	}
 	if rootFSLayer == nil {
-		return fmt.Errorf("failed to get rootFS layer")
+		return nil, fmt.Errorf("failed to get rootFS layer")
 	}
 
 	size := resource.NewQuantity(rootFSLayer.Descriptor().Size, resource.BinarySI)
 	if size == nil {
-		return fmt.Errorf("failed to get size of rootFS layer")
+		return nil, fmt.Errorf("failed to get size of rootFS layer")
+	}
+
+	return size, nil
+}
+
+func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+	size, err := getImageSize(ctx, volume)
+	if err != nil {
+		return fmt.Errorf("unable to get image size: %w", err)
 	}
 
 	imagePvc := &corev1.PersistentVolumeClaim{
