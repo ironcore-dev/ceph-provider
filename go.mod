@@ -11,8 +11,8 @@ require (
 	github.com/onmetal/controller-utils v0.6.6
 	github.com/onmetal/onmetal-api v0.0.13-0.20221212163328-f8ac2ec1d0a2
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
-	github.com/onsi/ginkgo/v2 v2.6.0
-	github.com/onsi/gomega v1.24.1
+	github.com/onsi/ginkgo/v2 v2.6.1
+	github.com/onsi/gomega v1.24.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rook/rook v1.10.7
@@ -129,7 +129,7 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go4.org/netipx v0.0.0-20220812043211-3cc044ffd68d // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10 // indirect
+	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/term v0.3.0 // indirect
