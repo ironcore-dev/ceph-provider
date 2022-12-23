@@ -45,7 +45,6 @@ import (
 const (
 	volumePoolFinalizer        = "cephlet.onmetal.de/volumepool"
 	volumePoolSecretAnnotation = "ceph-client-secret-name"
-	cephClientSecretKey        = "secretName"
 )
 
 var (
@@ -148,10 +147,6 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 	}
 
 	return r.patchVolumePoolStatus(ctx, pool, rookPool)
-}
-
-func GetClusterPoolName(clusterId, poolName string) string {
-	return fmt.Sprintf("%s--%s", clusterId, poolName)
 }
 
 func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) (ctrl.Result, error) {
@@ -361,7 +356,7 @@ func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *
 	case rookPool.Status.Phase == rookv1.ConditionReady:
 		pool.Status.State = storagev1alpha1.VolumePoolStateAvailable
 	case rookPool.Status.Phase == rookv1.ConditionFailure:
-		pool.Status.State = storagev1alpha1.VolumePoolStateNotAvailable
+		pool.Status.State = storagev1alpha1.VolumePoolStateUnavailable
 		requeue = true
 	default:
 		pool.Status.State = storagev1alpha1.VolumePoolStatePending

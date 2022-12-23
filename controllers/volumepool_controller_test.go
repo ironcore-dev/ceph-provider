@@ -118,7 +118,7 @@ var _ = Describe("VolumePoolReconciler", func() {
 				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
 					return err
 				}
-				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateNotAvailable))
+				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateUnavailable))
 				return nil
 			}).Should(Succeed())
 

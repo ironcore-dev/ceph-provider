@@ -30,6 +30,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ceph.rook.io
+  resources:
+  - cephobjectstores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -127,6 +139,66 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - bucketclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - bucketpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - bucketpools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - bucketpools/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - buckets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - buckets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - storage.api.onmetal.de
+  resources:
+  - buckets/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - storage.api.onmetal.de
   resources:
