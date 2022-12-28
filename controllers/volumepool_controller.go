@@ -123,8 +123,11 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		},
 		Spec: rookv1.NamedBlockPoolSpec{
 			PoolSpec: rookv1.PoolSpec{
+				FailureDomain: "osd",
 				Replicated: rookv1.ReplicatedSpec{
-					Size: uint(r.VolumePoolReplication),
+					//Size: uint(r.VolumePoolReplication),
+					Size:                   1,
+					RequireSafeReplicaSize: false,
 				},
 				EnableRBDStats: r.RookConfig.EnableRBDStats,
 			},
