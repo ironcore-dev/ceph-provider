@@ -1,7 +1,7 @@
 ---
-title: Network Loadbalancer
+title: Storage Encryption
 
-oep-number: 3
+oep-number: 
 
 creation-date: 2022-12-29
 
@@ -26,8 +26,18 @@ reviewers:
 - [Summary](#summary)
 - [Motivation](#motivation)
     - [Goals](#goals)
-    - [Non-Goals](#non-goals)
     - [Details](#details)
 - [Proposal](#proposal)
 
 ## Summary
+
+
+
+## Motivation
+
+### Goals
+
+### Details
+
+
+## Proposal
