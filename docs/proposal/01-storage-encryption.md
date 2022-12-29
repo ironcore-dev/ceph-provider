@@ -1,8 +1,6 @@
 ---
 title: Storage Encryption
 
-oep-number: 
-
 creation-date: 2022-12-29
 
 status: implementable
