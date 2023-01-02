@@ -126,7 +126,9 @@ func (r *VolumePoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 				FailureDomain: "osd",
 				Replicated: rookv1.ReplicatedSpec{
 					//Size: uint(r.VolumePoolReplication),
-					Size:                   1,
+					// Size:                   1,
+					Size: uint(1),
+
 					RequireSafeReplicaSize: false,
 				},
 				EnableRBDStats: r.RookConfig.EnableRBDStats,
@@ -205,9 +207,11 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 		},
 		Provisioner: r.RookConfig.CSIDriverName,
 		Parameters: map[string]string{
-			"clusterID":     r.RookConfig.ClusterId,
-			"pool":          r.VolumePoolName,
-			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
+			"clusterID":       r.RookConfig.ClusterId,
+			"pool":            r.VolumePoolName,
+			"encrypted":       "true",                 // Encryption Parameter Added
+			"encryptionKMSID": "user-secret-metadata", //  Make this configurable
+			"imageFeatures":   r.RookConfig.StorageClassImageFeatures,
 			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
 			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookConfig.Namespace,
 			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
