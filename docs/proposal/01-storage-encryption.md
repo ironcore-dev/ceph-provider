@@ -6,7 +6,6 @@ creation-date: 2022-12-29
 status: implementable
 
 authors:
-
 - @pradumnapandit
 - @aditya-dixit99
 - @DivyaD211093
