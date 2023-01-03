@@ -9,7 +9,7 @@ authors:
 
 - @pradumnapandit
 - @aditya-dixit99
-- @divya
+- @DivyaD211093
 
 reviewers:
 - @manuel
@@ -38,23 +38,27 @@ The primary purpose of encryption is to protect the confidentiality of digital d
 - In order to meet compliance requirements of businesses to store data encrypted in the cloud. 
 
 ### Goals
-- To offer  Encryption feature to the block device (RBD image) that CEPH exposes
-- User 
-- Way to provide user defined keys.
+- User should be able to create encrypted volumes (Link to API team proposal)
+- To offer Encryption feature to the block device (RBD image) that CEPH exposes
 
 
 ### Non-Goals
-- Encryption for whole pool of volumes in ceph or just one volume at a time ??
-- OSD level encryption is also supported
+- No OSD level encryption is supported
+- Object storage encryption (TDB?)
 
 ### Details
-As of now two level encryption is supported by Ceph
-- OSD 
-- RBD which disk level
+As of now two types of encryption is supported by Ceph: 
+- OSD Level 
+- Block device Level
+  - Currently when `volume` is created corresponding `PVC` is also created with reference to `storageclass`.
+    However, With `Encryption` enabled `Volume` there will be a new storageclass named `encrypted-ceph` will be created which will be referenced while 
+    creating encrypted PVCs with user provided passphrase.
+  - To use different passphrase you need to have different storage classes and point to a different K8s secrets csi.storage.k8s.io/node-stage-secret-name and      csi.storage.k8s.io/provisioner-secret-name which carry new passphrase value for encryptionPassphrase key in these secrets
+  
 
 ## Proposal
 
-- Encrypted storage class will be created by additional parameters as below.
+- Encrypted storage class will be created with additional parameters as below.
 
 ```
 apiVersion: storage.k8s.io/v1
@@ -87,4 +91,13 @@ data:
         "secretName": "storage-encryption-secret"
       }
     }
+```
+```
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-encryption-secret
+  namespace: rook-ceph
+stringData:
+  encryptionPassphrase: test-encryption
 ```
