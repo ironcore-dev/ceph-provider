@@ -34,7 +34,7 @@ The primary purpose of encryption is to protect the confidentiality of digital d
 ## Motivation
 - Security is an important concern and should be a strong focus of any  Cloud Native IaaS. 
 - Data breaches and downtime are costly and difficult to manage. 
-- In order to meet compliance requirements of businesses to store data encrypted in the cloud. 
+- In order to meet compliance requirements of businesses, it becomes essential to store the encryption enabled data in the cloud. 
 
 ### Goals
 - User should be able to create encrypted volumes (Link to API team proposal)
@@ -52,7 +52,7 @@ As of now two types of encryption is supported by Ceph:
   - Currently when `volume` is created corresponding `PVC` is also created with reference to `storageclass`.
     However, With `Encryption` enabled `Volume` there will be a new storageclass named `encrypted-ceph` will be created which will be referenced while 
     creating encrypted PVCs with user provided passphrase.
-  - To use different passphrase you need to have different storage classes and point to a different K8s secrets csi.storage.k8s.io/node-stage-secret-name and      csi.storage.k8s.io/provisioner-secret-name which carry new passphrase value for encryptionPassphrase key in these secrets
+  - To use different passphrase you need to have different storage classes and point to a different K8s secrets csi.storage.k8s.io/node-stage-secret-name and csi.storage.k8s.io/provisioner-secret-name which carry new passphrase value for encryptionPassphrase key in these secrets
   
 
 ## Proposal
