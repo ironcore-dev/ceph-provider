@@ -60,23 +60,6 @@ As of now two types of encryption is supported by Ceph:
 - Encrypted storage class will be created with additional parameters as below.
 
 ```
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: rook-ceph-block-encrypted
-parameters:
-  # additional parameters required for encryption
-  encrypted: "true"
-  encryptionKMSID: "user-secret-metadata"
-# ...
-```
-
-Additinally Update the rook-ceph-operator-config configmap and patch the following configurations
-```
-kubectl patch cm rook-ceph-operator-config -nrook-ceph -p $'data:\n "CSI_ENABLE_ENCRYPTION": "true"'
-```
-
-```
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -91,6 +74,13 @@ data:
       }
     }
 ```
+
+Additinally Update the rook-ceph-operator-config configmap and patch the following configurations
+```
+kubectl patch cm rook-ceph-operator-config -nrook-ceph -p $'data:\n "CSI_ENABLE_ENCRYPTION": "true"'
+```
+
+
 ```
 apiVersion: v1
 kind: Secret
@@ -100,3 +90,17 @@ metadata:
 stringData:
   encryptionPassphrase: test-encryption
 ```
+
+```
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-block-encrypted
+parameters:
+  # additional parameters required for encryption
+  encrypted: "true"
+  encryptionKMSID: "user-secret-metadata"
+# ...
+```
+
+The `rook-ceph-block-encrypted` is the encrypted `storage class`.
