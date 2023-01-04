@@ -104,3 +104,24 @@ parameters:
 ```
 
 The `rook-ceph-block-encrypted` is the encrypted `storage class`.
+
+## TBD (Remove below section after discussion)
+
+## Questions-
+- Any thought behind 
+```mermaid
+graph TD
+    VP[VolumePool] -- creates --> CephBlockPool
+    VP -- announces in status --> VC[VolumeClass]
+    VP -- ceates --> SC[StorageClass]
+    VP -- ceates --> VSC[VolumeSnapshotClass]
+    VP -- ceates --> CC[CephClient]
+```
+
+- User defined `encryption keys` required multiple `storageclasses`.
+
+
+## Observations-
+- one cephblockpool can be used with multiple storageclasses (both encrypted and non-encrypted) 
+- Cephlet creates Storageclass,VolumeSnapshotClass, cephclient name as `namespace—-volumepool` (Not customisable)
+- Cephlet creates Cephblockpool name as `volumepool` name (It is default can be changed by --volume-pool-name)
