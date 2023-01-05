@@ -59,6 +59,10 @@ const (
 	volumePoolProviderID  = "custom://pool"
 	volumePoolReplication = 3
 
+	bucketPoolName        = "my-pool"
+	bucketPoolProviderID  = "custom://pool"
+	bucketPoolReplication = 3
+
 	defaultDevicePath     = "/dev/block"
 	defaultPopulatorImage = "populator-image"
 	defaultPrefix         = "my-prefix"
@@ -80,6 +84,16 @@ var (
 		"some": "label",
 	}
 	volumePoolAnnotations = map[string]string{
+		"some": "annotation",
+	}
+
+	bucketClassSelector = map[string]string{
+		"suitable-for": "testing",
+	}
+	bucketPoolLabels = map[string]string{
+		"some": "label",
+	}
+	bucketPoolAnnotations = map[string]string{
 		"some": "annotation",
 	}
 )
@@ -236,6 +250,18 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			VolumePoolAnnotations: volumePoolAnnotations,
 			VolumeClassSelector:   volumeClassSelector,
 			VolumePoolReplication: volumePoolReplication,
+			RookConfig:            rookConfig,
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
+		Expect((&BucketPoolReconciler{
+			Client:                k8sManager.GetClient(),
+			Scheme:                k8sManager.GetScheme(),
+			BucketPoolName:        bucketPoolName,
+			BucketPoolProviderID:  bucketPoolProviderID,
+			BucketPoolLabels:      bucketPoolLabels,
+			BucketPoolAnnotations: bucketPoolAnnotations,
+			BucketClassSelector:   bucketClassSelector,
+			BucketPoolReplication: bucketPoolReplication,
 			RookConfig:            rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 

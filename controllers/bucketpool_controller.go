@@ -107,7 +107,7 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 
 	rookPool := &rookv1.CephObjectStore{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "CephBlockPool",
+			Kind:       "CephObjectStore",
 			APIVersion: "ceph.rook.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -118,7 +118,7 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 			MetadataPool: rookv1.PoolSpec{
 				FailureDomain: "host",
 				Replicated: rookv1.ReplicatedSpec{
-					Size: 3,
+					Size: uint(r.BucketPoolReplication),
 				},
 			},
 			DataPool: rookv1.PoolSpec{
@@ -126,6 +126,9 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 				ErasureCoded: rookv1.ErasureCodedSpec{
 					DataChunks:   2,
 					CodingChunks: 1,
+				},
+				Replicated: rookv1.ReplicatedSpec{
+					Size: uint(r.BucketPoolReplication),
 				},
 			},
 			PreservePoolsOnDelete: true,
@@ -214,7 +217,7 @@ func (r *BucketPoolReconciler) patchBucketPoolStatus(ctx context.Context, pool *
 	case rookPool.Status == nil:
 		pool.Status.State = storagev1alpha1.BucketPoolStatePending
 		requeue = true
-	case rookPool.Status.Phase == rookv1.ConditionReady:
+	case rookPool.Status.Phase == rookv1.ConditionConnected:
 		pool.Status.State = storagev1alpha1.BucketPoolStateAvailable
 	case rookPool.Status.Phase == rookv1.ConditionFailure:
 		pool.Status.State = storagev1alpha1.BucketPoolStateUnavailable
