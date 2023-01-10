@@ -1382,6 +1382,8 @@ github.com/onmetal/onmetal-api v0.0.13-0.20221212163328-f8ac2ec1d0a2 h1:F2p1NXVV
 github.com/onmetal/onmetal-api v0.0.13-0.20221212163328-f8ac2ec1d0a2/go.mod h1:nzEIl7IzF5ScxBXwHVpNq/3SivXGSRH9eU7XEflYTCw=
 github.com/onmetal/onmetal-api v0.0.13-0.20221221135304-0b26c85fda39 h1:mvLnED2wupwi75VN/rT2I1paNS+wi/o3K7YH7cmESK0=
 github.com/onmetal/onmetal-api v0.0.13-0.20221221135304-0b26c85fda39/go.mod h1:hqCQcDU2UgLrlzgAn5/bTZq2RTIsD0bM9lwkkPKATqQ=
+github.com/onmetal/onmetal-api v0.0.13-0.20230109100101-f53d460f2661 h1:P0XvxjYi6j4VAiGSDFqffc5eM2gwl8+AHj48urwaE5M=
+github.com/onmetal/onmetal-api v0.0.13-0.20230109100101-f53d460f2661/go.mod h1:hqCQcDU2UgLrlzgAn5/bTZq2RTIsD0bM9lwkkPKATqQ=
 github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660 h1:hqXcxP06lWGmbaFcMbIA4XwrPWG17/t6I21M3xDiRLA=
 github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660/go.mod h1:OM2WHTh6I0jVWlgn9VW18bANrwt7fyUy/MdF7nig8eg=
 github.com/onsi/ginkgo v0.0.0-20151202141238-7f8ab55aaf3b/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

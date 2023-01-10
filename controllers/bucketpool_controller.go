@@ -17,6 +17,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	storagev1 "k8s.io/api/storage/v1"
 	"sort"
 	"time"
 
@@ -150,7 +151,50 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, fmt.Errorf("failed to apply ceph bucket pool %s: %w", client.ObjectKeyFromObject(rookPool), err)
 	}
 
+	if err := r.applyStorageClass(ctx, log, pool); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to apply StorageClass: %w", err)
+	}
+
 	return r.patchBucketPoolStatus(ctx, pool, rookPool)
+}
+
+func (r *BucketPoolReconciler) applyStorageClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.BucketPool) error {
+	storageClass := &storagev1.StorageClass{}
+	storageClassKey := types.NamespacedName{Name: GetClusterBucketPoolName(r.RookConfig.ClusterId, pool.Name)}
+	err := r.Get(ctx, storageClassKey, storageClass)
+	if err == nil {
+		return nil
+	}
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to to get storageClass: %w", err)
+	}
+
+	storageClass = &storagev1.StorageClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StorageClass",
+			APIVersion: "storage.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: storageClassKey.Name,
+		},
+		Provisioner: r.RookConfig.BucketProvisioner,
+		Parameters: map[string]string{
+			"objectStoreName":      pool.Name,
+			"objectStoreNamespace": r.RookConfig.Namespace,
+		},
+		ReclaimPolicy: (*corev1.PersistentVolumeReclaimPolicy)(&r.RookConfig.StorageClassReclaimPolicy),
+	}
+
+	if err := ctrl.SetControllerReference(pool, storageClass, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownerreference for storage class %s: %w", client.ObjectKeyFromObject(storageClass), err)
+	}
+
+	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to patch storageClass %s for volumepool %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(pool), err)
+	}
+
+	log.V(1).Info("Applied StorageClass")
+	return nil
 }
 
 func (r *BucketPoolReconciler) delete(ctx context.Context, log logr.Logger, pool *storagev1alpha1.BucketPool) (ctrl.Result, error) {

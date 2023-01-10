@@ -21,11 +21,13 @@ import (
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 var _ = Describe("BucketPoolReconciler", func() {
@@ -37,56 +39,57 @@ var _ = Describe("BucketPoolReconciler", func() {
 			By("checking that a BucketPool has been created")
 			bucketPool := &storagev1alpha1.BucketPool{}
 			bucketPoolKey := types.NamespacedName{Name: bucketPoolName}
-			Eventually(func() error { return k8sClient.Get(ctx, bucketPoolKey, bucketPool) }).Should(Succeed())
+			Eventually(k8sClient.Get(ctx, bucketPoolKey, bucketPool)).Should(Succeed())
 
 			By("checking that a CephObjectStore has been created")
-			rookPool := &rookv1.CephObjectStore{}
-			rookPoolKey := types.NamespacedName{Name: bucketPoolName, Namespace: rookNs.Name}
-			Eventually(func() error { return k8sClient.Get(ctx, rookPoolKey, rookPool) }).Should(Succeed())
+			rookPool := &rookv1.CephObjectStore{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      bucketPoolName,
+					Namespace: rookNs.Name,
+				},
+			}
 
-			Expect(rookPool.Spec.DataPool.Replicated.Size).To(HaveValue(Equal(uint(bucketPoolReplication))))
-			Expect(rookPool.Spec.MetadataPool.Replicated.Size).To(HaveValue(Equal(uint(bucketPoolReplication))))
+			Eventually(Object(rookPool)).Should(SatisfyAll(
+				HaveField("Spec.DataPool.Replicated.Size", Equal(uint(bucketPoolReplication))),
+				HaveField("Spec.MetadataPool.Replicated.Size", Equal(uint(bucketPoolReplication))),
+			))
 
 			By("checking that a BucketPool reflect the rook status")
 			rookPoolBase := rookPool.DeepCopy()
-			rookPool.Status = &rookv1.ObjectStoreStatus{
-				Phase: rookv1.ConditionProgressing,
-			}
+			rookPool.Status = &rookv1.ObjectStoreStatus{Phase: rookv1.ConditionProgressing}
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
 
-			Eventually(func(g Gomega) error {
-				if err := k8sClient.Get(ctx, bucketPoolKey, bucketPool); err != nil {
-					return err
-				}
-				g.Expect(bucketPool.Status.State).To(BeEquivalentTo(storagev1alpha1.BucketPoolStatePending))
-				return nil
-			}).Should(Succeed())
+			Eventually(Object(bucketPool)).Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.BucketPoolStatePending)),
+			))
 
 			By("checking that a BucketPool reflect the rook status")
 			rookPoolBase = rookPool.DeepCopy()
 			rookPool.Status.Phase = rookv1.ConditionFailure
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
 
-			Eventually(func(g Gomega) error {
-				if err := k8sClient.Get(ctx, bucketPoolKey, bucketPool); err != nil {
-					return err
-				}
-				g.Expect(bucketPool.Status.State).To(BeEquivalentTo(storagev1alpha1.BucketPoolStateUnavailable))
-				return nil
-			}).Should(Succeed())
+			Eventually(Object(bucketPool)).Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.BucketPoolStateUnavailable)),
+			))
 
 			rookPoolBase = rookPool.DeepCopy()
 			rookPool.Status.Phase = rookv1.ConditionConnected
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
 
-			Eventually(func(g Gomega) error {
-				if err := k8sClient.Get(ctx, bucketPoolKey, bucketPool); err != nil {
-					return err
-				}
-				g.Expect(bucketPool.Status.State).To(BeEquivalentTo(storagev1alpha1.BucketPoolStateAvailable))
-				g.Expect(bucketPool.Status.AvailableBucketClasses).To(BeNil())
-				return nil
-			}).Should(Succeed())
+			Eventually(Object(bucketPool)).Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.BucketPoolStateAvailable)),
+				HaveField("Status.AvailableBucketClasses", BeNil()),
+			))
+
+			By("checking that a StorageClass has been created")
+			storageClass := &storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: GetClusterBucketPoolName(rookConfig.ClusterId, bucketPoolName),
+				},
+			}
+			Eventually(Object(storageClass)).Should(SatisfyAll(
+				HaveField("Provisioner", Equal(rookConfig.BucketProvisioner)),
+			))
 
 			By("creating a BucketClass")
 			volumeClass := &storagev1alpha1.BucketClass{
@@ -118,15 +121,10 @@ var _ = Describe("BucketPoolReconciler", func() {
 			})).To(Succeed())
 
 			By("checking that the BucketPool status includes the correct BucketClass")
-			Eventually(func(g Gomega) error {
-				if err := k8sClient.Get(ctx, bucketPoolKey, bucketPool); err != nil {
-					return err
-				}
-				g.Expect(bucketPool.Status.State).To(BeEquivalentTo(storagev1alpha1.BucketPoolStateAvailable))
-				g.Expect(bucketPool.Status.AvailableBucketClasses).To(HaveLen(1))
-				g.Expect(bucketPool.Status.AvailableBucketClasses).To(ContainElement(corev1.LocalObjectReference{Name: volumeClass.Name}))
-				return nil
-			}).Should(Succeed())
+			Eventually(Object(bucketPool)).Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.BucketPoolStateAvailable)),
+				HaveField("Status.AvailableBucketClasses", ContainElement(corev1.LocalObjectReference{Name: volumeClass.Name})),
+			))
 		})
 	})
 

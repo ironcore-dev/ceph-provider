@@ -20,6 +20,10 @@ const (
 	cephClientSecretKey = "secretName"
 )
 
-func GetClusterPoolName(clusterId, poolName string) string {
-	return fmt.Sprintf("%s--%s", clusterId, poolName)
+func GetClusterVolumePoolName(clusterId, poolName string) string {
+	return fmt.Sprintf("volume-%s--%s", clusterId, poolName)
+}
+
+func GetClusterBucketPoolName(clusterId, poolName string) string {
+	return fmt.Sprintf("bucket-%s-%s", clusterId, poolName)
 }

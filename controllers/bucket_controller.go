@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,7 +44,6 @@ type BucketReconciler struct {
 	Scheme         *runtime.Scheme
 	BucketPoolName string
 	RookConfig     *rook.Config
-	CephClient     ceph.Client
 
 	PoolUsage *prometheus.GaugeVec
 }
@@ -109,14 +107,6 @@ func (r *BucketReconciler) findObjectsForBucketPool(pool client.Object) []reconc
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	var err error
-	if r.CephClient == nil {
-		r.CephClient, err = ceph.NewClient(mgr.GetClient(), r.RookConfig)
-		if err != nil {
-			return err
-		}
-	}
-
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &storagev1alpha1.Bucket{}, bucketPoolRefIndex, func(rawObj client.Object) []string {
 		configDeployment := rawObj.(*storagev1alpha1.Bucket)
 		if configDeployment.Spec.BucketPoolRef == nil || configDeployment.Spec.BucketPoolRef.Name == "" {

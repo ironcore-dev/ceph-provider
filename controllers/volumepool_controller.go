@@ -178,7 +178,7 @@ func (r *VolumePoolReconciler) delete(ctx context.Context, log logr.Logger, pool
 
 func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
 	storageClass := &storagev1.StorageClass{}
-	storageClassKey := types.NamespacedName{Name: GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)}
+	storageClassKey := types.NamespacedName{Name: GetClusterVolumePoolName(r.RookConfig.ClusterId, pool.Name)}
 	err := r.Get(ctx, storageClassKey, storageClass)
 	if err == nil {
 		return nil
@@ -228,7 +228,7 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 
 func (r *VolumePoolReconciler) applyVolumeSnapshotClass(ctx context.Context, log logr.Logger, pool *storagev1alpha1.VolumePool) error {
 	volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
-	volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)}
+	volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterVolumePoolName(r.RookConfig.ClusterId, pool.Name)}
 	err := r.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass)
 	if err == nil {
 		return nil
@@ -274,7 +274,7 @@ func (r *VolumePoolReconciler) applyCephClient(ctx context.Context, log logr.Log
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: r.RookConfig.Namespace,
-			Name:      GetClusterPoolName(r.RookConfig.ClusterId, pool.Name),
+			Name:      GetClusterVolumePoolName(r.RookConfig.ClusterId, pool.Name),
 		},
 		Spec: rookv1.ClientSpec{
 			Name: "",

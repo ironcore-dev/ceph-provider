@@ -225,7 +225,14 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 		rookConfig = rook.NewConfigWithDefaults()
 		rookConfig.Namespace = rookNamespace.Name
 
-		metrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		volumeMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "test",
+		}, []string{
+			"pool",
+			"resource",
+		})
+
+		bucketMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "test",
 		}, []string{
 			"pool",
@@ -238,7 +245,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
 			CephClient:     &cephMock{},
-			PoolUsage:      metrics,
+			PoolUsage:      volumeMetrics,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&VolumePoolReconciler{
@@ -263,6 +270,14 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			BucketClassSelector:   bucketClassSelector,
 			BucketPoolReplication: bucketPoolReplication,
 			RookConfig:            rookConfig,
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
+		Expect((&BucketReconciler{
+			Client:         k8sManager.GetClient(),
+			Scheme:         k8sManager.GetScheme(),
+			BucketPoolName: bucketPoolName,
+			RookConfig:     rookConfig,
+			PoolUsage:      bucketMetrics,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&ImagePopulatorReconciler{

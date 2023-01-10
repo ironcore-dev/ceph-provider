@@ -30,6 +30,8 @@ const (
 	EnableRBDStatsDefaultValue                   = false
 	BurstFactorDefaultValue                      = 10
 	BurstDurationInSecondsDefaultValue           = 15
+
+	BucketProvisionerDefaultValue = "rook-ceph.ceph.rook.io/bucket"
 )
 
 var (
@@ -60,6 +62,9 @@ type Config struct {
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
+
+	//bucket config
+	BucketProvisioner string
 }
 
 func NewConfigWithDefaults() *Config {
@@ -80,5 +85,6 @@ func NewConfigWithDefaults() *Config {
 		EnableRBDStats:                   EnableRBDStatsDefaultValue,
 		BurstFactor:                      BurstFactorDefaultValue,
 		BurstDurationInSeconds:           BurstDurationInSecondsDefaultValue,
+		BucketProvisioner:                BucketProvisionerDefaultValue,
 	}
 }
