@@ -16,17 +16,23 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -36,6 +42,10 @@ import (
 
 const (
 	bucketPoolRefIndex = ".spec.bucketPoolRef.name"
+)
+
+var (
+	bucketFieldOwner = client.FieldOwner("cephlet.onmetal.de/bucket")
 )
 
 // BucketReconciler reconciles a Bucket object
@@ -80,7 +90,114 @@ func (r *BucketReconciler) reconcileExists(ctx context.Context, log logr.Logger,
 func (r *BucketReconciler) reconcile(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) (ctrl.Result, error) {
 	log.V(1).Info("Reconciling Bucket")
 
+	bucketPool := &storagev1alpha1.BucketPool{}
+	waitUntilRefIsPresent, err := r.checkBucketPoolRef(ctx, log, bucket, bucketPool)
+	if err != nil || waitUntilRefIsPresent {
+		return ctrl.Result{}, err
+	}
+
+	waitUntilClaimBound, err := r.applyObjectBucketClaim(ctx, log, bucket)
+	if err != nil || waitUntilClaimBound {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.applySecretAndUpdateBucketStatus(ctx, log, bucket); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to apply secret: %w", err)
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func (r *BucketReconciler) applyObjectBucketClaim(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) (bool, error) {
+	bucketClaim := &bucketv1alpha1.ObjectBucketClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ObjectBucketClaim",
+			APIVersion: "objectbucket.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      bucket.Name,
+			Namespace: bucket.Namespace,
+		},
+		Spec: bucketv1alpha1.ObjectBucketClaimSpec{
+			StorageClassName:   GetClusterBucketPoolName(r.RookConfig.ClusterId, bucket.Spec.BucketPoolRef.Name),
+			GenerateBucketName: bucket.Name,
+		},
+	}
+
+	if err := ctrl.SetControllerReference(bucket, bucketClaim, r.Scheme); err != nil {
+		return false, fmt.Errorf("failed to set ownerref for bucket bucketClaim %s: %w", client.ObjectKeyFromObject(bucketClaim), err)
+	}
+
+	if _, err := controllerutil.CreateOrPatch(ctx, r.Client, bucketClaim, func() error { return nil }); err != nil {
+		return false, fmt.Errorf("failed to apply bucket bucketClaim %s: %w", client.ObjectKeyFromObject(bucketClaim), err)
+	}
+
+	if bucketClaim.Status.Phase != bucketv1alpha1.ObjectBucketClaimStatusPhaseBound {
+		log.V(1).Info("Pvc is not yet in ClaimBound state")
+		return true, nil
+	}
+
+	log.V(3).Info("Bucket provided.")
+	return false, nil
+}
+
+func (r *BucketReconciler) applySecretAndUpdateBucketStatus(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) error {
+	defer log.V(2).Info("applySecretAndUpdateBucketStatus done")
+
+	bucketSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      bucket.Name,
+			Namespace: bucket.Namespace,
+		},
+		Data: map[string][]byte{
+			//TODO
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	if err := ctrl.SetControllerReference(bucket, bucketSecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set ownerref for bucket secret %s: %w", client.ObjectKeyFromObject(bucketSecret), err)
+	}
+
+	if err := r.Patch(ctx, bucketSecret, client.Apply, bucketFieldOwner, client.ForceOwnership); err != nil {
+		return fmt.Errorf("failed to apply bucket secret %s: %w", client.ObjectKeyFromObject(bucketSecret), err)
+	}
+
+	bucketBase := bucket.DeepCopy()
+	bucket.Status.State = storagev1alpha1.BucketStateAvailable
+	bucket.Status.Access = &storagev1alpha1.BucketAccess{
+		SecretRef: &corev1.LocalObjectReference{
+			Name: bucket.Name,
+		},
+		//ToDO
+		Endpoint: "",
+	}
+	return r.Status().Patch(ctx, bucket, client.MergeFrom(bucketBase))
+}
+
+func (r *BucketReconciler) checkBucketPoolRef(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket, pool *storagev1alpha1.BucketPool) (bool, error) {
+	if bucket.Spec.BucketPoolRef == nil {
+		log.V(1).Info("Skipped reconcile: BucketPoolRef not present")
+		return true, nil
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Name: bucket.Spec.BucketPoolRef.Name}, pool); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("failed to get bucket pool %s : %w", bucket.Spec.BucketPoolRef.Name, err)
+	} else if errors.IsNotFound(err) {
+		log.V(1).Info("Skipped reconcile: BucketPool does not exist", "pool", bucket.Spec.BucketPoolRef.Name)
+		return true, nil
+	}
+
+	if pool.Status.State != storagev1alpha1.BucketPoolStateAvailable {
+		log.V(1).Info("Skipped reconcile: BucketPool is not ready")
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *BucketReconciler) delete(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) (ctrl.Result, error) {
@@ -119,6 +236,7 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&storagev1alpha1.Bucket{}).
+		Owns(&bucketv1alpha1.ObjectBucketClaim{}).
 		Watches(&source.Kind{Type: &storagev1alpha1.BucketPool{}}, handler.EnqueueRequestsFromMapFunc(r.findObjectsForBucketPool), builder.WithPredicates(predicate.Funcs{
 			UpdateFunc: func(event event.UpdateEvent) bool {
 				oldPool := event.ObjectOld.(*storagev1alpha1.BucketPool)

@@ -17,7 +17,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	storagev1 "k8s.io/api/storage/v1"
 	"sort"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/onmetal/onmetal-api/apiutils/equality"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"

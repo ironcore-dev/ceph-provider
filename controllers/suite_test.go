@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	"github.com/onmetal/cephlet/pkg/ceph"
@@ -145,6 +146,7 @@ var _ = BeforeSuite(func() {
 	Expect(storagev1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(popv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(snapshotv1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(bucketv1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// Init package-level k8sClient
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})

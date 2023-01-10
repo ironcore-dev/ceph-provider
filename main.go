@@ -20,6 +20,7 @@ import (
 	goflag "flag"
 	"os"
 
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/controllers"
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -60,6 +61,7 @@ func init() {
 	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rookv1.AddToScheme(scheme))
 	utilruntime.Must(snapshotv1.AddToScheme(scheme))
+	utilruntime.Must(bucketv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	metrics.Registry.MustRegister(poolUsage)
