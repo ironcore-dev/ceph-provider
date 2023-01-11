@@ -361,7 +361,7 @@ func (r *VolumePoolReconciler) patchVolumePoolStatus(ctx context.Context, pool *
 	case rookPool.Status.Phase == rookv1.ConditionReady:
 		pool.Status.State = storagev1alpha1.VolumePoolStateAvailable
 	case rookPool.Status.Phase == rookv1.ConditionFailure:
-		pool.Status.State = storagev1alpha1.VolumePoolStateNotAvailable
+		pool.Status.State = storagev1alpha1.VolumePoolStateUnavailable
 		requeue = true
 	default:
 		pool.Status.State = storagev1alpha1.VolumePoolStatePending

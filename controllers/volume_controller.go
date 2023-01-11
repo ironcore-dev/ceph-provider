@@ -313,7 +313,7 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	}
 
 	if volume.Spec.Image != "" {
-		pvc.Spec.DataSourceRef = &corev1.TypedLocalObjectReference{
+		pvc.Spec.DataSourceRef = &corev1.TypedObjectReference{
 			APIGroup: pointer.String("snapshot.storage.k8s.io"),
 			Kind:     "VolumeSnapshot",
 			Name:     GetSanitizedImageNameFromVolume(volume),
@@ -411,7 +411,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
 			StorageClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 			//set DataSourceRef that populator picks up the pvc
-			DataSourceRef: &corev1.TypedLocalObjectReference{
+			DataSourceRef: &corev1.TypedObjectReference{
 				APIGroup: pointer.String(storagev1alpha1.SchemeGroupVersion.String()),
 				Kind:     "Volume",
 				Name:     volume.Name,

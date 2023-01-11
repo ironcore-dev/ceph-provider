@@ -124,7 +124,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 				},
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,
-				DataSourceRef: &corev1.TypedLocalObjectReference{
+				DataSourceRef: &corev1.TypedObjectReference{
 					APIGroup: &storagev1ApiGroup,
 					Kind:     "Volume",
 					Name:     vol.Name,
@@ -140,7 +140,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
 			g.Expect(err).NotTo(HaveOccurred())
 
-			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedLocalObjectReference{
+			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedObjectReference{
 				APIGroup: &storagev1ApiGroup,
 				Kind:     "Volume",
 				Name:     vol.Name,
@@ -340,7 +340,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 				},
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,
-				DataSourceRef: &corev1.TypedLocalObjectReference{
+				DataSourceRef: &corev1.TypedObjectReference{
 					APIGroup: &podApiGroup,
 					Kind:     "Pod",
 					Name:     "my-pod",
@@ -431,7 +431,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 				},
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,
-				DataSourceRef: &corev1.TypedLocalObjectReference{
+				DataSourceRef: &corev1.TypedObjectReference{
 					APIGroup: &storagev1ApiGroup,
 					Kind:     "Volume",
 					Name:     vol.Name,
@@ -447,7 +447,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Expect(client.IgnoreNotFound(err)).NotTo(HaveOccurred())
 			g.Expect(err).NotTo(HaveOccurred())
 
-			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedLocalObjectReference{
+			g.Expect(pvc.Spec.DataSourceRef).To(Equal(&corev1.TypedObjectReference{
 				APIGroup: &storagev1ApiGroup,
 				Kind:     "Volume",
 				Name:     vol.Name,
