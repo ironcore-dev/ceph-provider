@@ -44,10 +44,6 @@ const (
 	bucketPoolRefIndex = ".spec.bucketPoolRef.name"
 )
 
-var (
-	bucketFieldOwner = client.FieldOwner("cephlet.onmetal.de/bucket")
-)
-
 // BucketReconciler reconciles a Bucket object
 type BucketReconciler struct {
 	client.Client
@@ -101,8 +97,9 @@ func (r *BucketReconciler) reconcile(ctx context.Context, log logr.Logger, bucke
 		return ctrl.Result{}, err
 	}
 
-	if err := r.applySecretAndUpdateBucketStatus(ctx, log, bucket); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to apply secret: %w", err)
+	waitUntilSecretCreated, err := r.updateBucketStatus(ctx, log, bucket)
+	if err != nil || waitUntilSecretCreated {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -141,30 +138,16 @@ func (r *BucketReconciler) applyObjectBucketClaim(ctx context.Context, log logr.
 	return false, nil
 }
 
-func (r *BucketReconciler) applySecretAndUpdateBucketStatus(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) error {
+func (r *BucketReconciler) updateBucketStatus(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket) (bool, error) {
 	defer log.V(2).Info("applySecretAndUpdateBucketStatus done")
 
-	bucketSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      bucket.Name,
-			Namespace: bucket.Namespace,
-		},
-		Data: map[string][]byte{
-			//TODO
-		},
-		Type: corev1.SecretTypeOpaque,
-	}
-
-	if err := ctrl.SetControllerReference(bucket, bucketSecret, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set ownerref for bucket secret %s: %w", client.ObjectKeyFromObject(bucketSecret), err)
-	}
-
-	if err := r.Patch(ctx, bucketSecret, client.Apply, bucketFieldOwner, client.ForceOwnership); err != nil {
-		return fmt.Errorf("failed to apply bucket secret %s: %w", client.ObjectKeyFromObject(bucketSecret), err)
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Name: bucket.Name, Namespace: bucket.Namespace}
+	if err := r.Get(ctx, secretKey, secret); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("failed to get bucket secret %s : %w", secretKey, err)
+	} else if errors.IsNotFound(err) {
+		log.V(1).Info("Skipped reconcile: Bucket secret does not exist", "ref", secretKey)
+		return true, nil
 	}
 
 	bucketBase := bucket.DeepCopy()
@@ -176,7 +159,12 @@ func (r *BucketReconciler) applySecretAndUpdateBucketStatus(ctx context.Context,
 		//ToDO
 		Endpoint: "",
 	}
-	return r.Status().Patch(ctx, bucket, client.MergeFrom(bucketBase))
+
+	if err := r.Status().Patch(ctx, bucket, client.MergeFrom(bucketBase)); err != nil {
+		return false, fmt.Errorf("failed to patch status : %w", err)
+	}
+
+	return false, nil
 }
 
 func (r *BucketReconciler) checkBucketPoolRef(ctx context.Context, log logr.Logger, bucket *storagev1alpha1.Bucket, pool *storagev1alpha1.BucketPool) (bool, error) {

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -117,32 +116,19 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		},
 		Spec: rookv1.ObjectStoreSpec{
 			MetadataPool: rookv1.PoolSpec{
-				FailureDomain: "host",
 				Replicated: rookv1.ReplicatedSpec{
 					Size: uint(r.BucketPoolReplication),
 				},
 			},
 			DataPool: rookv1.PoolSpec{
-				FailureDomain: "host",
-				ErasureCoded: rookv1.ErasureCodedSpec{
-					DataChunks:   2,
-					CodingChunks: 1,
-				},
 				Replicated: rookv1.ReplicatedSpec{
 					Size: uint(r.BucketPoolReplication),
 				},
 			},
-			PreservePoolsOnDelete: true,
 			Gateway: rookv1.GatewaySpec{
-				Port:       80,
-				SecurePort: 443,
-				Instances:  1,
-			},
-			HealthCheck: rookv1.BucketHealthCheckSpec{
-				Bucket: rookv1.HealthCheckSpec{
-					Disabled: false,
-					Interval: &metav1.Duration{Duration: 60 * time.Second},
-				},
+				Port: 80,
+				//SecurePort: 443,
+				Instances: 1,
 			},
 		},
 	}

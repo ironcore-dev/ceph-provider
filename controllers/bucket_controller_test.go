@@ -92,7 +92,48 @@ var _ = Describe("BucketReconciler", func() {
 		}
 		Eventually(Get(obc)).Should(Succeed())
 
+		ob := &bucketv1alpha1.ObjectBucket{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: obc.Name,
+				Namespace:    obc.Namespace,
+			},
+			Spec: bucketv1alpha1.ObjectBucketSpec{
+				StorageClassName: obc.Spec.StorageClassName,
+				Connection: &bucketv1alpha1.Connection{
+					Endpoint: &bucketv1alpha1.Endpoint{
+						BucketHost: "rook",
+						BucketPort: 00,
+						BucketName: "name",
+						Region:     "",
+						SubRegion:  "",
+					},
+					AdditionalState: map[string]string{
+						"cephUser":             "obc-default-ceph-bucket",
+						"objectStoreName":      "test-store",
+						"objectStoreNamespace": "rook-ceph",
+					},
+				},
+			},
+			Status: bucketv1alpha1.ObjectBucketStatus{
+				Phase: bucketv1alpha1.ObjectBucketClaimStatusPhaseBound,
+			},
+		}
+		Expect(k8sClient.Create(ctx, ob)).To(Succeed())
+
 		obcBase := obc.DeepCopy()
+		obc.Spec.ObjectBucketName = ob.Name
+		Expect(k8sClient.Status().Patch(ctx, obc, client.MergeFrom(obcBase)))
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      bucket.Name,
+				Namespace: bucket.Namespace,
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		obcBase = obc.DeepCopy()
 		obc.Status.Phase = bucketv1alpha1.ObjectBucketClaimStatusPhaseBound
 		Expect(k8sClient.Status().Patch(ctx, obc, client.MergeFrom(obcBase)))
 
