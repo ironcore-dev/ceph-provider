@@ -15,14 +15,15 @@
 package controllers
 
 import (
-	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"fmt"
 
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
@@ -141,6 +142,7 @@ var _ = Describe("BucketReconciler", func() {
 		Eventually(Object(bucket)).Should(SatisfyAll(
 			HaveField("Status.State", Equal(storagev1alpha1.BucketStateAvailable)),
 			HaveField("Status.Access.SecretRef", Not(BeNil())),
+			HaveField("Status.Access.Endpoint", Equal(fmt.Sprintf("%s.%s", bucket.Name, bucketBaseURL))),
 		))
 
 		accessSecret := &corev1.Secret{

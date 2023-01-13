@@ -64,6 +64,8 @@ const (
 	bucketPoolProviderID  = "custom://pool"
 	bucketPoolReplication = 3
 
+	bucketBaseURL = "example.com"
+
 	defaultDevicePath     = "/dev/block"
 	defaultPopulatorImage = "populator-image"
 	defaultPrefix         = "my-prefix"
@@ -278,6 +280,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			Client:         k8sManager.GetClient(),
 			Scheme:         k8sManager.GetScheme(),
 			BucketPoolName: bucketPoolName,
+			BucketBaseUrl:  bucketBaseURL,
 			RookConfig:     rookConfig,
 			PoolUsage:      bucketMetrics,
 		}).SetupWithManager(k8sManager)).To(Succeed())

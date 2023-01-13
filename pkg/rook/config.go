@@ -39,8 +39,11 @@ var (
 )
 
 type Config struct {
-	ClusterId                        string
-	Namespace                        string
+	//common config
+	ClusterId string
+	Namespace string
+
+	//volume config
 	StorageClassMountOptions         []string
 	MonitorConfigMapName             string
 	MonitorConfigMapDataKey          string

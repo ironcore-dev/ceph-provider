@@ -90,6 +90,8 @@ func main() {
 		bucketClassSelector   map[string]string
 		bucketPoolLabels      map[string]string
 		bucketPoolAnnotations map[string]string
+
+		bucketBaseUrl string
 	)
 
 	var (
@@ -118,6 +120,7 @@ func main() {
 	flag.StringToStringVar(&bucketClassSelector, "bucket-class-selector", nil, "Selector for bucket classes to report as available.")
 	flag.StringToStringVar(&bucketPoolLabels, "bucket-pool-labels", nil, "Labels to apply to the bucket pool upon startup.")
 	flag.StringToStringVar(&bucketPoolAnnotations, "bucket-pool-annotations", nil, "Annotations to apply to the bucket pool upon startup.")
+	flag.StringVar(&bucketBaseUrl, "bucket-base-url", "example.com", "Base url of the buckets.")
 
 	// image populator
 	flag.StringVar(&populatorImage, "populator-image", "", "Container image of the populator pod.")
@@ -196,9 +199,11 @@ func main() {
 	}
 
 	if err = (&controllers.BucketReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		RookConfig: rookConfig,
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		BucketPoolName: bucketPoolName,
+		BucketBaseUrl:  bucketBaseUrl,
+		RookConfig:     rookConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)

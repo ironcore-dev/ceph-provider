@@ -49,6 +49,7 @@ type BucketReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	BucketPoolName string
+	BucketBaseUrl  string
 	RookConfig     *rook.Config
 
 	PoolUsage *prometheus.GaugeVec
@@ -156,8 +157,7 @@ func (r *BucketReconciler) updateBucketStatus(ctx context.Context, log logr.Logg
 		SecretRef: &corev1.LocalObjectReference{
 			Name: bucket.Name,
 		},
-		//ToDO
-		Endpoint: "",
+		Endpoint: fmt.Sprintf("%s.%s", bucket.Name, r.BucketBaseUrl),
 	}
 
 	if err := r.Status().Patch(ctx, bucket, client.MergeFrom(bucketBase)); err != nil {
