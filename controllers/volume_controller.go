@@ -359,7 +359,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	volumeSizeBytes := volumeCapacity.Value()
 	if volumeSizeBytes < snapshot.Status.RestoreSize.Value() {
 		log.Info(fmt.Sprintf("Requested volume size %d is less than the size %d for the source snapshot", volumeSizeBytes, snapshot.Status.RestoreSize.Value()), "snapshotName", snapshot.Name)
-		r.Eventf(volume, corev1.EventTypeWarning, ReasonVolumeSizeToSmall, "Failed allocating: %w", fmt.Errorf("requested volume size %d is less than the size %d for the source snapshot %s", volumeSizeBytes, snapshot.Status.RestoreSize.Value(), snapshot.Name))
+		r.Eventf(volume, corev1.EventTypeWarning, ReasonVolumeSizeToSmall, "Requested volume size %d is less than the size %d for the source snapshot %s", volumeSizeBytes, snapshot.Status.RestoreSize.Value(), snapshot.Name)
 	}
 
 	return nil
