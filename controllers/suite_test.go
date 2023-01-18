@@ -40,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -99,6 +100,8 @@ var (
 	bucketPoolAnnotations = map[string]string{
 		"some": "annotation",
 	}
+
+	volumeEventRecorder = record.NewFakeRecorder(100)
 )
 
 func TestAPIs(t *testing.T) {
@@ -250,6 +253,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			RookConfig:     rookConfig,
 			CephClient:     &cephMock{},
 			PoolUsage:      volumeMetrics,
+			EventRecorder:  volumeEventRecorder,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&VolumePoolReconciler{

@@ -17,6 +17,7 @@ package controllers
 import (
 	"fmt"
 
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/testutils"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
@@ -41,6 +43,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	const (
 		volumeSize    = "1Gi"
+		snapshotSize  = "2Gi"
 		cephPoolName  = "pool-1"
 		cephImageName = "image-1"
 	)
@@ -218,6 +221,65 @@ var _ = Describe("VolumeReconciler", func() {
 			g.Expect(k8sClient.Get(ctx, volKey2, vol2)).To(Succeed())
 			g.Expect(vol2.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumeStateAvailable))
 		}).Should(Succeed())
+	})
+
+	It("should reconcile volume with image reference and too little storage space", func() {
+		vol := &storagev1alpha1.Volume{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "volume-",
+				Namespace:    testNs.Name,
+			},
+			Spec: storagev1alpha1.VolumeSpec{
+				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
+				Resources: corev1.ResourceList{
+					"storage": resource.MustParse(volumeSize),
+				},
+				Image: "example.com/test:latest",
+			},
+		}
+
+		By("checking that a VolumeSnapshot has been created")
+		snapshot := &snapshotv1.VolumeSnapshot{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      GetSanitizedImageNameFromVolume(vol),
+				Namespace: vol.Namespace,
+			},
+			Spec: snapshotv1.VolumeSnapshotSpec{
+				Source: snapshotv1.VolumeSnapshotSource{
+					PersistentVolumeClaimName: pointer.String("some-pvc"),
+				},
+				VolumeSnapshotClassName: pointer.String("some-snapshot-class"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, snapshot)).To(Succeed())
+
+		snapshotRestoreSize := resource.MustParse(snapshotSize)
+		snapshotBase := snapshot.DeepCopy()
+		snapshot.Status = &snapshotv1.VolumeSnapshotStatus{
+			BoundVolumeSnapshotContentName: pointer.String("snapcontent-2e13a6b8"),
+			ReadyToUse:                     pointer.Bool(true),
+			RestoreSize:                    &snapshotRestoreSize,
+		}
+		Expect(k8sClient.Status().Patch(ctx, snapshot, client.MergeFrom(snapshotBase)))
+
+		By("checking that a Volume has been created")
+		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+
+		By("checking that the pvc has been created but not the corresponding pv ")
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      vol.Name,
+				Namespace: vol.Namespace,
+			},
+		}
+		Eventually(Get(pvc)).Should(Succeed())
+
+		Eventually(volumeEventRecorder.Events).Should(Receive())
+
+		Eventually(Object(vol)).Should(SatisfyAll(
+			HaveField("Status.State", Equal(storagev1alpha1.VolumeStatePending)),
+		))
 	})
 
 	It("should end reconcile volume if pool ref is not valid", func() {

@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -77,6 +78,8 @@ type VolumeReconciler struct {
 	RookConfig     *rook.Config
 	CephClient     ceph.Client
 
+	record.EventRecorder
+
 	PoolUsage *prometheus.GaugeVec
 }
 
@@ -95,6 +98,8 @@ type VolumeReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -348,6 +353,13 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 		}
 		log.V(1).Info("Requested snapshot not found: create image pvc and snapshot it.")
 		return r.createSnapshot(ctx, log, volume)
+	}
+
+	volumeCapacity := volume.Spec.Resources[corev1.ResourceStorage]
+	volumeSizeBytes := volumeCapacity.Value()
+	if volumeSizeBytes < snapshot.Status.RestoreSize.Value() {
+		log.Info(fmt.Sprintf("Requested volume size %d is less than the size %d for the source snapshot", volumeSizeBytes, snapshot.Status.RestoreSize.Value()), "snapshotName", snapshot.Name)
+		r.Eventf(volume, corev1.EventTypeWarning, ReasonVolumeSizeToSmall, "Failed allocating: %w", fmt.Errorf("requested volume size %d is less than the size %d for the source snapshot %s", volumeSizeBytes, snapshot.Status.RestoreSize.Value(), snapshot.Name))
 	}
 
 	return nil

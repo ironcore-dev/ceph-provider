@@ -179,6 +179,7 @@ func main() {
 		VolumePoolName: volumePoolName,
 		RookConfig:     rookConfig,
 		PoolUsage:      poolUsage,
+		EventRecorder:  mgr.GetEventRecorderFor("volume"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
 		os.Exit(1)
