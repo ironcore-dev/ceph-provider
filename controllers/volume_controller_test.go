@@ -275,7 +275,7 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Eventually(Get(pvc)).Should(Succeed())
 
-		Eventually(volumeEventRecorder.Events).Should(Receive())
+		Eventually(volumeEventRecorder.Events).Should(Receive(ContainSubstring("Requested volume size")))
 
 		Eventually(Object(vol)).Should(SatisfyAll(
 			HaveField("Status.State", Equal(storagev1alpha1.VolumeStatePending)),
