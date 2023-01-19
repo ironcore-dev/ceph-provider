@@ -188,7 +188,7 @@ func (r *BucketPoolReconciler) delete(ctx context.Context, log logr.Logger, pool
 		return ctrl.Result{}, nil
 	}
 
-	cephPoolExisted, err := clientutils.DeleteIfExists(ctx, r.Client, &rookv1.CephBlockPool{
+	cephPoolExisted, err := clientutils.DeleteIfExists(ctx, r.Client, &rookv1.CephObjectStore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pool.Name,
 			Namespace: r.RookConfig.Namespace,
@@ -285,7 +285,7 @@ func (r *BucketPoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return !equality.Semantic.DeepEqual(old.Spec, new.Spec)
 			},
 		})).
-		Owns(&rookv1.CephBlockPool{}).
+		Owns(&rookv1.CephObjectStore{}).
 		Watches(
 			&source.Kind{Type: &storagev1alpha1.BucketClass{}},
 			handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
