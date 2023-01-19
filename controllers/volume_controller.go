@@ -297,7 +297,7 @@ func (r *VolumeReconciler) getImageKeyFromPV(ctx context.Context, log logr.Logge
 }
 
 func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (*corev1.PersistentVolumeClaim, bool, error) {
-	storageClass := GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
+	storageClass := GetClusterVolumePoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
@@ -421,7 +421,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 				Requests: corev1.ResourceList{corev1.ResourceStorage: *size},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
-			StorageClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			StorageClassName: pointer.String(GetClusterVolumePoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 			//set DataSourceRef that populator picks up the pvc
 			DataSourceRef: &corev1.TypedObjectReference{
 				APIGroup: pointer.String(storagev1alpha1.SchemeGroupVersion.String()),
@@ -449,7 +449,7 @@ func (r *VolumeReconciler) createSnapshot(ctx context.Context, log logr.Logger, 
 			Source: snapshotv1.VolumeSnapshotSource{
 				PersistentVolumeClaimName: &imagePvc.Name,
 			},
-			VolumeSnapshotClassName: pointer.String(GetClusterPoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
+			VolumeSnapshotClassName: pointer.String(GetClusterVolumePoolName(r.RookConfig.ClusterId, volume.Spec.VolumePoolRef.Name)),
 		},
 	}
 	if err := r.Patch(ctx, snapshot, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
@@ -477,7 +477,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 	}
 
 	// Data key of secret is equivalent to CephClient name
-	credentials, ok := cephClientSecret.Data[GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)]
+	credentials, ok := cephClientSecret.Data[GetClusterVolumePoolName(r.RookConfig.ClusterId, pool.Name)]
 	if !ok {
 		return fmt.Errorf("secret %s does not contain data key %s", client.ObjectKeyFromObject(cephClientSecret), volume.Namespace)
 	}
@@ -492,7 +492,7 @@ func (r *VolumeReconciler) applySecretAndUpdateVolumeStatus(ctx context.Context,
 			Namespace: volume.Namespace,
 		},
 		Data: map[string][]byte{
-			userIDKey:  []byte(GetClusterPoolName(r.RookConfig.ClusterId, pool.Name)),
+			userIDKey:  []byte(GetClusterVolumePoolName(r.RookConfig.ClusterId, pool.Name)),
 			userKeyKey: credentials,
 		},
 		Type: corev1.SecretTypeOpaque,

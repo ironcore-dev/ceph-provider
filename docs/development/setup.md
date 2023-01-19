@@ -29,9 +29,9 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 1. Install Rook operator and `CRD`s
 ```shell
 kubectl apply \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.7/deploy/examples/crds.yaml \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.7/deploy/examples/common.yaml \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.7/deploy/examples/operator.yaml
+ -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/crds.yaml \
+ -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/common.yaml \
+ -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/operator.yaml
 ```
 
 2. Verify the rook-ceph-operator is in the Running state before proceeding 
