@@ -61,6 +61,9 @@ type BucketReconciler struct {
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=bucketpools,verbs=get;list;watch
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=bucketpools/status,verbs=get
 
+//+kubebuilder:rbac:groups=objectbucket.io,resources=objectbucketclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=objectbucket.io,resources=objectbucketclaims/status,verbs=get
+
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
