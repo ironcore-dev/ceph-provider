@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
 	"github.com/onmetal/cephlet/pkg/ceph"
@@ -60,6 +61,12 @@ const (
 	volumePoolProviderID  = "custom://pool"
 	volumePoolReplication = 3
 
+	bucketPoolName        = "my-pool"
+	bucketPoolProviderID  = "custom://pool"
+	bucketPoolReplication = 3
+
+	bucketBaseURL = "example.com"
+
 	defaultDevicePath     = "/dev/block"
 	defaultPopulatorImage = "populator-image"
 	defaultPrefix         = "my-prefix"
@@ -81,6 +88,16 @@ var (
 		"some": "label",
 	}
 	volumePoolAnnotations = map[string]string{
+		"some": "annotation",
+	}
+
+	bucketClassSelector = map[string]string{
+		"suitable-for": "testing",
+	}
+	bucketPoolLabels = map[string]string{
+		"some": "label",
+	}
+	bucketPoolAnnotations = map[string]string{
 		"some": "annotation",
 	}
 
@@ -134,6 +151,7 @@ var _ = BeforeSuite(func() {
 	Expect(storagev1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(popv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(snapshotv1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(bucketv1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	// Init package-level k8sClient
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -214,7 +232,14 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 		rookConfig = rook.NewConfigWithDefaults()
 		rookConfig.Namespace = rookNamespace.Name
 
-		metrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		volumeMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "test",
+		}, []string{
+			"pool",
+			"resource",
+		})
+
+		bucketMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "test",
 		}, []string{
 			"pool",
@@ -227,7 +252,7 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			VolumePoolName: volumePoolName,
 			RookConfig:     rookConfig,
 			CephClient:     &cephMock{},
-			PoolUsage:      metrics,
+			PoolUsage:      volumeMetrics,
 			EventRecorder:  volumeEventRecorder,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
@@ -241,6 +266,27 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			VolumeClassSelector:   volumeClassSelector,
 			VolumePoolReplication: volumePoolReplication,
 			RookConfig:            rookConfig,
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
+		Expect((&BucketPoolReconciler{
+			Client:                k8sManager.GetClient(),
+			Scheme:                k8sManager.GetScheme(),
+			BucketPoolName:        bucketPoolName,
+			BucketPoolProviderID:  bucketPoolProviderID,
+			BucketPoolLabels:      bucketPoolLabels,
+			BucketPoolAnnotations: bucketPoolAnnotations,
+			BucketClassSelector:   bucketClassSelector,
+			BucketPoolReplication: bucketPoolReplication,
+			RookConfig:            rookConfig,
+		}).SetupWithManager(k8sManager)).To(Succeed())
+
+		Expect((&BucketReconciler{
+			Client:         k8sManager.GetClient(),
+			Scheme:         k8sManager.GetScheme(),
+			BucketPoolName: bucketPoolName,
+			BucketBaseUrl:  bucketBaseURL,
+			RookConfig:     rookConfig,
+			PoolUsage:      bucketMetrics,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		Expect((&ImagePopulatorReconciler{

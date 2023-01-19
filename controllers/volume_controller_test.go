@@ -73,7 +73,7 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 		Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
 
-		cephClientSecret := getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePool.Name), cephClientSecretValue)
+		cephClientSecret := getCephClientSecret(rookNs.Name, GetClusterVolumePoolName(rookConfig.ClusterId, volumePool.Name), cephClientSecretValue)
 		Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
 
 		volumePoolBase := volumePool.DeepCopy()
@@ -149,7 +149,7 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 		}
 		Eventually(Object(accessSecret)).Should(SatisfyAll(
-			HaveField("Data", HaveKeyWithValue("userID", BeEquivalentTo(GetClusterPoolName(rookConfig.ClusterId, volumePool.Name)))),
+			HaveField("Data", HaveKeyWithValue("userID", BeEquivalentTo(GetClusterVolumePoolName(rookConfig.ClusterId, volumePool.Name)))),
 			HaveField("Data", HaveKeyWithValue("userKey", BeEquivalentTo(cephClientSecretValue))),
 		))
 	})

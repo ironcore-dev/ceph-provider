@@ -30,6 +30,8 @@ const (
 	EnableRBDStatsDefaultValue                   = false
 	BurstFactorDefaultValue                      = 10
 	BurstDurationInSecondsDefaultValue           = 15
+
+	BucketProvisionerDefaultValue = "rook-ceph.ceph.rook.io/bucket"
 )
 
 var (
@@ -37,8 +39,11 @@ var (
 )
 
 type Config struct {
-	ClusterId                        string
-	Namespace                        string
+	//common config
+	ClusterId string
+	Namespace string
+
+	//volume config
 	StorageClassMountOptions         []string
 	MonitorConfigMapName             string
 	MonitorConfigMapDataKey          string
@@ -60,6 +65,9 @@ type Config struct {
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
+
+	//bucket config
+	BucketProvisioner string
 }
 
 func NewConfigWithDefaults() *Config {
@@ -80,5 +88,6 @@ func NewConfigWithDefaults() *Config {
 		EnableRBDStats:                   EnableRBDStatsDefaultValue,
 		BurstFactor:                      BurstFactorDefaultValue,
 		BurstDurationInSeconds:           BurstDurationInSecondsDefaultValue,
+		BucketProvisioner:                BucketProvisionerDefaultValue,
 	}
 }
