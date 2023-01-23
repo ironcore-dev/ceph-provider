@@ -135,7 +135,8 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 			return ctrl.Result{}, fmt.Errorf("failed to get datasource ref %s for PVC: %w", volumeKey, err)
 		}
 		// We'll get called again later when the data source exists
-		return ctrl.Result{}, fmt.Errorf("the datasource %s ref for PVC could not be found: %w", volumeKey, err)
+		log.Info("Requeue: Datasource ref for PVC could not be found", "datasource", volumeKey)
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	log.Info("Found volume as datasource ref for PVC", "Volume", client.ObjectKeyFromObject(volume))
