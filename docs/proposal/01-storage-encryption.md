@@ -26,37 +26,44 @@ reviewers-
     - [Non-Goals](#goals)
     - [Details](#details)
 - [Proposal](#proposal)
+- [Appendices](#appendices)
+
 
 ## Summary
-The primary purpose of encryption is to protect the confidentiality of digital data stored on computer systems. Encryption removes the risk of data breach and unauthorized access. It ensures that the data remains secure regardless of the device on which it is stored and accessed. This proposal focuses on providing option to enable encryption for individual Volume as a block device. 
+The primary purpose of encryption is to protect the confidentiality of digital data stored on a device or a cloud by encrypting it before it is written to storage and then decrypting it when it is read. Encryption removes the risk of data breach and unauthorized access. The proposal for storage encryption would outline the specific encryption method, key management, and other details that would be used to secure the data being stored. This can include policies and procedures for securing the encryption keys, as well as details on how the encryption will be implemented and managed. Overall, the goal of the proposal is to ensure that the data stored is protected against unauthorized access or disclosure. This proposal focuses on providing option to enable encryption for individual Volumes.
 
 
 ## Motivation
-- Security is an important concern and should be a strong focus of any  Cloud Native IaaS. 
-- Data breaches and downtime are costly and difficult to manage. 
-- In order to meet compliance requirements of businesses, it becomes essential to store the encryption enabled data in the cloud. 
+- Security: Security is an important concern and should be a strong focus of any Cloud Native IaaS. To protect the data against variety of security threats, including        data breaches, hacking and physical theft, encryption plays vital role.
+- Privacy: Encryption helps to maintain privacy of personal data from being accessed by unauthorised parties.
+- Cost-effective: Rather than building and maintaining a secure physical storage facility, encryption can be more cost efficient.
+- Compliance and business cotinuity: In order to meet compliance requirements of businesses keeping the standards and regulations in mind, it becomes essential to          store the encryption enabled data in the cloud so that in the events of disaster and data loss, organizations can recover the data quickly.
+
+Overall, the motivation for a storage encryption proposal is to provide a holostic and secure approach to protect sensitive data and ensure compliance with regulations and standards.
+
 
 ### Goals
-- User should be able to create encrypted volumes (Link to API team proposal)
+- User should be able to create encrypted volumes (https://github.com/onmetal/onmetal-api/blob/main/docs/proposals/06-storage-encryption.md)
 - To offer Encryption feature to the block device (RBD image) that CEPH exposes
 
 
 ### Non-Goals
-- No OSD level encryption is supported
-- Object storage encryption (TDB?)
+- OSD level encryption
+- Object storage encryption
 
 ### Details
 As of now two types of encryption is supported by Ceph: 
 - OSD Level 
 - Block device Level
-  - Currently when `volume` is created corresponding `PVC` is also created with reference to `storageclass`.
-    However, With `Encryption` enabled `Volume` there will be a new storageclass named `encrypted-ceph` will be created which will be referenced while 
-    creating encrypted PVCs with user provided passphrase.
-  - To use different passphrase you need to have different storage classes and point to a different K8s secrets csi.storage.k8s.io/node-stage-secret-name and csi.storage.k8s.io/provisioner-secret-name which carry new passphrase value for encryptionPassphrase key in these secrets
+Currently we are moving ahead in this proposal with Block device level.
   
-
 ## Proposal
-
+- Currently when `volume` is created corresponding `PVC` is also created with reference to `storageclass`.
+    However, With `Encryption` enabled `Volume` there will be a new storageclass named `encrypted-ceph` will be created which will be referenced while 
+    creating encrypted PVCs with cephlet generated passphrase.
+    
+- Data encryption key will be provided by user in volume object. Cephlet will internally create a KEK, encrypt the data encryption key and add into the metadata. All the cahanges will take place in cephCSI.
+  
 - Encrypted storage class will be created with additional parameters as below.
 
 ```
@@ -75,7 +82,7 @@ data:
     }
 ```
 
-Additinally Update the rook-ceph-operator-config configmap and patch the following configurations
+Additionally Update the rook-ceph-operator-config configmap and patch the following configurations
 ```
 kubectl patch cm rook-ceph-operator-config -nrook-ceph -p $'data:\n "CSI_ENABLE_ENCRYPTION": "true"'
 ```
@@ -105,23 +112,8 @@ parameters:
 
 The `rook-ceph-block-encrypted` is the encrypted `storage class`.
 
-## TBD (Remove below section after discussion)
+- The ownership of managing `user-secret-metadata` will be taken by the storage team.
 
-## Questions-
-- Any thought behind 
-```mermaid
-graph TD
-    VP[VolumePool] -- creates --> CephBlockPool
-    VP -- announces in status --> VC[VolumeClass]
-    VP -- ceates --> SC[StorageClass]
-    VP -- ceates --> VSC[VolumeSnapshotClass]
-    VP -- ceates --> CC[CephClient]
-```
+## Appendices
+- Following link will describe the use of passphrase and importance of second level encryption. https://docs.ceph.com/en/quincy/rbd/rbd-encryption/
 
-- User defined `encryption keys` required multiple `storageclasses`.
-
-
-## Observations-
-- one cephblockpool can be used with multiple storageclasses (both encrypted and non-encrypted) 
-- Cephlet creates Storageclass,VolumeSnapshotClass, cephclient name as `namespace—-volumepool` (Not customisable)
-- Cephlet creates Cephblockpool name as `volumepool` name (It is default can be changed by --volume-pool-name)
