@@ -20,6 +20,7 @@ import (
 	goflag "flag"
 	"os"
 
+	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/controllers"
 	"github.com/onmetal/cephlet/pkg/rook"
@@ -60,6 +61,7 @@ func init() {
 	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rookv1.AddToScheme(scheme))
 	utilruntime.Must(snapshotv1.AddToScheme(scheme))
+	utilruntime.Must(bucketv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	metrics.Registry.MustRegister(poolUsage)
@@ -75,10 +77,21 @@ func main() {
 	var (
 		volumePoolName        string
 		volumePoolReplication int
-		providerID            string
+		volumePoolProviderID  string
 		volumeClassSelector   map[string]string
 		volumePoolLabels      map[string]string
 		volumePoolAnnotations map[string]string
+	)
+
+	var (
+		bucketPoolName        string
+		bucketPoolReplication int
+		bucketPoolProviderID  string
+		bucketClassSelector   map[string]string
+		bucketPoolLabels      map[string]string
+		bucketPoolAnnotations map[string]string
+
+		bucketBaseUrl string
 	)
 
 	var (
@@ -93,12 +106,21 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+
 	flag.StringVar(&volumePoolName, "volume-pool-name", "ceph", "The name of the volume pool.")
 	flag.IntVar(&volumePoolReplication, "volume-pool-replication", 3, "The replication factor of the volume pool.")
-	flag.StringVar(&providerID, "provider-id", "cephlet://pool", "Provider ID of the pool.")
+	flag.StringVar(&volumePoolProviderID, "volume-pool-provider-id", "cephlet://pool", "Provider ID of the pool.")
 	flag.StringToStringVar(&volumeClassSelector, "volume-class-selector", nil, "Selector for volume classes to report as available.")
 	flag.StringToStringVar(&volumePoolLabels, "volume-pool-labels", nil, "Labels to apply to the volume pool upon startup.")
 	flag.StringToStringVar(&volumePoolAnnotations, "volume-pool-annotations", nil, "Annotations to apply to the volume pool upon startup.")
+
+	flag.StringVar(&bucketPoolName, "bucket-pool-name", "ceph", "The name of the bucket pool.")
+	flag.IntVar(&bucketPoolReplication, "bucket-pool-replication", 3, "The replication factor of the bucket pool.")
+	flag.StringVar(&bucketPoolProviderID, "bucket-pool-provider-id", "cephlet://pool", "Provider ID of the pool.")
+	flag.StringToStringVar(&bucketClassSelector, "bucket-class-selector", nil, "Selector for bucket classes to report as available.")
+	flag.StringToStringVar(&bucketPoolLabels, "bucket-pool-labels", nil, "Labels to apply to the bucket pool upon startup.")
+	flag.StringToStringVar(&bucketPoolAnnotations, "bucket-pool-annotations", nil, "Annotations to apply to the bucket pool upon startup.")
+	flag.StringVar(&bucketBaseUrl, "bucket-base-url", "example.com", "Base url of the buckets.")
 
 	// image populator
 	flag.StringVar(&populatorImage, "populator-image", "", "Container image of the populator pod.")
@@ -111,6 +133,7 @@ func main() {
 	flag.StringVar(&rookConfig.MonitorConfigMapName, "rook-ceph-mon-cm-name", rook.MonitorConfigMapNameDefaultValue, "ConfigMap name containing actual ceph monitor list")
 	flag.StringVar(&rookConfig.MonitorConfigMapDataKey, "rook-ceph-mon-cm-data-key", rook.MonitorConfigMapDataKeyDefaultValue, "Ceph monitor ConfigMap key")
 	flag.StringVar(&rookConfig.Namespace, "rook-namespace", rook.NamespaceDefaultValue, "namespace for rook operator and ceph cluster")
+	flag.StringVar(&rookConfig.BucketProvisioner, "rook-bucket-provisioner", rook.BucketProvisionerDefaultValue, "Name of Ceph CSI driver for buckets")
 	flag.BoolVar(&rookConfig.EnableRBDStats, "pool-enable-rbd-stats", rook.EnableRBDStatsDefaultValue, "Enables collecting RBD per-image IO statistics by enabling dynamic OSD performance counters.")
 	flag.StringVar(&rookConfig.CSIRBDProvisionerSecretName, "rook-csi-rbd-provisioner-secret-name", rook.CSIRBDProvisionerSecretNameDefaultValue, "Secret name containing Ceph csi rbd provisioner secrets")
 	flag.StringVar(&rookConfig.CSIRBDNodeSecretName, "rook-csi-rbd-node-secret-name", rook.CSIRBDNodeSecretNameDefaultValue, "Secret name containing Ceph csi rbd node secrets")
@@ -156,6 +179,7 @@ func main() {
 		VolumePoolName: volumePoolName,
 		RookConfig:     rookConfig,
 		PoolUsage:      poolUsage,
+		EventRecorder:  mgr.GetEventRecorderFor("volume"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Volume")
 		os.Exit(1)
@@ -164,7 +188,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
 		VolumePoolName:        volumePoolName,
-		VolumePoolProviderID:  providerID,
+		VolumePoolProviderID:  volumePoolProviderID,
 		VolumePoolLabels:      volumePoolLabels,
 		VolumePoolAnnotations: volumePoolAnnotations,
 		VolumeClassSelector:   volumeClassSelector,
@@ -174,6 +198,33 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "VolumePool")
 		os.Exit(1)
 	}
+
+	if err = (&controllers.BucketReconciler{
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		BucketPoolName: bucketPoolName,
+		BucketBaseUrl:  bucketBaseUrl,
+		RookConfig:     rookConfig,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.BucketPoolReconciler{
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		BucketPoolName:        bucketPoolName,
+		BucketPoolProviderID:  bucketPoolProviderID,
+		BucketPoolLabels:      bucketPoolLabels,
+		BucketPoolAnnotations: bucketPoolAnnotations,
+		BucketClassSelector:   bucketClassSelector,
+		BucketPoolReplication: bucketPoolReplication,
+		RookConfig:            rookConfig,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BucketPool")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.ImagePopulatorReconciler{
 		Client:                 mgr.GetClient(),
 		Scheme:                 mgr.GetScheme(),

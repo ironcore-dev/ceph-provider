@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 var _ = Describe("VolumePoolReconciler", func() {
@@ -44,36 +45,37 @@ var _ = Describe("VolumePoolReconciler", func() {
 			Eventually(func() error { return k8sClient.Get(ctx, volumePoolKey, volumePool) }).Should(Succeed())
 
 			By("checking that a CephBlockPool has been created")
-			rookPool := &rookv1.CephBlockPool{}
+			rookPool := &rookv1.CephBlockPool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      volumePoolName,
+					Namespace: rookNs.Name,
+				},
+			}
 			rookPoolKey := types.NamespacedName{Name: volumePoolName, Namespace: rookNs.Name}
 			Eventually(func() error { return k8sClient.Get(ctx, rookPoolKey, rookPool) }).Should(Succeed())
 
-			Expect(rookPool.Spec.PoolSpec.Replicated.Size).To(HaveValue(Equal(uint(volumePoolReplication))))
-			Expect(rookPool.Spec.PoolSpec.EnableRBDStats).To(Equal(rook.EnableRBDStatsDefaultValue))
+			Eventually(Object(rookPool)).Should(SatisfyAll(
+				HaveField("Spec.PoolSpec.Replicated.Size", Equal(uint(volumePoolReplication))),
+				HaveField("Spec.PoolSpec.EnableRBDStats", Equal(rook.EnableRBDStatsDefaultValue)),
+			))
 
 			By("checking that a VolumePool reflect the rook status")
 			rookPoolBase := rookPool.DeepCopy()
-			rookPool.Status = &rookv1.CephBlockPoolStatus{
-				Phase: rookv1.ConditionProgressing,
-			}
+			rookPool.Status = &rookv1.CephBlockPoolStatus{Phase: rookv1.ConditionProgressing}
 			Expect(k8sClient.Status().Patch(ctx, rookPool, client.MergeFrom(rookPoolBase))).To(Succeed())
 
-			Eventually(func(g Gomega) error {
-				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
-					return err
-				}
-				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStatePending))
-				return nil
-			}).Should(Succeed())
+			Eventually(Object(volumePool)).Should(SatisfyAll(
+				HaveField("Status.State", Equal(storagev1alpha1.VolumePoolStatePending)),
+			))
 
 			By("checking that the ceph client has been created and updating it to ready")
 			cephClient := &rookv1.CephClient{}
-			cephClientKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName), Namespace: rookNs.Name}
+			cephClientKey := types.NamespacedName{Name: GetClusterVolumePoolName(rookConfig.ClusterId, volumePoolName), Namespace: rookNs.Name}
 			cephClientSecret := &corev1.Secret{}
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, cephClientKey, cephClient)).To(Succeed())
 
-				cephClientSecret = getCephClientSecret(rookNs.Name, GetClusterPoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
+				cephClientSecret = getCephClientSecret(rookNs.Name, GetClusterVolumePoolName(rookConfig.ClusterId, volumePoolName), cephClientSecretValue)
 				g.Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
 
 				cephClientBase := cephClient.DeepCopy()
@@ -97,14 +99,14 @@ var _ = Describe("VolumePoolReconciler", func() {
 
 			By("checking that a StorageClass has been created")
 			storageClass := &storagev1.StorageClass{}
-			storageClassKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName)}
+			storageClassKey := types.NamespacedName{Name: GetClusterVolumePoolName(rookConfig.ClusterId, volumePoolName)}
 			Eventually(func() error { return k8sClient.Get(ctx, storageClassKey, storageClass) }).Should(Succeed())
 
 			Expect(storageClass.Provisioner).To(BeEquivalentTo(rookConfig.CSIDriverName))
 
 			By("checking that a VolumeSnapshotClass has been created")
 			volumeSnapshotClass := &snapshotv1.VolumeSnapshotClass{}
-			volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterPoolName(rookConfig.ClusterId, volumePoolName)}
+			volumeSnapshotClassKey := types.NamespacedName{Name: GetClusterVolumePoolName(rookConfig.ClusterId, volumePoolName)}
 			Eventually(func() error { return k8sClient.Get(ctx, volumeSnapshotClassKey, volumeSnapshotClass) }).Should(Succeed())
 
 			Expect(volumeSnapshotClass.Driver).To(BeEquivalentTo(rookConfig.CSIDriverName))
@@ -118,7 +120,7 @@ var _ = Describe("VolumePoolReconciler", func() {
 				if err := k8sClient.Get(ctx, volumePoolKey, volumePool); err != nil {
 					return err
 				}
-				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateNotAvailable))
+				g.Expect(volumePool.Status.State).To(BeEquivalentTo(storagev1alpha1.VolumePoolStateUnavailable))
 				return nil
 			}).Should(Succeed())
 
