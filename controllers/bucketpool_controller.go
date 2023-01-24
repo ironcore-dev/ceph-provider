@@ -53,14 +53,18 @@ var (
 // BucketPoolReconciler reconciles a BucketPool object
 type BucketPoolReconciler struct {
 	client.Client
-	Scheme                *runtime.Scheme
-	BucketPoolName        string
-	BucketPoolProviderID  string
-	BucketPoolLabels      map[string]string
-	BucketPoolAnnotations map[string]string
-	BucketClassSelector   client.MatchingLabels
-	BucketPoolReplication int
-	RookConfig            *rook.Config
+	Scheme                     *runtime.Scheme
+	BucketPoolName             string
+	BucketPoolProviderID       string
+	BucketPoolLabels           map[string]string
+	BucketPoolAnnotations      map[string]string
+	BucketPoolReplication      int
+	BucketGatewayInstances     int32
+	BucketGatewayPort          int32
+	BucketGatewaySecurePort    int32
+	BucketGatewaySSLSecretName string
+	BucketClassSelector        client.MatchingLabels
+	RookConfig                 *rook.Config
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=bucketpools,verbs=get;list;watch;create;update;patch;delete
@@ -105,6 +109,20 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 		return ctrl.Result{}, fmt.Errorf("failed to patch status for bucket pool: %w", err)
 	}
 
+	gatewaySpec := rookv1.GatewaySpec{
+		Port:      r.BucketGatewayPort,
+		Instances: r.BucketGatewayInstances,
+	}
+
+	if r.BucketGatewaySSLSecretName != "" {
+		sslSecret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: r.BucketGatewaySSLSecretName, Namespace: r.RookConfig.Namespace}, sslSecret); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get ssl secret %s: %w", client.ObjectKeyFromObject(sslSecret), err)
+		}
+		gatewaySpec.SecurePort = r.BucketGatewaySecurePort
+		gatewaySpec.SSLCertificateRef = r.BucketGatewaySSLSecretName
+	}
+
 	rookPool := &rookv1.CephObjectStore{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CephObjectStore",
@@ -125,11 +143,7 @@ func (r *BucketPoolReconciler) reconcile(ctx context.Context, log logr.Logger, p
 					Size: uint(r.BucketPoolReplication),
 				},
 			},
-			Gateway: rookv1.GatewaySpec{
-				Port: 80,
-				//SecurePort: 443,
-				Instances: 1,
-			},
+			Gateway: gatewaySpec,
 		},
 	}
 

@@ -92,6 +92,11 @@ func main() {
 		bucketPoolAnnotations map[string]string
 
 		bucketBaseUrl string
+
+		bucketGatewayInstances     int32
+		bucketGatewayPort          int32
+		bucketGatewaySecurePort    int32
+		bucketGatewaySSLSecretName string
 	)
 
 	var (
@@ -121,6 +126,11 @@ func main() {
 	flag.StringToStringVar(&bucketPoolLabels, "bucket-pool-labels", nil, "Labels to apply to the bucket pool upon startup.")
 	flag.StringToStringVar(&bucketPoolAnnotations, "bucket-pool-annotations", nil, "Annotations to apply to the bucket pool upon startup.")
 	flag.StringVar(&bucketBaseUrl, "bucket-base-url", "example.com", "Base url of the buckets.")
+
+	flag.Int32Var(&bucketGatewayInstances, "bucket-gateway-instances", 1, "Number of RADOS gateway instances to spin up.")
+	flag.Int32Var(&bucketGatewayPort, "bucket-gateway-port", 80, "RADOS gateway port.")
+	flag.Int32Var(&bucketGatewaySecurePort, "bucket-gateway-secure-port", 443, "RADOS gateway secure port.")
+	flag.StringVar(&bucketGatewaySSLSecretName, "bucket-gateway-ssl-secret-name", "", "Secret name to obtain SSL cert to use in the RADOS gateway.")
 
 	// image populator
 	flag.StringVar(&populatorImage, "populator-image", "", "Container image of the populator pod.")
@@ -211,15 +221,19 @@ func main() {
 	}
 
 	if err = (&controllers.BucketPoolReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		BucketPoolName:        bucketPoolName,
-		BucketPoolProviderID:  bucketPoolProviderID,
-		BucketPoolLabels:      bucketPoolLabels,
-		BucketPoolAnnotations: bucketPoolAnnotations,
-		BucketClassSelector:   bucketClassSelector,
-		BucketPoolReplication: bucketPoolReplication,
-		RookConfig:            rookConfig,
+		Client:                     mgr.GetClient(),
+		Scheme:                     mgr.GetScheme(),
+		BucketPoolName:             bucketPoolName,
+		BucketPoolProviderID:       bucketPoolProviderID,
+		BucketPoolLabels:           bucketPoolLabels,
+		BucketPoolAnnotations:      bucketPoolAnnotations,
+		BucketGatewayInstances:     bucketGatewayInstances,
+		BucketGatewayPort:          bucketGatewayPort,
+		BucketGatewaySecurePort:    bucketGatewaySecurePort,
+		BucketGatewaySSLSecretName: bucketGatewaySSLSecretName,
+		BucketClassSelector:        bucketClassSelector,
+		BucketPoolReplication:      bucketPoolReplication,
+		RookConfig:                 rookConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BucketPool")
 		os.Exit(1)
