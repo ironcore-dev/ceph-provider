@@ -160,7 +160,7 @@ func (r *BucketReconciler) updateBucketStatus(ctx context.Context, log logr.Logg
 		SecretRef: &corev1.LocalObjectReference{
 			Name: bucket.Name,
 		},
-		Endpoint: fmt.Sprintf("%s.%s", bucket.Name, r.BucketBaseUrl),
+		Endpoint: fmt.Sprintf("s3.%s", r.BucketBaseUrl),
 	}
 
 	if err := r.Status().Patch(ctx, bucket, client.MergeFrom(bucketBase)); err != nil {
