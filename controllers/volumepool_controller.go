@@ -202,9 +202,9 @@ func (r *VolumePoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 		},
 		Provisioner: r.RookConfig.CSIDriverName,
 		Parameters: map[string]string{
-			"clusterID":       r.RookConfig.ClusterId,
-			"pool":            r.VolumePoolName,
-			"imageFeatures":   r.RookConfig.StorageClassImageFeatures,
+			"clusterID":     r.RookConfig.ClusterId,
+			"pool":          r.VolumePoolName,
+			"imageFeatures": r.RookConfig.StorageClassImageFeatures,
 			"csi.storage.k8s.io/provisioner-secret-name":            r.RookConfig.CSIRBDProvisionerSecretName,
 			"csi.storage.k8s.io/provisioner-secret-namespace":       r.RookConfig.Namespace,
 			"csi.storage.k8s.io/controller-expand-secret-name":      r.RookConfig.CSIRBDProvisionerSecretName,
