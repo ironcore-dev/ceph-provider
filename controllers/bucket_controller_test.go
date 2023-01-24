@@ -142,7 +142,7 @@ var _ = Describe("BucketReconciler", func() {
 		Eventually(Object(bucket)).Should(SatisfyAll(
 			HaveField("Status.State", Equal(storagev1alpha1.BucketStateAvailable)),
 			HaveField("Status.Access.SecretRef", Not(BeNil())),
-			HaveField("Status.Access.Endpoint", Equal(fmt.Sprintf("%s.%s", bucket.Name, bucketBaseURL))),
+			HaveField("Status.Access.Endpoint", Equal(fmt.Sprintf("s3.%s", bucketBaseURL))),
 		))
 
 		accessSecret := &corev1.Secret{
