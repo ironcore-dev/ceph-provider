@@ -12,7 +12,7 @@ require (
 	github.com/onmetal/controller-utils v0.6.7-0.20230109144521-67f4a1e9104d
 	github.com/onmetal/onmetal-api v0.0.13-0.20230110111839-d7722f18b5f8
 	github.com/onmetal/onmetal-image v0.0.0-20220805142941-d73b45a1b660
-	github.com/onsi/ginkgo/v2 v2.7.1
+	github.com/onsi/ginkgo/v2 v2.8.0
 	github.com/onsi/gomega v1.26.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
