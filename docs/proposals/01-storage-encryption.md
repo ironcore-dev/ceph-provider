@@ -57,7 +57,7 @@ Overall, the motivation for a storage encryption proposal is to provide a holost
 As of now two types of encryption is supported by Ceph: 
 - OSD Level 
 - Block device Level
-Currently we are moving ahead in this proposal with Block device level.
+(Currently we are moving ahead in this proposal with Block device level.)
   
 ## Proposal
 - Data encryption key(DEK) will be provided by user in volume object. Cephlet will internally create a Key encryption key(KEK), encrypt the data encryption key and add     into the metadata. All the changes will take place in cephCSI.
