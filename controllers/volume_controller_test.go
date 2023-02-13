@@ -19,8 +19,9 @@ import (
 
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/controller-utils/clientutils"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/testutils"
+	testutils "github.com/onmetal/onmetal-api/utils/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -54,9 +55,9 @@ var _ = Describe("VolumeReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "sc-",
 			},
-			Capabilities: map[corev1.ResourceName]resource.Quantity{
-				storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
-				storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
@@ -99,8 +100,8 @@ var _ = Describe("VolumeReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
-				Resources: corev1.ResourceList{
-					"storage": resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 			},
 		}
@@ -164,8 +165,8 @@ var _ = Describe("VolumeReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
-				Resources: corev1.ResourceList{
-					"storage": resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 			},
 		}
@@ -232,8 +233,8 @@ var _ = Describe("VolumeReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePool.Name},
-				Resources: corev1.ResourceList{
-					"storage": resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 				Image: "example.com/test:latest",
 			},
@@ -292,8 +293,8 @@ var _ = Describe("VolumeReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: "not-there"},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: "not-there"},
-				Resources: corev1.ResourceList{
-					"storage": resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 			},
 		}
