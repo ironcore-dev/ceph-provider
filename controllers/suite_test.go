@@ -28,8 +28,8 @@ import (
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/testutils/envtestutils"
-	"github.com/onmetal/onmetal-api/testutils/envtestutils/apiserver"
+	envtestutils "github.com/onmetal/onmetal-api/utils/envtest"
+	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
@@ -160,7 +160,7 @@ var _ = BeforeSuite(func() {
 	SetClient(k8sClient)
 
 	apiSrv, err := apiserver.New(cfg, apiserver.Options{
-		MainPath:     "github.com/onmetal/onmetal-api/onmetal-apiserver/cmd/apiserver",
+		MainPath:     "github.com/onmetal/onmetal-api/cmd/onmetal-apiserver",
 		BuildOptions: []buildutils.BuildOption{buildutils.ModModeMod},
 		ETCDServers:  []string{testEnv.ControlPlane.Etcd.URL.String()},
 		Host:         testEnvExt.APIServiceInstallOptions.LocalServingHost,

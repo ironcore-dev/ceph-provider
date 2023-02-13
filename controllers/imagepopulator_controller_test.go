@@ -16,8 +16,9 @@ package controllers
 
 import (
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/testutils"
+	testutils "github.com/onmetal/onmetal-api/utils/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -45,9 +46,9 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "sc-",
 			},
-			Capabilities: corev1.ResourceList{
-				storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
-				storagev1alpha1.ResourceIOPS: resource.MustParse("1"),
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
+				corev1alpha1.ResourceIOPS: resource.MustParse("1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
@@ -86,8 +87,8 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
-				Resources: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 				Image: "my-image",
 			},
@@ -120,7 +121,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1.ResourceStorage]},
+					Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1alpha1.ResourceStorage]},
 				},
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,
@@ -169,7 +170,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 
 			g.Expect(pvc.Spec.AccessModes).To(Equal([]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}))
 			g.Expect(pvc.Spec.Resources).To(Equal(corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1.ResourceStorage]},
+				Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1alpha1.ResourceStorage]},
 			}))
 			g.Expect(pvc.Spec.StorageClassName).To(Equal(&storageClass.Name))
 			g.Expect(pvc.Spec.VolumeMode).To(Equal(&mode))
@@ -393,8 +394,8 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: volumeClass.Name},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: volumePoolName},
-				Resources: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(volumeSize),
+				Resources: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
 				Image: "my-image",
 			},
@@ -427,7 +428,7 @@ var _ = Describe("ImagePopulatorReconciler", func() {
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1.ResourceStorage]},
+					Requests: corev1.ResourceList{corev1.ResourceStorage: vol.Spec.Resources[corev1alpha1.ResourceStorage]},
 				},
 				StorageClassName: &storageClass.Name,
 				VolumeMode:       &mode,

@@ -17,6 +17,7 @@ package ceph
 import (
 	"fmt"
 
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -46,7 +47,7 @@ func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha
 		scale = size.ScaledValue(resource.Giga)
 	}
 
-	if iops, ok := volumeClass.Capabilities[storagev1alpha1.ResourceIOPS]; ok {
+	if iops, ok := volumeClass.Capabilities[corev1alpha1.ResourceIOPS]; ok {
 		limit := iops.DeepCopy()
 		limit.Set(scale * iops.Value())
 
@@ -63,7 +64,7 @@ func CalculateLimits(volume *storagev1alpha1.Volume, volumeClass *storagev1alpha
 		limits[IOPSBurstDurationLimit] = *burstDuration
 	}
 
-	if tps, ok := volumeClass.Capabilities[storagev1alpha1.ResourceTPS]; ok {
+	if tps, ok := volumeClass.Capabilities[corev1alpha1.ResourceTPS]; ok {
 		limit := tps.DeepCopy()
 		limit.Set(scale * tps.Value())
 

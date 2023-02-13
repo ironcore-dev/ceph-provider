@@ -18,8 +18,9 @@ import (
 	"fmt"
 
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/testutils"
+	testutils "github.com/onmetal/onmetal-api/utils/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -44,9 +45,9 @@ var _ = Describe("BucketReconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "sc-",
 			},
-			Capabilities: map[corev1.ResourceName]resource.Quantity{
-				storagev1alpha1.ResourceIOPS: resource.MustParse("100"),
-				storagev1alpha1.ResourceTPS:  resource.MustParse("1"),
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
