@@ -20,7 +20,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.24.0
-	golang.org/x/oauth2 v0.4.0
+	golang.org/x/oauth2 v0.5.0
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.26.1
@@ -120,11 +120,11 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go4.org/netipx v0.0.0-20220812043211-3cc044ffd68d // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/term v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/api v0.102.0 // indirect
