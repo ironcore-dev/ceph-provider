@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/onmetal/cephlet/pkg/ceph"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,8 +35,8 @@ const (
 )
 
 func TestCalculateRelativeLimits(t *testing.T) {
-	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
-		corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
+	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: corev1alpha1.ResourceList{
+		corev1alpha1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
 	}}}
 	volumeClass := &storagev1alpha1.VolumeClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -43,9 +44,9 @@ func TestCalculateRelativeLimits(t *testing.T) {
 				ceph.LabelLimitsPerGB: "true",
 			},
 		},
-		Capabilities: map[corev1.ResourceName]resource.Quantity{
-			storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
-			storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+		Capabilities: corev1alpha1.ResourceList{
+			corev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+			corev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
 		},
 	}
 
@@ -112,16 +113,16 @@ func TestCalculateRelativeLimits(t *testing.T) {
 }
 
 func TestCalculateAbsoluteLimits(t *testing.T) {
-	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: map[corev1.ResourceName]resource.Quantity{
-		corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
+	volume := &storagev1alpha1.Volume{Spec: storagev1alpha1.VolumeSpec{Resources: corev1alpha1.ResourceList{
+		corev1alpha1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size)),
 	}}}
 	volumeClass := &storagev1alpha1.VolumeClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{},
 		},
-		Capabilities: map[corev1.ResourceName]resource.Quantity{
-			storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
-			storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+		Capabilities: corev1alpha1.ResourceList{
+			corev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+			corev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
 		},
 	}
 
@@ -195,13 +196,13 @@ func TestCalculateUsage(t *testing.T) {
 			{
 				Spec: storagev1alpha1.VolumeSpec{
 					VolumeClassRef: &corev1.LocalObjectReference{Name: "test1"},
-					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
+					Resources:      corev1alpha1.ResourceList{corev1alpha1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
 				},
 			},
 			{
 				Spec: storagev1alpha1.VolumeSpec{
 					VolumeClassRef: &corev1.LocalObjectReference{Name: "test2"},
-					Resources:      map[corev1.ResourceName]resource.Quantity{corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
+					Resources:      corev1alpha1.ResourceList{corev1alpha1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dG", size))},
 				},
 			},
 		},
@@ -216,9 +217,9 @@ func TestCalculateUsage(t *testing.T) {
 					Name:   "test1",
 					Labels: map[string]string{},
 				},
-				Capabilities: map[corev1.ResourceName]resource.Quantity{
-					storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
-					storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
+				Capabilities: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops)),
+					corev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps)),
 				},
 			},
 			{
@@ -226,9 +227,9 @@ func TestCalculateUsage(t *testing.T) {
 					Name:   "test2",
 					Labels: map[string]string{},
 				},
-				Capabilities: map[corev1.ResourceName]resource.Quantity{
-					storagev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops*2)),
-					storagev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps*2)),
+				Capabilities: corev1alpha1.ResourceList{
+					corev1alpha1.ResourceIOPS: resource.MustParse(fmt.Sprintf("%d", iops*2)),
+					corev1alpha1.ResourceTPS:  resource.MustParse(fmt.Sprintf("%d", tps*2)),
 				},
 			},
 		},

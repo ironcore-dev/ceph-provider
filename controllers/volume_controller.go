@@ -25,6 +25,7 @@ import (
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	onmetalimage "github.com/onmetal/onmetal-image"
 	"github.com/onmetal/onmetal-image/oci/image"
@@ -310,7 +311,7 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1.ResourceStorage]},
+				Requests: corev1.ResourceList{corev1.ResourceStorage: volume.Spec.Resources[corev1alpha1.ResourceStorage]},
 			},
 			VolumeMode:       func(m corev1.PersistentVolumeMode) *corev1.PersistentVolumeMode { return &m }(corev1.PersistentVolumeBlock),
 			StorageClassName: &storageClass,
@@ -355,7 +356,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 		return r.createSnapshot(ctx, log, volume)
 	}
 
-	volumeCapacity := volume.Spec.Resources[corev1.ResourceStorage]
+	volumeCapacity := volume.Spec.Resources[corev1alpha1.ResourceStorage]
 	volumeSizeBytes := volumeCapacity.Value()
 	if volumeSizeBytes < snapshot.Status.RestoreSize.Value() {
 		log.Info(fmt.Sprintf("Requested volume size %d is less than the size %d for the source snapshot", volumeSizeBytes, snapshot.Status.RestoreSize.Value()), "snapshotName", snapshot.Name)
