@@ -357,6 +357,11 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 	}
 
 	volumeCapacity := volume.Spec.Resources[corev1alpha1.ResourceStorage]
+	if !pointer.BoolDeref(snapshot.Status.ReadyToUse, false) || snapshot.Status.RestoreSize == nil {
+		log.Info("Referenced snapshot not ready or RestoreSize not defined", "snapshotName", snapshot.Name)
+		return nil
+	}
+
 	volumeSizeBytes := volumeCapacity.Value()
 	if volumeSizeBytes < snapshot.Status.RestoreSize.Value() {
 		log.Info(fmt.Sprintf("Requested volume size %d is less than the size %d for the source snapshot", volumeSizeBytes, snapshot.Status.RestoreSize.Value()), "snapshotName", snapshot.Name)
