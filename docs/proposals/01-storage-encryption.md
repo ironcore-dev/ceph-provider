@@ -62,7 +62,7 @@ Overall, the motivation for a storage encryption proposal is to provide a holost
 
 ### Way 1:
 ### Details
--This way emphasizes more on one level down to abstraction.
+This way emphasizes more on one level down to abstraction.
 
 - To perform RBD encryption directly at ceph level is by using the LUKS encryption technology, which is built into the Linux kernel and can be used to encrypt block       devices such as RBD. 
 
@@ -82,9 +82,8 @@ Overall, the motivation for a storage encryption proposal is to provide a holost
 
 ### Way 2:
 ### Details
-As of now two types of encryption is supported by Ceph: 
-- OSD Level 
-- Block device Level
+ As of now two types of encryption is supported by Ceph: 
+- OSD Level and Block device Level
 (Currently we are moving ahead in this proposal with Block device level.)
 
 - Data encryption key(DEK) will be provided by user in volume object. Cephlet will internally create a Key encryption key(KEK), encrypt the data encryption key and add     into the metadata. All the changes will take place in cephCSI.
