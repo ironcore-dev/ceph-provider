@@ -22,15 +22,20 @@ reviewers-
 # Storage Encryption
 
 ## Table of Contents
-
+- [Document Terminology](#documentterminology)
 - [Summary](#summary)
 - [Motivation](#motivation)
     - [Goals](#goals)
     - [Non-Goals](#goals)
-    - [Details](#details)
 - [Proposal](#proposal)
 - [Appendices](#appendices)
 
+## Document Terminology
+
+- volume encryption: encryption of a volume attached by rbd
+- LUKS: Linux Unified Key Setup: stores all the needed setup information for dm-crypt on the disk
+- dm-crypt: linux kernel device-mapper crypto target
+- cryptsetup: the command line tool to interface with dm-crypt
 
 ## Summary
 The primary purpose of encryption is to protect the confidentiality of digital data stored on a device. Encryption removes the risk of data breach and unauthorized access. The proposal for storage encryption would outline the specific encryption method, key management, and other details that would be used to secure the data being stored. This can include policies and procedures for securing the encryption keys, as well as details on how the encryption will be implemented and managed. Overall, the goal of the proposal is to ensure that the data stored is protected against unauthorized access or disclosure. This proposal focuses on providing option to enable encryption for individual Volumes.
@@ -53,13 +58,35 @@ Overall, the motivation for a storage encryption proposal is to provide a holost
 - OSD level encryption
 - Object storage encryption
 
+## Proposal
+
+### Way 1:
+### Details
+-This way emphasizes more on one level down to abstraction.
+
+- To perform RBD encryption directly at ceph level is by using the LUKS encryption technology, which is built into the Linux kernel and can be used to encrypt block       devices such as RBD. 
+
+- The new RBD image can be created with RBD command line tool or directly from ceph dashboard. LUKS container on the RBD image can be created using `cryptsetup` tool       which can be further mapped to a block device on the client system.
+
+- To use the LUKS format, start by formatting the image:
+
+   ` $ rbd encryption format {pool-name}/{image-name} {luks1|luks2} {passphrase-file} [–cipher-alg {aes-128 | aes-256}] `
+ 
+- A file system is created on the mapped block device and is mounted as per the requirement. Mounted file system is the point of contact to write or read the data from     encrypted RBD image.
+
+- To mount a LUKS-encrypted image run:
+
+   ` $ rbd -p {pool-name} device map -t nbd -o encryption-format={luks1|luks2},encryption-passphrase-file={passphrase-file} `
+
+- When writing data to the encrypted RBD image, it is automatically encrypted by LUKS before being written to the RBD image. When reading data from the RBD image, it       is decrypted by LUKS on the client system before being made available to the application.
+
+### Way 2:
 ### Details
 As of now two types of encryption is supported by Ceph: 
 - OSD Level 
 - Block device Level
 (Currently we are moving ahead in this proposal with Block device level.)
-  
-## Proposal
+
 - Data encryption key(DEK) will be provided by user in volume object. Cephlet will internally create a Key encryption key(KEK), encrypt the data encryption key and add     into the metadata. All the changes will take place in cephCSI.
 
 - Currently when `volume` is created corresponding `PVC` is also created with reference to `storageclass`.
