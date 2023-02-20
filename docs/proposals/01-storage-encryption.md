@@ -91,7 +91,7 @@ spec:
 This way emphasizes more on providing encryption on ceph level.
 
 #### Image encryption
-- Image level encryption refers to the process of encrypting an image at the pixel level. It involves transforming the original image into a form that is                   unintelligible to anyone who does not have the proper decryption key. Image-level encryption can be handled internally by RBD clients. This means you can set a         secret key that will be used to encrypt a specific RBD image.
+- Image-level encryption can be handled internally by RBD clients. This means you can set a secret key that will be used to encrypt a specific RBD image.
 
 ##### Encryption Format
 - By default, RBD images are not encrypted. To encrypt an RBD image, it needs to be formatted to one of the supported encryption formats. The format operation persists     encryption metadata to the image. Ceph supports encryption of data at rest, including images, which can be encrypted using the  AES-128 and AES-256 encryption         format. Additionally, xts-plain64 is currently the only supported encryption mode.
