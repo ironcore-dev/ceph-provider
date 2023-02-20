@@ -98,8 +98,8 @@ This way emphasizes more on providing encryption on ceph level.
 
 ##### Encryption Format and Encryption Load
 - To encrypt an RBD image, it needs to be formatted to one of the supported encryption format and is a necessary pre-requisite for enabling encryption. The format operation persists encryption metadata to the image such as encryption format and version, cipher algorithm and mode specification as well as information used to secure the encryption key. This encryption key is protected by Passphrase (KEK) which is user-kept secret.
-
 - In order to safely perform encrypted IO on the formatted image, an additional encryption load operation should be applied after opening the image.  The encryption load operation requires supplying the encryption format and a secret for unlocking the encryption key(KEK). The encryption key(DEK) will be stored in-memory by the RBD client until the image is closed.
+- Encryption load can be automatically applied when mounting RBD images as block devices via rbd-nbd.
 
 ##### Supported Formats
 - To perform RBD encryption directly at ceph level is by using the LUKS encryption technology(both LUKS1 and LUKS2 are supported), which is built into the Linux kernel     and can be used to encrypt block devices such as RBD. 
