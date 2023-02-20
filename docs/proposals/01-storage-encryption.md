@@ -46,9 +46,9 @@ The primary purpose of encryption is to protect the confidentiality of digital d
 ## Motivation
 - Security: Security is an important concern and should be a strong focus of any Cloud Native IaaS. To protect the data against variety of security threats, including        data breaches, hacking and physical theft, encryption plays vital role.
 - Privacy: Encryption helps to maintain privacy of data from being accessed by unauthorised parties.
-- Compliance and business cotinuity: In order to meet compliance requirements of businesses keeping the standards and regulations in mind, it becomes essential to          store the encryption enabled data in the cloud so that in the events of disaster and data theft, organizations can recover the data quickly.
+- Compliance and business continuity: In order to meet compliance requirements of businesses keeping the standards and regulations in mind, it becomes essential to          store the encryption enabled data in the cloud so that in the events of disaster and data theft, organizations can recover the data quickly.
 
-Overall, the motivation for a storage encryption proposal is to provide a holostic and secure approach to protect sensitive data and ensure compliance with regulations and standards.
+Overall, the motivation for a storage encryption proposal is to provide a holistic and secure approach to protect sensitive data and ensure compliance with regulations and standards.
 
 
 ### Goals
