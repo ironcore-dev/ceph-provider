@@ -102,23 +102,7 @@ This way emphasizes more on providing encryption on ceph level.
 - Encryption load can be automatically applied when mounting RBD images as block devices via rbd-nbd.
 
 ##### Supported Formats
-- To perform RBD encryption directly at ceph level is by using the LUKS encryption technology(both LUKS1 and LUKS2 are supported), which is built into the Linux kernel     and can be used to encrypt block devices such as RBD. 
 
-- The new RBD image can be created with RBD command line tool or directly from ceph dashboard. LUKS container on the RBD image can be created using `cryptsetup` tool  which can be further mapped to a block device on the client system.
-
-- To use the LUKS format, start by formatting the image:
-
-   ` $ rbd encryption format {pool-name}/{image-name} {luks1|luks2} {passphrase-file} [–cipher-alg {aes-128 | aes-256}] `
-   
-- The encryption format operation generates a LUKS header and writes it to the beginning of the image. The header is appended with a single keyslot holding a randomly-     generated encryption key, and is protected by the passphrase read from passphrase-file.
- 
-- A file system is created on the mapped block device and is mounted as per the requirement. Mounted file system is the point of contact to write or read the data from  encrypted RBD image.
-
-- To mount a LUKS-encrypted image run:
-
-   ` $ rbd -p {pool-name} device map -t nbd -o encryption-format={luks1|luks2},encryption-passphrase-file={passphrase-file} `
-
-- When writing data to the encrypted RBD image, it is automatically encrypted by LUKS before being written to the RBD image. When reading data from the RBD image, it  is decrypted by LUKS on the client system before being made available to the application.
 
 ### Way 2:
 ### Details
