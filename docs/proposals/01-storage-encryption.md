@@ -46,7 +46,7 @@ The primary purpose of encryption is to protect the confidentiality of digital d
 ## Motivation
 - Security: Security is an important concern and should be a strong focus of any Cloud Native IaaS. To protect the data against variety of security threats, including        data breaches, hacking and physical theft, encryption plays vital role.
 - Privacy: Encryption helps to maintain privacy of data from being accessed by unauthorised parties.
-- Compliance and business continuity: In order to meet compliance requirements of businesses keeping the standards and regulations in mind, it becomes essential to          store the encryption enabled data in the cloud so that in the events of disaster and data theft, organizations can recover the data quickly.
+- Compliance and business continuity: In order to meet compliance requirements of businesses keeping the standards and regulations in mind, it becomes essential to  store the encryption enabled data in the cloud so that in the events of disaster and data theft, organizations can recover the data quickly.
 
 Overall, the motivation for a storage encryption proposal is to provide a holistic and secure approach to protect sensitive data and ensure compliance with regulations and standards.
 
@@ -64,7 +64,6 @@ Overall, the motivation for a storage encryption proposal is to provide a holist
 As of now two types of encryption is supported by Ceph: 
 - OSD Level and 
 - Block device Level
-(Currently we are moving ahead in this proposal with Block device level.)
 
 The volume object is created with a reference to a secret which contains DEK:
 
@@ -108,14 +107,14 @@ This way emphasizes more on providing encryption on ceph level.
 
 - Though the images are formated, but RBD APIs will treat them as raw unencrypted images. So in this scenario an encrypted RBD image can be opened by the same APIs as      any other image resulting in reading or writing to the raw encrypted data. It will be a risk to the security.
 
-- To eliminate this risk, an additional encryption load operation should be applied after opening the image. The encryption load operation requires supplying the           encryption format and a secret for unlocking the encryption key. After this process, all IOs for the opened image will be encrypted / decrypted. For a cloned           image, this includes IOs for ancestor images as well. Untill the image is closed, the encryption key will be stored in-memory by the RBD client.
+- To eliminate this risk, an additional encryption load operation should be applied after opening the image. The encryption load operation requires supplying the           encryption format and a secret for unlocking the encryption key. After this process, all IOs for the opened image will be encrypted / decrypted. For a cloned image, this includes IOs for ancestor images as well. Untill the image is closed, the encryption key will be stored in-memory by the RBD client.
 
 - In terms of open image, once the encryption is loaded, no other load or formating can be applied. 
 
 ##### Supported Formats
 - To perform RBD encryption directly at ceph level is by using the LUKS encryption technology(both LUKS1 and LUKS2 are supported), which is built into the Linux kernel     and can be used to encrypt block devices such as RBD. 
 
-- The new RBD image can be created with RBD command line tool or directly from ceph dashboard. LUKS container on the RBD image can be created using `cryptsetup` tool       which can be further mapped to a block device on the client system.
+- The new RBD image can be created with RBD command line tool or directly from ceph dashboard. LUKS container on the RBD image can be created using `cryptsetup` tool  which can be further mapped to a block device on the client system.
 
 - To use the LUKS format, start by formatting the image:
 
@@ -123,13 +122,13 @@ This way emphasizes more on providing encryption on ceph level.
    
 - The encryption format operation generates a LUKS header and writes it to the beginning of the image. The header is appended with a single keyslot holding a randomly-     generated encryption key, and is protected by the passphrase read from passphrase-file.
  
-- A file system is created on the mapped block device and is mounted as per the requirement. Mounted file system is the point of contact to write or read the data from     encrypted RBD image.
+- A file system is created on the mapped block device and is mounted as per the requirement. Mounted file system is the point of contact to write or read the data from  encrypted RBD image.
 
 - To mount a LUKS-encrypted image run:
 
    ` $ rbd -p {pool-name} device map -t nbd -o encryption-format={luks1|luks2},encryption-passphrase-file={passphrase-file} `
 
-- When writing data to the encrypted RBD image, it is automatically encrypted by LUKS before being written to the RBD image. When reading data from the RBD image, it       is decrypted by LUKS on the client system before being made available to the application.
+- When writing data to the encrypted RBD image, it is automatically encrypted by LUKS before being written to the RBD image. When reading data from the RBD image, it  is decrypted by LUKS on the client system before being made available to the application.
 
 ### Way 2:
 ### Details
