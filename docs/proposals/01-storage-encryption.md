@@ -38,6 +38,8 @@ reviewers-
 - LUKS: Linux Unified Key Setup: stores all the needed setup information for dm-crypt on the disk
 - dm-crypt: linux kernel device-mapper crypto target
 - cryptsetup: the command line tool to interface with dm-crypt
+- DEK : Data Encryption Key
+- KEK : Key ENcryption Key
 
 ## Summary
 The primary purpose of encryption is to protect the confidentiality of digital data stored on a device. Encryption removes the risk of data breach and unauthorized access. The proposal for storage encryption would outline the specific encryption method, key management, and other details that would be used to secure the data being stored. This can include policies and procedures for securing the encryption keys, as well as details on how the encryption will be implemented and managed. Overall, the goal of the proposal is to ensure that the data stored is protected against unauthorized access or disclosure. This proposal focuses on providing option to enable encryption for individual Volumes.
