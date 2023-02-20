@@ -93,17 +93,14 @@ This way emphasizes more on providing encryption on ceph level.
 #### Image encryption
 - Image-level encryption can be handled internally by RBD clients. This means you can set a secret key that will be used to encrypt a specific RBD image.
 
-##### Encryption Format
+##### Encryption Format and Encryption Load
 - By default, RBD images are not encrypted. To encrypt an RBD image, it needs to be formatted to one of the supported encryption formats. The format operation persists     encryption metadata to the image. Ceph supports encryption of data at rest, including images, which can be encrypted using the  AES-128 and AES-256 encryption         format. Additionally, xts-plain64 is currently the only supported encryption mode.
 
 - The encryption metadata includes format, version, cipher algorithms, mode specifications and methods to secure the encryption key. The normal encryption format           operation needs to specify encryption format and user-kept secret(usually a passphrase).
 
 - The imagesize of the encrypted image will be lower than the raw image size as a result of storing encryption metadata as a part of image data including an encryption     header will be written to the beginning of the raw image data.
 
-##### Encryption Load
-- Formatting an image is a key pre-requisite for enabling encryption. The encryption load is influenced by several factors, including the encryption algorithm used,        the size of the image file, the level of encryption required, and the computing power available. 
-
-- To reduce the encryption load in image encryption, techniques such as parallel processing, distributed computing or hardware-based encryption acceleration can be         used. Parallel processing involves breaking up the image file into smaller parts and encrypting them simultaneously using multiple processors, while                   distributed computing involves spreading the encryption process across multiple computers in a network.
+- To reduce the encryption load in image encryption, techniques such as parallel processing, distributed computing or hardware-based encryption acceleration can be         used. Parallel processing involves breaking up the image file into smaller parts and encrypting them simultaneously using multiple processors, while   distributed computing involves spreading the encryption process across multiple computers in a network.
 
 - Though the images are formated, but RBD APIs will treat them as raw unencrypted images. So in this scenario an encrypted RBD image can be opened by the same APIs as      any other image resulting in reading or writing to the raw encrypted data. It will be a risk to the security.
 
