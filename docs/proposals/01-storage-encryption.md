@@ -63,7 +63,7 @@ Overall, the motivation for a storage encryption proposal is to provide a holist
 - Object storage encryption
 
 ### Details
-As of now two types of encryption is supported by Ceph: 
+Ceph supports encryption of data at rest, including images, which can be encrypted using the AES-128 and AES-256 encryption format. Additionally, xts-plain64 is currently the only supported encryption mode. Two types of encryption are supported by Ceph: 
 - OSD Level and 
 - Block device Level
 
@@ -87,28 +87,19 @@ spec:
 ```
 
 ## Proposal
+This proposal is divided into two ways of encrypting RBD image. Following two ways explains how RBD Image encryption is carried out.
 
 ### Way 1:
 ### Details
 This way emphasizes more on providing encryption on ceph level.
 
 #### Image encryption
-- Image-level encryption can be handled internally by RBD clients. This means you can set a secret key that will be used to encrypt a specific RBD image.
+- By default, RBD image is not encrypted, to encrypt RBD image following operations need to be performed. Image-level encryption can be handled internally by RBD clients. This means you can set a secret key that will be used to encrypt a specific RBD image.
 
 ##### Encryption Format and Encryption Load
-- By default, RBD images are not encrypted. To encrypt an RBD image, it needs to be formatted to one of the supported encryption formats. The format operation persists     encryption metadata to the image. Ceph supports encryption of data at rest, including images, which can be encrypted using the  AES-128 and AES-256 encryption         format. Additionally, xts-plain64 is currently the only supported encryption mode.
+- To encrypt an RBD image, it needs to be formatted to one of the supported encryption format and is a necessary pre-requisite for enabling encryption. The format operation persists encryption metadata to the image such as encryption format and version, cipher algorithm and mode specification as well as information used to secure the encryption key. This encryption key is protected by Passphrase (KEK) which is user-kept secret.
 
-- The encryption metadata includes format, version, cipher algorithms, mode specifications and methods to secure the encryption key. The normal encryption format           operation needs to specify encryption format and user-kept secret(usually a passphrase).
-
-- The imagesize of the encrypted image will be lower than the raw image size as a result of storing encryption metadata as a part of image data including an encryption     header will be written to the beginning of the raw image data.
-
-- To reduce the encryption load in image encryption, techniques such as parallel processing, distributed computing or hardware-based encryption acceleration can be         used. Parallel processing involves breaking up the image file into smaller parts and encrypting them simultaneously using multiple processors, while   distributed computing involves spreading the encryption process across multiple computers in a network.
-
-- Though the images are formated, but RBD APIs will treat them as raw unencrypted images. So in this scenario an encrypted RBD image can be opened by the same APIs as      any other image resulting in reading or writing to the raw encrypted data. It will be a risk to the security.
-
-- To eliminate this risk, an additional encryption load operation should be applied after opening the image. The encryption load operation requires supplying the           encryption format and a secret for unlocking the encryption key. After this process, all IOs for the opened image will be encrypted / decrypted. For a cloned image, this includes IOs for ancestor images as well. Untill the image is closed, the encryption key will be stored in-memory by the RBD client.
-
-- In terms of open image, once the encryption is loaded, no other load or formating can be applied. 
+- In order to safely perform encrypted IO on the formatted image, an additional encryption load operation should be applied after opening the image.  The encryption load operation requires supplying the encryption format and a secret for unlocking the encryption key(KEK). The encryption key(DEK) will be stored in-memory by the RBD client until the image is closed.
 
 ##### Supported Formats
 - To perform RBD encryption directly at ceph level is by using the LUKS encryption technology(both LUKS1 and LUKS2 are supported), which is built into the Linux kernel     and can be used to encrypt block devices such as RBD. 
@@ -131,7 +122,7 @@ This way emphasizes more on providing encryption on ceph level.
 
 ### Way 2:
 ### Details
-This way emphasizes more on providing encryption on kubernetes level.
+This way emphasizes more on providing encryption on kubernetes level using CSI, StorageClass, PVC.
  
 - Data encryption key(DEK) will be provided by user in volume object. Cephlet will internally create a Key encryption key(KEK), encrypt the data encryption key and add     into the metadata. All the changes will take place in cephCSI.
 
