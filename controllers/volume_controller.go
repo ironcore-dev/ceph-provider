@@ -147,7 +147,7 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 
 	waitUntilSnapshotReady, err := r.handleImagePopulation(ctx, log, volume)
 	if err != nil || waitUntilSnapshotReady {
-		return ctrl.Result{}, err
+		return ctrl.Result{Requeue: waitUntilSnapshotReady}, err
 	}
 
 	pvc, waitUntilClaimBound, err := r.applyPVC(ctx, log, volume)
