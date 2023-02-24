@@ -20,6 +20,10 @@ const (
 	AnnotationsAnnotation = "volume.cephlet.api.onmetal.de/annotations"
 
 	CreatedLabel = "volume.cephlet.api.onmetal.de/created"
+
+	VolumeClassLabel = "volume.cephlet.api.onmetal.de/volume-class"
+
+	ImageLabel = "volume.cephlet.api.onmetal.de/image"
 )
 
 const (

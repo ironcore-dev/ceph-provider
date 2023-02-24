@@ -17,15 +17,17 @@ package server
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-logr/logr"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
+	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	computev1alpha1 "github.com/onmetal/onmetal-api/api/compute/v1alpha1"
 	ipamv1alpha1 "github.com/onmetal/onmetal-api/api/ipam/v1alpha1"
 	networkingv1alpha1 "github.com/onmetal/onmetal-api/api/networking/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/broker/common/cleaner"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
-	"github.com/onmetal/onmetal-api/broker/volumebroker/apiutils"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -47,6 +49,7 @@ func init() {
 	utilruntime.Must(networkingv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ipamv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(snapshotv1.AddToScheme(scheme))
 }
 
 type Server struct {
@@ -55,8 +58,16 @@ type Server struct {
 
 	namespace string
 
-	volumePoolName         string
-	volumePoolStorageClass string
+	rookNamespace            string
+	rookClusterName          string
+	rookPoolName             string
+	rookClientName           string
+	rookPoolSecretName       string
+	rookPoolMonitorConfigmap string
+	rookPoolStorageClass     string
+
+	driver    string
+	wwnPrefix string
 
 	volumeClassSelector client.MatchingLabels
 }
@@ -84,9 +95,21 @@ func (s *Server) setupCleaner(ctx context.Context, log logr.Logger, retErr *erro
 }
 
 type Options struct {
-	Namespace           string
+	IDGen     idgen.IDGen
+	Namespace string
+
+	RookNamespace            string
+	RookClusterName          string
+	RookPoolName             string
+	RookClientName           string
+	RookPoolSecretName       string
+	RookPoolMonitorConfigmap string
+	RookPoolStorageClass     string
+
+	Driver    string
+	WwnPrefix string
+
 	VolumeClassSelector map[string]string
-	IDGen               idgen.IDGen
 }
 
 func setOptionsDefaults(o *Options) {
@@ -114,9 +137,22 @@ func New(cfg *rest.Config, opts Options) (*Server, error) {
 	}
 
 	return &Server{
-		client:              c,
-		idGen:               opts.IDGen,
-		namespace:           opts.Namespace,
+		client: c,
+		idGen:  opts.IDGen,
+
+		namespace: opts.Namespace,
+
+		rookNamespace:            opts.RookNamespace,
+		rookClusterName:          opts.RookClusterName,
+		rookPoolName:             opts.RookPoolName,
+		rookClientName:           opts.RookClientName,
+		rookPoolSecretName:       opts.RookPoolSecretName,
+		rookPoolMonitorConfigmap: opts.RookPoolMonitorConfigmap,
+		rookPoolStorageClass:     opts.RookPoolStorageClass,
+
+		driver:    opts.Driver,
+		wwnPrefix: opts.WwnPrefix,
+
 		volumeClassSelector: opts.VolumeClassSelector,
 	}, nil
 }

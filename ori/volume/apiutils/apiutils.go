@@ -24,7 +24,6 @@ import (
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	orimeta "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -68,20 +67,24 @@ func SetCreatedLabel(o metav1.Object) {
 	metautils.SetLabel(o, volumev1alpha1.CreatedLabel, "true")
 }
 
-func IsCreated(o metav1.Object) bool {
-	return metautils.HasLabel(o, volumev1alpha1.CreatedLabel)
+func SetVolumeClassLabel(o metav1.Object, class string) {
+	metautils.SetLabel(o, volumev1alpha1.VolumeClassLabel, class)
 }
 
-func PatchControlledBy(ctx context.Context, c client.Client, owner, controlled client.Object) error {
-	base := controlled.DeepCopyObject().(client.Object)
-	if err := ctrl.SetControllerReference(owner, controlled, c.Scheme()); err != nil {
-		return err
-	}
+func GetVolumeClass(o metav1.Object) string {
+	return o.GetLabels()[volumev1alpha1.VolumeClassLabel]
+}
 
-	if err := c.Patch(ctx, controlled, client.MergeFrom(base)); err != nil {
-		return fmt.Errorf("error patching object to be controlled: %w", err)
-	}
-	return nil
+func SetImageAnnotation(o metav1.Object, class string) {
+	metautils.SetAnnotation(o, volumev1alpha1.ImageLabel, class)
+}
+
+func GetImage(o metav1.Object) string {
+	return o.GetAnnotations()[volumev1alpha1.ImageLabel]
+}
+
+func IsCreated(o metav1.Object) bool {
+	return metautils.HasLabel(o, volumev1alpha1.CreatedLabel)
 }
 
 func PatchCreated(ctx context.Context, c client.Client, o client.Object) error {
