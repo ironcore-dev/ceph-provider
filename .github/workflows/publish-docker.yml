@@ -26,6 +26,8 @@ jobs:
             target: manager
           - name: populator
             target: populator
+          - name: ori-volume
+            target: ori-volume
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
