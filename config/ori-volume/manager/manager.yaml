@@ -20,7 +20,7 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: broker
+        kubectl.kubernetes.io/default-container: volume-ori
       labels:
         control-plane: controller-manager
     spec:
@@ -58,9 +58,9 @@ spec:
             - name: var-run
               mountPath: /var/run
         - command:
-            - /volumebroker
-          image: volumebroker:latest
-          name: broker
+            - /ori-volume
+          image: volume-ori:latest
+          name: volume-ori
           securityContext:
             allowPrivilegeEscalation: false
           livenessProbe:
