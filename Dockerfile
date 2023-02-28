@@ -18,28 +18,50 @@ COPY main.go main.go
 COPY cmd/ cmd/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
+COPY ori/ ori/
 
 ARG TARGETOS
 ARG TARGETARCH
 
+
+FROM builder as controller
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o manager main.go && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o populator ./cmd/populator/populator.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/manager main.go
+
+FROM builder as populator-bin
+# Build
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/populator ./cmd/populator/populator.go
+
+FROM builder as ori-volume-bin
+# Build
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ori-volume ./ori/volume/cmd/volume/main.go
+
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot as manager
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=controller /workspace/bin/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
 
 FROM gcr.io/distroless/static:nonroot as populator
 WORKDIR /
-COPY --from=builder /workspace/populator .
+COPY --from=populator-bin /workspace/bin/populator .
 USER 65532:65532
 
 ENTRYPOINT ["/populator"]
+
+FROM gcr.io/distroless/static:nonroot as ori-volume
+WORKDIR /
+COPY --from=ori-volume-bin /workspace/bin/ori-volume .
+USER 65532:65532
+
+ENTRYPOINT ["/ori-volume"]

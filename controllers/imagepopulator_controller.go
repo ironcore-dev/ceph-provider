@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/clientutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -128,9 +129,9 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		return ctrl.Result{}, nil
 	}
 
-	volume := &storagev1alpha1.Volume{}
+	volumePVC := &corev1.PersistentVolumeClaim{}
 	volumeKey := types.NamespacedName{Name: dataSourceRef.Name, Namespace: pvc.Namespace}
-	if err := r.Get(ctx, volumeKey, volume); err != nil {
+	if err := r.Get(ctx, volumeKey, volumePVC); err != nil {
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, fmt.Errorf("failed to get datasource ref %s for PVC: %w", volumeKey, err)
 		}
@@ -139,7 +140,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	log.Info("Found volume as datasource ref for PVC", "Volume", client.ObjectKeyFromObject(volume))
+	log.Info("Found volume as datasource ref for PVC", "Volume", client.ObjectKeyFromObject(volumePVC))
 
 	storageClass := &storagev1.StorageClass{}
 	storageClassKey := types.NamespacedName{Name: *pvc.Spec.StorageClassName}
@@ -195,7 +196,7 @@ func (r *ImagePopulatorReconciler) reconcile(ctx context.Context, log logr.Logge
 				return ctrl.Result{}, nil
 			}
 
-			pod, err := r.createPopulatorPod(ctx, pvc, volume, isStorageClassWaitingForConsumer(storageClass))
+			pod, err := r.createPopulatorPod(ctx, pvc, volumePVC, isStorageClassWaitingForConsumer(storageClass))
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -400,10 +401,10 @@ func generateNameFromPrefixAndUID(prefix string, uid types.UID) string {
 	return fmt.Sprintf("%s%s", prefix, uid)
 }
 
-func (r *ImagePopulatorReconciler) createPopulatorPod(ctx context.Context, pvc *corev1.PersistentVolumeClaim, volume *storagev1alpha1.Volume, waitForFirstConsumer bool) (*corev1.Pod, error) {
+func (r *ImagePopulatorReconciler) createPopulatorPod(ctx context.Context, pvc, volumePVC *corev1.PersistentVolumeClaim, waitForFirstConsumer bool) (*corev1.Pod, error) {
 	// Calculate the args for the populator pod
 	var args []string
-	args = append(args, "--image="+volume.Spec.Image)
+	args = append(args, "--image="+apiutils.GetImage(volumePVC))
 
 	// Make the pod
 	pod := &corev1.Pod{
