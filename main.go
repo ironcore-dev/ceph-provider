@@ -183,31 +183,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.VolumeReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		VolumePoolName: volumePoolName,
-		RookConfig:     rookConfig,
-		PoolUsage:      poolUsage,
-		EventRecorder:  mgr.GetEventRecorderFor("volume"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Volume")
-		os.Exit(1)
-	}
-	if err = (&controllers.VolumePoolReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		VolumePoolName:        volumePoolName,
-		VolumePoolProviderID:  volumePoolProviderID,
-		VolumePoolLabels:      volumePoolLabels,
-		VolumePoolAnnotations: volumePoolAnnotations,
-		VolumeClassSelector:   volumeClassSelector,
-		VolumePoolReplication: volumePoolReplication,
-		RookConfig:            rookConfig,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VolumePool")
-		os.Exit(1)
-	}
+	//if err = (&controllers.VolumeReconciler{
+	//	Client:         mgr.GetClient(),
+	//	Scheme:         mgr.GetScheme(),
+	//	VolumePoolName: volumePoolName,
+	//	RookConfig:     rookConfig,
+	//	PoolUsage:      poolUsage,
+	//	EventRecorder:  mgr.GetEventRecorderFor("volume"),
+	//}).SetupWithManager(mgr); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "Volume")
+	//	os.Exit(1)
+	//}
+	//if err = (&controllers.VolumePoolReconciler{
+	//	Client:                mgr.GetClient(),
+	//	Scheme:                mgr.GetScheme(),
+	//	VolumePoolName:        volumePoolName,
+	//	VolumePoolProviderID:  volumePoolProviderID,
+	//	VolumePoolLabels:      volumePoolLabels,
+	//	VolumePoolAnnotations: volumePoolAnnotations,
+	//	VolumeClassSelector:   volumeClassSelector,
+	//	VolumePoolReplication: volumePoolReplication,
+	//	RookConfig:            rookConfig,
+	//}).SetupWithManager(mgr); err != nil {
+	//	setupLog.Error(err, "unable to create controller", "controller", "VolumePool")
+	//	os.Exit(1)
+	//}
 
 	if err = (&controllers.BucketReconciler{
 		Client:         mgr.GetClient(),
