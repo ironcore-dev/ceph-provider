@@ -145,8 +145,9 @@ func (r *VolumeReconciler) reconcile(ctx context.Context, log logr.Logger, volum
 		return ctrl.Result{}, err
 	}
 
-	if err := r.handleImagePopulation(ctx, log, volume); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to initiate image population: %w", err)
+	waitUntilSnapshotReady, err := r.handleImagePopulation(ctx, log, volume)
+	if err != nil || waitUntilSnapshotReady {
+		return ctrl.Result{Requeue: waitUntilSnapshotReady}, err
 	}
 
 	pvc, waitUntilClaimBound, err := r.applyPVC(ctx, log, volume)
@@ -342,24 +343,34 @@ func (r *VolumeReconciler) applyPVC(ctx context.Context, log logr.Logger, volume
 	log.V(3).Info("Volume provided.")
 	return pvc, false, nil
 }
-func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) error {
+func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.Logger, volume *storagev1alpha1.Volume) (bool, error) {
 	if volume.Spec.Image == "" {
-		return nil
+		return false, nil
 	}
 
 	snapshot := &snapshotv1.VolumeSnapshot{}
 	if err := r.Get(ctx, types.NamespacedName{Namespace: volume.Namespace, Name: GetSanitizedImageNameFromVolume(volume)}, snapshot); err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get snapshot: %w", err)
+			return true, fmt.Errorf("unable to get snapshot: %w", err)
 		}
 		log.V(1).Info("Requested snapshot not found: create image pvc and snapshot it.")
-		return r.createSnapshot(ctx, log, volume)
+		return true, r.createSnapshot(ctx, log, volume)
 	}
 
-	volumeCapacity := volume.Spec.Resources[corev1alpha1.ResourceStorage]
-	if !pointer.BoolDeref(snapshot.Status.ReadyToUse, false) || snapshot.Status.RestoreSize == nil {
-		log.Info("Referenced snapshot not ready or RestoreSize not defined", "snapshotName", snapshot.Name)
-		return nil
+	if snapshot.Status == nil || !pointer.BoolDeref(snapshot.Status.ReadyToUse, false) {
+		log.Info("Referenced snapshot not ready", "snapshotName", snapshot.Name)
+		return true, nil
+	}
+
+	volumeCapacity, ok := volume.Spec.Resources[corev1alpha1.ResourceStorage]
+	if !ok {
+		log.Info("Volume resource storage not defined ", "snapshotName", snapshot.Name)
+		return true, fmt.Errorf("volume resource storage not defined")
+	}
+
+	if snapshot.Status.RestoreSize == nil {
+		log.Info("Snapshot RestoreSize not defined", "snapshotName", snapshot.Name)
+		return true, fmt.Errorf("snapshot restore size not defined")
 	}
 
 	volumeSizeBytes := volumeCapacity.Value()
@@ -368,7 +379,7 @@ func (r *VolumeReconciler) handleImagePopulation(ctx context.Context, log logr.L
 		r.Eventf(volume, corev1.EventTypeWarning, ReasonVolumeSizeToSmall, "Requested volume size %d is less than the size %d for the source snapshot %s", volumeSizeBytes, snapshot.Status.RestoreSize.Value(), snapshot.Name)
 	}
 
-	return nil
+	return false, nil
 }
 
 func getImageSize(ctx context.Context, volume *storagev1alpha1.Volume) (*resource.Quantity, error) {
