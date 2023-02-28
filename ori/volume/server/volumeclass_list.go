@@ -16,46 +16,14 @@ package server
 
 import (
 	"context"
-	"fmt"
 
-	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
-func (s *Server) convertOnmetalVolumeClass(volumeClass *storagev1alpha1.VolumeClass) (*ori.VolumeClass, error) {
-	tps := volumeClass.Capabilities.TPS()
-	iops := volumeClass.Capabilities.IOPS()
-
-	return &ori.VolumeClass{
-		Name: volumeClass.Name,
-		Capabilities: &ori.VolumeClassCapabilities{
-			Tps:  tps.Value(),
-			Iops: iops.Value(),
-		},
-	}, nil
-}
-
 func (s *Server) ListVolumeClasses(ctx context.Context, req *ori.ListVolumeClassesRequest) (*ori.ListVolumeClassesResponse, error) {
 	log := s.loggerFrom(ctx)
-
 	log.V(1).Info("Listing onmetal volume classes")
-	onmetalVolumeClassList := &storagev1alpha1.VolumeClassList{}
-	if err := s.client.List(ctx, onmetalVolumeClassList, s.volumeClassSelector); err != nil {
-		return nil, fmt.Errorf("error listing volume classes: %w", err)
-	}
-
-	var volumeClasses []*ori.VolumeClass
-	for _, onmetalVolumeClass := range onmetalVolumeClassList.Items {
-		volumeClass, err := s.convertOnmetalVolumeClass(&onmetalVolumeClass)
-		if err != nil {
-			return nil, fmt.Errorf("error converting onmetal volume class %s: %w", onmetalVolumeClass.Name, err)
-		}
-
-		volumeClasses = append(volumeClasses, volumeClass)
-	}
 
 	log.V(1).Info("Returning volume classes")
-	return &ori.ListVolumeClassesResponse{
-		VolumeClasses: volumeClasses,
-	}, nil
+	return &ori.ListVolumeClassesResponse{}, nil
 }
