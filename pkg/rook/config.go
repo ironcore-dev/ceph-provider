@@ -15,23 +15,12 @@
 package rook
 
 const (
-	ClusterIdDefaultValue                        = "rook-ceph"
-	MonitorConfigMapNameDefaultValue             = "rook-ceph-mon-endpoints"
-	MonitorConfigMapDataKeyDefaultValue          = "csi-cluster-config-json"
-	CSIRBDProvisionerSecretNameDefaultValue      = "rook-csi-rbd-provisioner"
-	CSIRBDNodeSecretNameDefaultValue             = "rook-csi-rbd-node"
-	StorageClassAllowVolumeExpansionDefaultValue = true
-	StorageClassFSTypeDefaultValue               = "ext4"
-	StorageClassImageFeaturesDefaultValue        = "layering,exclusive-lock,object-map,fast-diff"
-	StorageClassReclaimPolicyDefaultValue        = "Delete"
-	StorageClassVolumeBindingModeDefaultValue    = "Immediate"
-	CSIDriverNameDefaultValue                    = "rook-ceph.rbd.csi.ceph.com"
-	NamespaceDefaultValue                        = "rook-ceph"
-	EnableRBDStatsDefaultValue                   = false
-	BurstFactorDefaultValue                      = 10
-	BurstDurationInSecondsDefaultValue           = 15
-
-	BucketProvisionerDefaultValue = "rook-ceph.ceph.rook.io/bucket"
+	ClusterIdDefaultValue                 = "rook-ceph"
+	MonitorConfigMapNameDefaultValue      = "rook-ceph-mon-endpoints"
+	MonitorConfigMapDataKeyDefaultValue   = "csi-cluster-config-json"
+	StorageClassReclaimPolicyDefaultValue = "Delete"
+	NamespaceDefaultValue                 = "rook-ceph"
+	BucketProvisionerDefaultValue         = "rook-ceph.ceph.rook.io/bucket"
 )
 
 var (
@@ -39,23 +28,8 @@ var (
 )
 
 type Config struct {
-	//common config
 	ClusterId string
 	Namespace string
-
-	//volume config
-	StorageClassMountOptions         []string
-	MonitorConfigMapName             string
-	MonitorConfigMapDataKey          string
-	CSIRBDProvisionerSecretName      string
-	CSIRBDNodeSecretName             string
-	StorageClassAllowVolumeExpansion bool
-	StorageClassFSType               string
-	StorageClassImageFeatures        string
-	StorageClassReclaimPolicy        string
-	StorageClassVolumeBindingMode    string
-	CSIDriverName                    string
-	EnableRBDStats                   bool
 
 	DashboardInsecureSkipVerify    bool
 	DashboardUser                  string
@@ -63,31 +37,16 @@ type Config struct {
 	DashboardEndpoint              string
 	DashboardTokenRefreshInMinutes int
 
-	BurstFactor            int64
-	BurstDurationInSeconds int64
-
-	//bucket config
-	BucketProvisioner string
+	StorageClassReclaimPolicy string
+	BucketProvisioner         string
 }
 
 func NewConfigWithDefaults() *Config {
 	return &Config{
-		ClusterId:                        ClusterIdDefaultValue,
-		Namespace:                        NamespaceDefaultValue,
-		StorageClassMountOptions:         StorageClassMountOptionsDefaultValue,
-		MonitorConfigMapName:             MonitorConfigMapNameDefaultValue,
-		MonitorConfigMapDataKey:          MonitorConfigMapDataKeyDefaultValue,
-		CSIRBDProvisionerSecretName:      CSIRBDProvisionerSecretNameDefaultValue,
-		CSIRBDNodeSecretName:             CSIRBDNodeSecretNameDefaultValue,
-		StorageClassAllowVolumeExpansion: StorageClassAllowVolumeExpansionDefaultValue,
-		StorageClassFSType:               StorageClassFSTypeDefaultValue,
-		StorageClassImageFeatures:        StorageClassImageFeaturesDefaultValue,
-		StorageClassReclaimPolicy:        StorageClassReclaimPolicyDefaultValue,
-		StorageClassVolumeBindingMode:    StorageClassVolumeBindingModeDefaultValue,
-		CSIDriverName:                    CSIDriverNameDefaultValue,
-		EnableRBDStats:                   EnableRBDStatsDefaultValue,
-		BurstFactor:                      BurstFactorDefaultValue,
-		BurstDurationInSeconds:           BurstDurationInSecondsDefaultValue,
-		BucketProvisioner:                BucketProvisionerDefaultValue,
+		ClusterId: ClusterIdDefaultValue,
+		Namespace: NamespaceDefaultValue,
+
+		StorageClassReclaimPolicy: StorageClassReclaimPolicyDefaultValue,
+		BucketProvisioner:         BucketProvisionerDefaultValue,
 	}
 }

@@ -22,7 +22,6 @@ import (
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/pkg/rook"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,8 +50,6 @@ type BucketReconciler struct {
 	BucketPoolName string
 	BucketBaseUrl  string
 	RookConfig     *rook.Config
-
-	PoolUsage *prometheus.GaugeVec
 }
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=buckets,verbs=get;list;watch;create;update;patch;delete
