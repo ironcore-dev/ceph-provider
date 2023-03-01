@@ -13,7 +13,7 @@ require (
 	github.com/onmetal/onmetal-api v0.0.13-0.20230213145104-0cde7523c4fc
 	github.com/onmetal/onmetal-image v0.1.1
 	github.com/onsi/ginkgo/v2 v2.8.4
-	github.com/onsi/gomega v1.27.1
+	github.com/onsi/gomega v1.27.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rook/rook v1.9.0-beta.0
