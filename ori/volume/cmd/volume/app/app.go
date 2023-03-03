@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/onmetal/cephlet/ori/volume/provisioner"
 	"github.com/onmetal/cephlet/ori/volume/server"
 	"github.com/onmetal/onmetal-api/broker/common"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
@@ -35,6 +36,15 @@ type Options struct {
 
 	VolumeNameLabelName        string
 	PathAvailableVolumeClasses string
+
+	Ceph CephOptions
+}
+
+type CephOptions struct {
+	Monitors string
+	User     string
+	KeyFile  string
+	Pool     string
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -42,6 +52,11 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 	fs.StringVar(&o.VolumeNameLabelName, "volume-name-label-name", o.VolumeNameLabelName, "Label name to fetch VolumeName.")
 	fs.StringVar(&o.PathAvailableVolumeClasses, "available-volume-classes", o.PathAvailableVolumeClasses, "JSON File path of available volume classes.")
+
+	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
+	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
+	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "CephKeyFile.")
+	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
 }
 
 func Command() *cobra.Command {
@@ -75,10 +90,18 @@ func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 
+	provisioner := provisioner.New(&provisioner.Credentials{
+		Monitors: opts.Ceph.Monitors,
+		User:     opts.Ceph.User,
+		Keyfile:  opts.Ceph.KeyFile,
+	}, &provisioner.CephConfig{
+		Pool: opts.Ceph.Pool,
+	})
+
 	srv, err := server.New(server.Options{
 		PathAvailableVolumeClasses: opts.PathAvailableVolumeClasses,
 		VolumeNameLabelName:        opts.VolumeNameLabelName,
-	})
+	}, provisioner)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}

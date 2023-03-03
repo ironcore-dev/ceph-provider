@@ -143,37 +143,38 @@ func (s *Server) createCephVolume(ctx context.Context, log logr.Logger, volume *
 	c, cleanup := setupCleaner(ctx, log, &retErr)
 	defer cleanup()
 
-	if err := s.provisioner.Lock(); err != nil {
-		//TODO
-		return err
+	volumeName := volume.Requested.Name
+	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
+	if err := s.provisioner.Lock(volumeName); err != nil {
+		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.provisioner.Release()
+	defer s.provisioner.Release(volumeName)
 
+	log.V(2).Info("Check if volume mapping exists")
 	found, err := s.provisioner.MappingExists(ctx, volume)
 	if err != nil {
-		//TODO
-		return err
+		return fmt.Errorf("unable to fetch volume mapping: %w", err)
 	}
 
 	if found {
-		s.provisioner.UpdateCephImage(ctx)
-		return nil
+		return s.provisioner.UpdateCephImage(ctx, volume)
 	}
 
+	volume.ImageId = s.idGen.Generate()
+	log.V(2).Info("Provision ceph volume: Generated id.", "volumeName", volumeName, "volumeId", volume.ImageId)
+
 	if err := s.provisioner.PutMapping(ctx, volume); err != nil {
-		//TODO
-		return err
+		return fmt.Errorf("unable to write volume mapping: %w", err)
 	}
 	c.Add(func(ctx context.Context) error {
 		return s.provisioner.DeleteMapping(ctx, volume)
 	})
 
-	if err := s.provisioner.CreateCephImage(ctx); err != nil {
-		//TODO
-		return err
+	if err := s.provisioner.CreateCephImage(ctx, volume); err != nil {
+		return fmt.Errorf("unable to create ceph image: %w", err)
 	}
 	c.Add(func(ctx context.Context) error {
-		return s.provisioner.DeleteCephImage(ctx)
+		return s.provisioner.DeleteCephImage(ctx, volume)
 	})
 
 	c.Reset()
@@ -187,10 +188,12 @@ func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest)
 
 	cephVolume, err := s.getCephVolume(ctx, req.Volume)
 	if err != nil {
-		return nil, fmt.Errorf("error validating ceph volume config: %w", err)
+		return nil, fmt.Errorf("anable to get ceph volume config: %w", err)
 	}
 
-	_ = cephVolume
+	if err := s.createCephVolume(ctx, log, cephVolume); err != nil {
+		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
+	}
 
 	return &ori.CreateVolumeResponse{}, nil
 }

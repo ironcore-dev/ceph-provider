@@ -12,26 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package server
+package provisioner
 
-type CephVolume struct {
-	Requested Volume
+const (
+	OmapNameVolumesDefault  = "onmetal.csi.volumes"
+	OmapNameMappingsDefault = "onmetal.csi.mappings"
+)
 
-	//Persisted in ceph
-	ImageId   string
-	ImagePool string
+type CephConfig struct {
+	Pool string
+
+	OmapNameVolumes  string
+	OmapNameMappings string
 }
 
-type Volume struct {
-	Name string
-
-	Bytes uint64
-	IOPS  int64
-	TPS   int64
-
-	Image *Image
-}
-type Image struct {
-	Name  string
-	Bytes uint64
+func (c *CephConfig) Defaults() {
+	if c.OmapNameVolumes == "" {
+		c.OmapNameVolumes = OmapNameVolumesDefault
+	}
+	if c.OmapNameMappings == "" {
+		c.OmapNameMappings = OmapNameMappingsDefault
+	}
 }

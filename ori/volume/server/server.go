@@ -28,16 +28,16 @@ import (
 )
 
 type Provisioner interface {
-	Lock() error
-	Release() error
+	Lock(name string) error
+	Release(name string)
 
 	MappingExists(ctx context.Context, volume *CephVolume) (bool, error)
 	PutMapping(ctx context.Context, volume *CephVolume) error
 	DeleteMapping(ctx context.Context, volume *CephVolume) error
 
-	CreateCephImage(ctx context.Context) error
-	UpdateCephImage(ctx context.Context) error
-	DeleteCephImage(ctx context.Context) error
+	CreateCephImage(ctx context.Context, volume *CephVolume) error
+	UpdateCephImage(ctx context.Context, volume *CephVolume) error
+	DeleteCephImage(ctx context.Context, volume *CephVolume) error
 }
 
 type Server struct {
@@ -88,7 +88,7 @@ var _ ori.VolumeRuntimeServer = (*Server)(nil)
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
 
-func New(opts Options) (*Server, error) {
+func New(opts Options, provisioner Provisioner) (*Server, error) {
 	classes, err := ReadVolumeClasses(opts.PathAvailableVolumeClasses)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get volume classes: %w", err)
@@ -100,6 +100,7 @@ func New(opts Options) (*Server, error) {
 		idGen:                  opts.IDGen,
 		VolumeNameLabelName:    opts.VolumeNameLabelName,
 		AvailableVolumeClasses: classes,
+		provisioner:            provisioner,
 	}, nil
 }
 
