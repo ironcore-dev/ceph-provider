@@ -32,10 +32,16 @@ import (
 
 type Options struct {
 	Address string
+
+	VolumeNameLabelName        string
+	PathAvailableVolumeClasses string
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Address, "address", "/var/run/ori-volume.sock", "Address to listen on.")
+
+	fs.StringVar(&o.VolumeNameLabelName, "volume-name-label-name", o.VolumeNameLabelName, "Label name to fetch VolumeName.")
+	fs.StringVar(&o.PathAvailableVolumeClasses, "available-volume-classes", o.PathAvailableVolumeClasses, "JSON File path of available volume classes.")
 }
 
 func Command() *cobra.Command {
@@ -69,7 +75,10 @@ func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 
-	srv, err := server.New(server.Options{})
+	srv, err := server.New(server.Options{
+		PathAvailableVolumeClasses: opts.PathAvailableVolumeClasses,
+		VolumeNameLabelName:        opts.VolumeNameLabelName,
+	})
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}

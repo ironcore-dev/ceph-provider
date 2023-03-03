@@ -24,6 +24,13 @@ func (s *Server) ListVolumeClasses(ctx context.Context, req *ori.ListVolumeClass
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Listing onmetal volume classes")
 
+	var classes []*ori.VolumeClass
+	for _, class := range s.AvailableVolumeClasses {
+		classes = append(classes, &class)
+	}
+
 	log.V(1).Info("Returning volume classes")
-	return &ori.ListVolumeClassesResponse{}, nil
+	return &ori.ListVolumeClassesResponse{
+		VolumeClasses: classes,
+	}, nil
 }
