@@ -90,7 +90,7 @@ func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 
-	provisioner := provisioner.New(&provisioner.Credentials{
+	provisioner := provisioner.New(log.WithName("provisioner"), &provisioner.Credentials{
 		Monitors: opts.Ceph.Monitors,
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,

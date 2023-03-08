@@ -18,12 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/pkg/round"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	onmetalimage "github.com/onmetal/onmetal-image"
 	"github.com/onmetal/onmetal-image/oci/image"
 	"github.com/onmetal/onmetal-image/oci/remote"
+	"github.com/pkg/errors"
 )
 
 func (s *Server) validateName(volume *ori.Volume) (string, error) {
@@ -48,15 +50,15 @@ func (s *Server) validateVolumeClass(volume *ori.Volume) (*ori.VolumeClass, erro
 	return &class, nil
 }
 
-func (s *Server) validateSize(volume *ori.Volume, image *Image) (uint64, error) {
+func (s *Server) validateSize(volume *ori.Volume, image *PopulationImage) (uint64, error) {
 	if image != nil && volume.Spec.Resources.StorageBytes <= image.Bytes {
 		return 0, fmt.Errorf("volume size smaller than image")
 	}
 
-	return round.OffBytes(volume.Spec.Resources.StorageBytes), nil
+	return volume.Spec.Resources.StorageBytes, nil
 }
 
-func (s *Server) validateImage(ctx context.Context, volume *ori.Volume) (*Image, error) {
+func (s *Server) validateImage(ctx context.Context, volume *ori.Volume) (*PopulationImage, error) {
 	imageName := volume.GetSpec().GetImage()
 	if imageName == "" {
 		return nil, nil
@@ -88,14 +90,13 @@ func (s *Server) validateImage(ctx context.Context, volume *ori.Volume) (*Image,
 		return nil, fmt.Errorf("failed to get rootFS layer")
 	}
 
-	return &Image{
+	return &PopulationImage{
 		Name:  imageName,
 		Bytes: uint64(rootFSLayer.Descriptor().Size),
 	}, nil
 }
 
-func (s *Server) getCephVolume(ctx context.Context, oriVolume *ori.Volume) (*CephVolume, error) {
-	log := s.loggerFrom(ctx)
+func (s *Server) getAggregateVolume(ctx context.Context, log logr.Logger, oriVolume *ori.Volume) (*AggregateVolume, error) {
 	log.V(2).Info("Starting volume validation")
 	defer log.V(2).Info("Finished volume validation")
 
@@ -119,19 +120,20 @@ func (s *Server) getCephVolume(ctx context.Context, oriVolume *ori.Volume) (*Cep
 	if err != nil {
 		return nil, fmt.Errorf("invalid volume image: %w", err)
 	}
-	log.V(2).Info("Validated class")
+	log.V(2).Info("Validated image")
 
 	validatedSize, err := s.validateSize(oriVolume, validatedImage)
 	if err != nil {
 		return nil, fmt.Errorf("invalid volume size: %w", err)
 	}
-	log.V(2).Info("Validated class")
+	log.V(2).Info("Validated size")
 
-	return &CephVolume{
+	return &AggregateVolume{
 		Requested: Volume{
 			Name:  validatedName,
 			Image: validatedImage,
 			Bytes: validatedSize,
+			Class: validatedClass.Name,
 			IOPS:  validatedClass.GetCapabilities().GetIops(),
 			TPS:   validatedClass.GetCapabilities().GetIops(),
 		},
@@ -139,42 +141,66 @@ func (s *Server) getCephVolume(ctx context.Context, oriVolume *ori.Volume) (*Cep
 
 }
 
-func (s *Server) createCephVolume(ctx context.Context, log logr.Logger, volume *CephVolume) (retErr error) {
+func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregateVolume *AggregateVolume) (retErr error) {
 	c, cleanup := setupCleaner(ctx, log, &retErr)
 	defer cleanup()
 
-	volumeName := volume.Requested.Name
+	volumeName := aggregateVolume.Requested.Name
 	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
 	if err := s.provisioner.Lock(volumeName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
 	defer s.provisioner.Release(volumeName)
 
-	log.V(2).Info("Check if volume mapping exists")
-	found, err := s.provisioner.MappingExists(ctx, volume)
+	log.V(2).Info("Check if mapping exists")
+	imageName, found, err := s.provisioner.GetMapping(ctx, volumeName)
 	if err != nil {
 		return fmt.Errorf("unable to fetch volume mapping: %w", err)
 	}
 
 	if found {
-		return s.provisioner.UpdateCephImage(ctx, volume)
+		aggregateVolume.Provisioned.Name = imageName
+		if err := s.provisioner.GetCephImage(ctx, imageName, &aggregateVolume.Provisioned); err != nil {
+			if errors.Is(err, librbd.ErrNotFound) {
+				if err := s.provisioner.DeleteMapping(ctx, volumeName); err != nil {
+					return fmt.Errorf("unable to delete mapping: %w", err)
+				}
+
+				return fmt.Errorf("corrupted state since image is missing: deleted mapping")
+			}
+			return fmt.Errorf("unable to get ceph image: %w", err)
+		}
+		log.V(2).Info("Nothing updated since update is not supported: Returning found ceph image.")
+
+		return nil
 	}
 
-	volume.ImageId = s.idGen.Generate()
-	log.V(2).Info("Provision ceph volume: Generated id.", "volumeName", volumeName, "volumeId", volume.ImageId)
+	imageName = s.idGen.Generate()
+	aggregateVolume.Provisioned.Name = imageName
+	log.V(2).Info("Set image id.", "volumeName", volumeName, "volumeId", aggregateVolume.Provisioned.Name)
 
-	if err := s.provisioner.PutMapping(ctx, volume); err != nil {
+	aggregateVolume.Provisioned.Bytes = round.OffBytes(aggregateVolume.Requested.Bytes)
+	log.V(2).Info("Set image size.", "volumeName", volumeName, "requested", aggregateVolume.Requested.Bytes, "configured", aggregateVolume.Provisioned.Bytes)
+
+	aggregateVolume.Provisioned.Wwn, err = generateWWN()
+	if err != nil {
+		return fmt.Errorf("unable to generate wwn: %w", err)
+	}
+
+	aggregateVolume.Provisioned.Class = aggregateVolume.Requested.Class
+
+	if err := s.provisioner.PutMapping(ctx, volumeName, imageName); err != nil {
 		return fmt.Errorf("unable to write volume mapping: %w", err)
 	}
 	c.Add(func(ctx context.Context) error {
-		return s.provisioner.DeleteMapping(ctx, volume)
+		return s.provisioner.DeleteMapping(ctx, volumeName)
 	})
 
-	if err := s.provisioner.CreateCephImage(ctx, volume); err != nil {
+	if err := s.provisioner.CreateCephImage(ctx, aggregateVolume); err != nil {
 		return fmt.Errorf("unable to create ceph image: %w", err)
 	}
 	c.Add(func(ctx context.Context) error {
-		return s.provisioner.DeleteCephImage(ctx, volume)
+		return s.provisioner.DeleteCephImage(ctx, imageName)
 	})
 
 	c.Reset()
@@ -186,14 +212,21 @@ func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest)
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Validating volume request")
 
-	cephVolume, err := s.getCephVolume(ctx, req.Volume)
+	aggregateVolume, err := s.getAggregateVolume(ctx, log, req.Volume)
 	if err != nil {
 		return nil, fmt.Errorf("anable to get ceph volume config: %w", err)
 	}
 
-	if err := s.createCephVolume(ctx, log, cephVolume); err != nil {
+	if err := s.createCephImage(ctx, log, aggregateVolume); err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
-	return &ori.CreateVolumeResponse{}, nil
+	oriVolume, err := s.createOriVolume(ctx, log, &aggregateVolume.Provisioned)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
+	}
+
+	return &ori.CreateVolumeResponse{
+		Volume: oriVolume,
+	}, nil
 }

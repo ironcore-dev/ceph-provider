@@ -18,15 +18,21 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ceph/go-ceph/rados"
+	librbd "github.com/ceph/go-ceph/rbd"
+	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/ori/volume/server"
 	"github.com/onmetal/onmetal-image/utils/sets"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/util/json"
 )
 
-func New(auth *Credentials, config *CephConfig) *Provisioner {
+func New(log logr.Logger, auth *Credentials, config *CephConfig) *Provisioner {
 	config.Defaults()
 	return &Provisioner{
+		log:  log,
 		auth: auth,
 		cfg:  config,
 
@@ -38,6 +44,7 @@ func New(auth *Credentials, config *CephConfig) *Provisioner {
 }
 
 type Provisioner struct {
+	log  logr.Logger
 	auth *Credentials
 	cfg  *CephConfig
 
@@ -48,53 +55,49 @@ type Provisioner struct {
 	inProgressLock sync.Mutex
 }
 
-func (p *Provisioner) Lock(name string) error {
+func (p *Provisioner) Lock(volumeName string) error {
 	p.inProgressLock.Lock()
 	defer p.inProgressLock.Unlock()
 
-	if p.inProgress.Has(name) {
-		return fmt.Errorf("failed to acquire lock: %s already in use", name)
+	if p.inProgress.Has(volumeName) {
+		return fmt.Errorf("failed to acquire lock: %s already in use", volumeName)
 	}
 
-	p.inProgress.Insert(name)
+	p.inProgress.Insert(volumeName)
 
 	return nil
 }
 
-func (p *Provisioner) Release(name string) {
+func (p *Provisioner) Monitors() string {
+	return p.auth.Monitors
+}
+
+func (p *Provisioner) Release(volumeName string) {
 	p.inProgressLock.Lock()
 	defer p.inProgressLock.Unlock()
 
-	p.inProgress.Delete(name)
+	p.inProgress.Delete(volumeName)
 }
 
-func (p *Provisioner) MappingExists(ctx context.Context, volume *server.CephVolume) (bool, error) {
-	if err := p.reconnect(ctx); err != nil {
-		return false, fmt.Errorf("unable to reconnect: %w", err)
-	}
-
-	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+func (p *Provisioner) GetMapping(ctx context.Context, volumeName string) (string, bool, error) {
+	idMap, err := p.GetAllMappings(ctx)
 	if err != nil {
-		return false, fmt.Errorf("unable to get io context: %w", err)
-	}
-	defer ioCtx.Destroy()
-
-	idMap, err := ioCtx.GetAllOmapValues(p.cfg.OmapNameMappings, "", volume.Requested.Name, 10)
-	if err != nil {
-		return false, fmt.Errorf("unable to get omap: %w", err)
+		return "", false, fmt.Errorf("unable to get omap: %w", err)
 	}
 
-	id, found := idMap[volume.Requested.Name]
+	if idMap == nil {
+		return "", false, nil
+	}
+
+	id, found := idMap[volumeName]
 	if !found {
-		return false, nil
+		return "", false, nil
 	}
 
-	volume.ImageId = string(id)
-
-	return true, nil
+	return id, true, nil
 }
 
-func (p *Provisioner) PutMapping(ctx context.Context, volume *server.CephVolume) error {
+func (p *Provisioner) PutMapping(ctx context.Context, volumeName, imageName string) error {
 	if err := p.reconnect(ctx); err != nil {
 		return fmt.Errorf("unable to reconnect: %w", err)
 	}
@@ -106,7 +109,7 @@ func (p *Provisioner) PutMapping(ctx context.Context, volume *server.CephVolume)
 	defer ioCtx.Destroy()
 
 	if err := ioCtx.SetOmap(p.cfg.OmapNameMappings, map[string][]byte{
-		volume.Requested.Name: []byte(volume.ImageId),
+		volumeName: []byte(imageName),
 	}); err != nil {
 		return fmt.Errorf("unablet to set omap values: %w", err)
 	}
@@ -114,7 +117,7 @@ func (p *Provisioner) PutMapping(ctx context.Context, volume *server.CephVolume)
 	return nil
 }
 
-func (p *Provisioner) DeleteMapping(ctx context.Context, volume *server.CephVolume) error {
+func (p *Provisioner) DeleteMapping(ctx context.Context, volumeName string) error {
 	if err := p.reconnect(ctx); err != nil {
 		return fmt.Errorf("unable to reconnect: %w", err)
 	}
@@ -125,19 +128,16 @@ func (p *Provisioner) DeleteMapping(ctx context.Context, volume *server.CephVolu
 	}
 	defer ioCtx.Destroy()
 
-	if err := ioCtx.RmOmapKeys(p.cfg.OmapNameMappings, []string{volume.Requested.Name}); err != nil {
-		return fmt.Errorf("unablet to delete mapping omap value: %w", err)
+	if err := ioCtx.RmOmapKeys(p.cfg.OmapNameMappings, []string{volumeName}); err != nil {
+		return fmt.Errorf("unable to delete mapping omap value: %w", err)
 	}
 
 	return nil
 }
 
-func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.CephVolume) error {
-	//TODO implement me
-	return fmt.Errorf("implement me")
-}
+func (p *Provisioner) GetCephImage(ctx context.Context, imageName string, image *server.Image) error {
+	log := p.log.WithValues("imageName", imageName)
 
-func (p *Provisioner) UpdateCephImage(ctx context.Context, volume *server.CephVolume) error {
 	if err := p.reconnect(ctx); err != nil {
 		return fmt.Errorf("unable to reconnect: %w", err)
 	}
@@ -148,18 +148,202 @@ func (p *Provisioner) UpdateCephImage(ctx context.Context, volume *server.CephVo
 	}
 	defer ioCtx.Destroy()
 
-	attributeMap, err := ioCtx.GetAllOmapValues(p.cfg.OmapNameVolumes, "", volume.ImageId, 10)
+	img, err := librbd.OpenImageReadOnly(ioCtx, imageName, librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+	defer img.Close()
+
+	created, err := img.GetCreateTimestamp()
+	if err != nil {
+		return fmt.Errorf("failed to get rbd image created timestamp: %w", err)
+	}
+	log.V(2).Info("Fetched created timestamp")
+
+	attributes, err := ioCtx.GetAllOmapValues(p.cfg.OmapVolumeAttributesKey(imageName), "", "", 10)
 	if err != nil {
 		return fmt.Errorf("unable to get attribute omap: %w", err)
 	}
+	log.V(2).Info("Fetched attributes")
 
-	_ = attributeMap
+	imageId, ok := attributes[p.cfg.OmapImageIdKey]
+	if !ok {
+		return fmt.Errorf("unable to get omap attribute: %s", p.cfg.OmapImageIdKey)
+	}
+	log.V(2).Info("Found image id", "imageId", imageId)
+
+	imageWwn, ok := attributes[p.cfg.OmapWwnKey]
+	if !ok {
+		return fmt.Errorf("unable to get omap attribute: %s", p.cfg.OmapWwnKey)
+	}
+	log.V(2).Info("Found image wwn", "imageWwn", imageWwn)
+
+	imageClass, ok := attributes[p.cfg.OmapClassKey]
+	if !ok {
+		return fmt.Errorf("unable to get omap attribute: %s", p.cfg.OmapClassKey)
+	}
+	log.V(2).Info("Found image class", "imageClass", imageClass)
+
+	populatedImage, _ := attributes[p.cfg.OmapPopulatedImageKey]
+	log.V(2).Info("Found populated image", "populatedImage", populatedImage)
+
+	image.Name = imageName
+	image.Id = string(imageId)
+	image.Wwn = string(imageWwn)
+	image.Class = string(imageClass)
+	image.PopulatedImage = string(populatedImage)
+	image.Created = time.Unix(created.Sec, created.Nsec)
+
 	return nil
 }
 
-func (p *Provisioner) DeleteCephImage(ctx context.Context, volume *server.CephVolume) error {
-	//TODO implement me
-	return fmt.Errorf("implement me")
+func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.AggregateVolume) error {
+	log := p.log.WithValues("imageName", volume.Provisioned.Name)
+
+	if err := p.reconnect(ctx); err != nil {
+		return fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	options := librbd.NewRbdImageOptions()
+	defer options.Destroy()
+
+	if err := options.SetString(librbd.RbdImageOptionDataPool, p.cfg.Pool); err != nil {
+		return fmt.Errorf("failed to set data pool: %w", err)
+	}
+	log.V(2).Info("Configured pool", "pool", p.cfg.Pool)
+
+	if err = librbd.CreateImage(ioCtx, volume.Provisioned.Name, volume.Provisioned.Bytes, options); err != nil {
+		return fmt.Errorf("failed to create rbd image: %w", err)
+	}
+	log.V(2).Info("Created image", "bytes", volume.Provisioned.Bytes)
+
+	img, err := librbd.OpenImageReadOnly(ioCtx, volume.Provisioned.Name, librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+	defer img.Close()
+
+	imageId, err := img.GetId()
+	if err != nil {
+		return fmt.Errorf("failed to fetch rbd image id: %w", err)
+	}
+
+	created, err := img.GetCreateTimestamp()
+	if err != nil {
+		return fmt.Errorf("failed to get rbd image created timestamp: %w", err)
+	}
+	volume.Provisioned.Created = time.Unix(created.Sec, created.Nsec)
+
+	attributes := map[string][]byte{
+		p.cfg.OmapImageIdKey:    []byte(imageId),
+		p.cfg.OmapImageNameKey:  []byte(volume.Provisioned.Name),
+		p.cfg.OmapVolumeNameKey: []byte(volume.Requested.Name),
+		p.cfg.OmapWwnKey:        []byte(volume.Provisioned.Wwn),
+		p.cfg.OmapClassKey:      []byte(volume.Requested.Class),
+	}
+	if volume.Requested.Image != nil {
+		attributes[p.cfg.OmapPopulatedImageKey] = []byte(volume.Requested.Image.Name)
+	}
+
+	if err := ioCtx.SetOmap(p.cfg.OmapVolumeAttributesKey(volume.Provisioned.Name), attributes); err != nil {
+		return fmt.Errorf("unablet to set omap values: %w", err)
+	}
+	log.V(2).Info("Set image attributes", "omap", p.cfg.OmapVolumeAttributesKey(volume.Provisioned.Name))
+
+	return nil
+}
+
+func (p *Provisioner) GetAllMappings(ctx context.Context) (map[string]string, error) {
+	if err := p.reconnect(ctx); err != nil {
+		return nil, fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	idMap, err := ioCtx.GetAllOmapValues(p.cfg.OmapNameMappings, "", "", 10)
+	if err != nil {
+		if errors.Is(err, rados.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("unable to get omap: %w", err)
+	}
+
+	result := map[string]string{}
+	for volumeName, imageName := range idMap {
+		result[volumeName] = string(imageName)
+	}
+
+	return result, nil
+}
+
+type fetchAuthResponse struct {
+	Key string `json:"key"`
+}
+
+func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (string, string, error) {
+	if err := p.reconnect(ctx); err != nil {
+		return "", "", fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	cmd1, err := json.Marshal(map[string]string{
+		"prefix": "auth get-key",
+		"entity": p.cfg.Client,
+		"format": "json",
+	})
+
+	data, _, err := p.conn.MonCommand(cmd1)
+	if err != nil {
+		return "", "", fmt.Errorf("unable to get io context: %w", err)
+	}
+
+	response := fetchAuthResponse{}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return "", "", fmt.Errorf("unable to anmarshal response: %w", err)
+	}
+
+	return p.cfg.Client, response.Key, nil
+}
+
+func (p *Provisioner) DeleteCephImage(ctx context.Context, imageName string) error {
+	log := p.log.WithValues("imageName", imageName)
+
+	if err := p.reconnect(ctx); err != nil {
+		return fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	if err := ioCtx.Delete(p.cfg.OmapVolumeAttributesKey(imageName)); err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return err
+		}
+		log.V(2).Info("Image attributes already deleted", "omap", p.cfg.OmapVolumeAttributesKey(imageName))
+	}
+	log.V(2).Info("Image attributes deleted", "name", p.cfg.OmapVolumeAttributesKey(imageName))
+
+	if err := librbd.RemoveImage(ioCtx, imageName); err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return err
+		}
+		log.V(2).Info("Image already deleted")
+	}
+	log.V(2).Info("Image deleted")
+
+	return nil
 }
 
 func (p *Provisioner) reconnect(ctx context.Context) error {

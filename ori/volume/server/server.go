@@ -31,13 +31,17 @@ type Provisioner interface {
 	Lock(name string) error
 	Release(name string)
 
-	MappingExists(ctx context.Context, volume *CephVolume) (bool, error)
-	PutMapping(ctx context.Context, volume *CephVolume) error
-	DeleteMapping(ctx context.Context, volume *CephVolume) error
+	PutMapping(ctx context.Context, volumeName, imageName string) error
+	DeleteMapping(ctx context.Context, volumeName string) error
+	GetMapping(ctx context.Context, volumeName string) (string, bool, error)
+	GetAllMappings(ctx context.Context) (map[string]string, error)
 
-	CreateCephImage(ctx context.Context, volume *CephVolume) error
-	UpdateCephImage(ctx context.Context, volume *CephVolume) error
-	DeleteCephImage(ctx context.Context, volume *CephVolume) error
+	GetCephImage(ctx context.Context, imageName string, image *Image) error
+	CreateCephImage(ctx context.Context, volume *AggregateVolume) error
+	DeleteCephImage(ctx context.Context, imageName string) error
+	FetchAuth(ctx context.Context, volume *Image) (string, string, error)
+
+	Monitors() string
 }
 
 type Server struct {
