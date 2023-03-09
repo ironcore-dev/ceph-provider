@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
-      - run: apt update  && apt install -y libcephfs-dev librbd-dev librados-dev
+      - run: sudo apt update  && sudo apt install -y libcephfs-dev librbd-dev librados-dev
       - uses: actions/checkout@v3
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
