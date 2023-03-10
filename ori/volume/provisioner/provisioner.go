@@ -184,7 +184,7 @@ func (p *Provisioner) GetCephImage(ctx context.Context, imageName string, image 
 	}
 	log.V(2).Info("Found image class", "imageClass", imageClass)
 
-	populatedImage, _ := attributes[p.cfg.OmapPopulatedImageKey]
+	populatedImage := attributes[p.cfg.OmapPopulatedImageKey]
 	log.V(2).Info("Found populated image", "populatedImage", populatedImage)
 
 	image.Name = imageName
@@ -300,6 +300,9 @@ func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (strin
 		"entity": p.cfg.Client,
 		"format": "json",
 	})
+	if err != nil {
+		return "", "", fmt.Errorf("unable to marshal command: %w", err)
+	}
 
 	data, _, err := p.conn.MonCommand(cmd1)
 	if err != nil {
@@ -308,7 +311,7 @@ func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (strin
 
 	response := fetchAuthResponse{}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return "", "", fmt.Errorf("unable to anmarshal response: %w", err)
+		return "", "", fmt.Errorf("unable to unmarshal response: %w", err)
 	}
 
 	return p.cfg.Client, response.Key, nil
