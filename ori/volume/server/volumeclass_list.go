@@ -26,6 +26,7 @@ func (s *Server) ListVolumeClasses(ctx context.Context, req *ori.ListVolumeClass
 
 	var classes []*ori.VolumeClass
 	for _, class := range s.AvailableVolumeClasses {
+		log.V(2).Info("Found volume class", "class", class.Name)
 		classes = append(classes, &class)
 	}
 

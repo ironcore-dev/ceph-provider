@@ -24,6 +24,7 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/ori/volume/server"
+	"github.com/onmetal/cephlet/pkg/limits"
 	"github.com/onmetal/onmetal-image/utils/sets"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -193,6 +194,7 @@ func (p *Provisioner) GetCephImage(ctx context.Context, imageName string, image 
 	image.Class = string(imageClass)
 	image.PopulatedImage = string(populatedImage)
 	image.Created = time.Unix(created.Sec, created.Nsec)
+	image.Pool = p.cfg.Pool
 
 	return nil
 }
@@ -223,7 +225,7 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 	}
 	log.V(2).Info("Created image", "bytes", volume.Provisioned.Bytes)
 
-	img, err := librbd.OpenImageReadOnly(ioCtx, volume.Provisioned.Name, librbd.NoSnapshot)
+	img, err := librbd.OpenImage(ioCtx, volume.Provisioned.Name, librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
@@ -240,6 +242,8 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 	}
 	volume.Provisioned.Created = time.Unix(created.Sec, created.Nsec)
 
+	volume.Provisioned.Pool = p.cfg.Pool
+
 	attributes := map[string][]byte{
 		p.cfg.OmapImageIdKey:    []byte(imageId),
 		p.cfg.OmapImageNameKey:  []byte(volume.Provisioned.Name),
@@ -255,6 +259,15 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 		return fmt.Errorf("unablet to set omap values: %w", err)
 	}
 	log.V(2).Info("Set image attributes", "omap", p.cfg.OmapVolumeAttributesKey(volume.Provisioned.Name))
+
+	calculatedLimits := limits.Calculate(volume.Requested.IOPS, volume.Requested.TPS, p.cfg.BurstFactor, p.cfg.BurstDurationInSeconds)
+	for limit, value := range calculatedLimits.String() {
+		if err := img.SetMetadata(fmt.Sprintf("%s%s", p.cfg.LimitMetadataPrefix, limit), value); err != nil {
+			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
+		}
+		log.V(3).Info("Set image limit", "limit", limit, "value", value)
+	}
+	log.V(2).Info("Successfully configured all limits")
 
 	return nil
 }
@@ -306,7 +319,7 @@ func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (strin
 
 	data, _, err := p.conn.MonCommand(cmd1)
 	if err != nil {
-		return "", "", fmt.Errorf("unable to get io context: %w", err)
+		return "", "", fmt.Errorf("failed to execute mon command: %w", err)
 	}
 
 	response := fetchAuthResponse{}

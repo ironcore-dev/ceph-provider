@@ -114,7 +114,7 @@ func (s *Server) createOriVolumeAccess(ctx context.Context, log logr.Logger, ima
 		Handle: image.Wwn,
 		Attributes: map[string]string{
 			MonitorsKey: s.provisioner.Monitors(),
-			ImageKey:    image.Name,
+			ImageKey:    fmt.Sprintf("%s/%s", image.Pool, image.Name),
 		},
 		SecretData: map[string][]byte{
 			UserIDKey:  []byte(user),

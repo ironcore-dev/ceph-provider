@@ -21,17 +21,23 @@ const (
 	OmapNameMappingsDefault = "onmetal.csi.mappings"
 	ClientDefault           = "client.volumes-ceph"
 
-	OmapImageIdDefaultKey        = "imageId"
-	OmapImageNameDefaultKey      = "imageName"
-	OmapVolumeNameDefaultKey     = "volumeName"
-	OmapWwnDefaultKey            = "wwn"
-	OmapClassDefaultKey          = "class"
-	OmapPopulatedImageDefaultKey = "populatedImage"
+	OmapImageIdKeyDefault        = "imageId"
+	OmapImageNameKeyDefault      = "imageName"
+	OmapVolumeNameKeyDefault     = "volumeName"
+	OmapWwnKeyDefault            = "wwn"
+	OmapClassKeyDefault          = "class"
+	OmapPopulatedImageKeyDefault = "populatedImage"
+
+	LimitMetadataPrefixDefault = "conf_"
 )
 
 type CephConfig struct {
 	Pool   string
 	Client string
+
+	//Limits
+	BurstFactor            int64
+	BurstDurationInSeconds int64
 
 	OmapNameVolumes  string
 	OmapNameMappings string
@@ -42,6 +48,8 @@ type CephConfig struct {
 	OmapWwnKey            string
 	OmapClassKey          string
 	OmapPopulatedImageKey string
+
+	LimitMetadataPrefix string
 }
 
 func (c *CephConfig) Defaults() {
@@ -56,27 +64,31 @@ func (c *CephConfig) Defaults() {
 	}
 
 	if c.OmapImageIdKey == "" {
-		c.OmapImageIdKey = OmapImageIdDefaultKey
+		c.OmapImageIdKey = OmapImageIdKeyDefault
 	}
 
 	if c.OmapImageNameKey == "" {
-		c.OmapImageNameKey = OmapImageNameDefaultKey
+		c.OmapImageNameKey = OmapImageNameKeyDefault
 	}
 
 	if c.OmapVolumeNameKey == "" {
-		c.OmapVolumeNameKey = OmapVolumeNameDefaultKey
+		c.OmapVolumeNameKey = OmapVolumeNameKeyDefault
 	}
 
 	if c.OmapWwnKey == "" {
-		c.OmapWwnKey = OmapWwnDefaultKey
+		c.OmapWwnKey = OmapWwnKeyDefault
 	}
 
 	if c.OmapClassKey == "" {
-		c.OmapClassKey = OmapClassDefaultKey
+		c.OmapClassKey = OmapClassKeyDefault
 	}
 
 	if c.OmapPopulatedImageKey == "" {
-		c.OmapPopulatedImageKey = OmapPopulatedImageDefaultKey
+		c.OmapPopulatedImageKey = OmapPopulatedImageKeyDefault
+	}
+
+	if c.LimitMetadataPrefix == "" {
+		c.LimitMetadataPrefix = LimitMetadataPrefixDefault
 	}
 }
 

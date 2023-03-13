@@ -45,6 +45,14 @@ type CephOptions struct {
 	User     string
 	KeyFile  string
 	Pool     string
+
+	BurstFactor            int64
+	BurstDurationInSeconds int64
+}
+
+func (o *Options) Defaults() {
+	o.Ceph.BurstFactor = 10
+	o.Ceph.BurstDurationInSeconds = 15
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -53,10 +61,20 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.VolumeNameLabelName, "volume-name-label-name", o.VolumeNameLabelName, "Label name to fetch VolumeName.")
 	fs.StringVar(&o.PathAvailableVolumeClasses, "available-volume-classes", o.PathAvailableVolumeClasses, "JSON File path of available volume classes.")
 
+	fs.Int64Var(&o.Ceph.BurstFactor, "limits-burst-factor", o.Ceph.BurstFactor, "Defines the factor to calculate the burst limits.")
+	fs.Int64Var(&o.Ceph.BurstDurationInSeconds, "limits-burst-duration", o.Ceph.BurstDurationInSeconds, "Defines the burst duration in seconds.")
+
 	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "CephKeyFile.")
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
+}
+
+func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
+	_ = cmd.MarkFlagRequired("available-volume-classes")
+	_ = cmd.MarkFlagRequired("ceph-monitors")
+	_ = cmd.MarkFlagRequired("ceph-key-file")
+	_ = cmd.MarkFlagRequired("ceph-pool")
 }
 
 func Command() *cobra.Command {
@@ -81,7 +99,9 @@ func Command() *cobra.Command {
 	zapOpts.BindFlags(goFlags)
 	cmd.PersistentFlags().AddGoFlagSet(goFlags)
 
+	opts.Defaults()
 	opts.AddFlags(cmd.Flags())
+	opts.MarkFlagsRequired(cmd)
 
 	return cmd
 }
@@ -95,7 +115,9 @@ func Run(ctx context.Context, opts Options) error {
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,
 	}, &provisioner.CephConfig{
-		Pool: opts.Ceph.Pool,
+		Pool:                   opts.Ceph.Pool,
+		BurstFactor:            opts.Ceph.BurstFactor,
+		BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
 	})
 
 	srv, err := server.New(server.Options{
