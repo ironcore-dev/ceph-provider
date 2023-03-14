@@ -141,6 +141,45 @@ func (s *Server) getAggregateVolume(ctx context.Context, log logr.Logger, oriVol
 
 }
 
+func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, aggregateVolume *AggregateVolume) (retErr error) {
+	c, cleanup := setupCleaner(ctx, log, &retErr)
+	defer cleanup()
+
+	osImageName := aggregateVolume.Requested.Image.Name
+	log.V(2).Info("Try to acquire lock for volume", "osImageName", osImageName)
+	if err := s.provisioner.Lock(osImageName); err != nil {
+		return fmt.Errorf("unable to acquire lock: %w", err)
+	}
+	defer s.provisioner.Release(osImageName)
+
+	found, err := s.provisioner.OsImageExists(ctx, osImageName)
+	if err != nil {
+		return fmt.Errorf("failed to fetch os image: %w", err)
+	}
+
+	if found {
+		log.V(2).Info("Found os image, skip creation", "osImageName", osImageName)
+		aggregateVolume.Provisioned.PopulatedImage = osImageName
+		return nil
+	}
+
+	log.V(2).Info("Create os image")
+	if err := s.provisioner.CreateOSImage(ctx, aggregateVolume); err != nil {
+		return fmt.Errorf("failed to create os image: %w", err)
+	}
+	log.V(2).Info("Created os image")
+
+	c.Add(func(ctx context.Context) error {
+		log.V(2).Info("Delete os image")
+		//TODO delete
+		return nil
+	})
+
+	c.Reset()
+
+	return
+}
+
 func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregateVolume *AggregateVolume) (retErr error) {
 	c, cleanup := setupCleaner(ctx, log, &retErr)
 	defer cleanup()
@@ -151,6 +190,12 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
 	defer s.provisioner.Release(volumeName)
+
+	if aggregateVolume.Requested.Image != nil {
+		if err := s.prepareOSImage(ctx, log, aggregateVolume); err != nil {
+			return fmt.Errorf("err: %w", err)
+		}
+	}
 
 	log.V(2).Info("Check if mapping exists")
 	imageName, found, err := s.provisioner.GetMapping(ctx, volumeName)

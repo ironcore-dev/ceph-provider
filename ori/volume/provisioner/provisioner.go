@@ -25,6 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/ori/volume/server"
 	"github.com/onmetal/cephlet/pkg/limits"
+	"github.com/onmetal/cephlet/pkg/populate"
 	"github.com/onmetal/onmetal-image/utils/sets"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -199,6 +200,85 @@ func (p *Provisioner) GetCephImage(ctx context.Context, imageName string, image 
 	return nil
 }
 
+func (p *Provisioner) OsImageExists(ctx context.Context, imageName string) (bool, error) {
+	log := p.log.WithValues("osImageName", imageName)
+
+	if err := p.reconnect(ctx); err != nil {
+		return false, fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return false, fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	log.V(2).Info("Try to open os image", "osImageName", imageName)
+	img, err := librbd.OpenImageReadOnly(ioCtx, imageName, p.cfg.OsImageSnapshotVersion)
+	if err != nil {
+		if errors.Is(err, librbd.ErrNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to open rbd image: %w", err)
+	}
+	defer img.Close()
+
+	log.V(2).Info("Found os image", "osImageName", imageName, "snapshot", p.cfg.OsImageSnapshotVersion)
+
+	return true, nil
+}
+
+func (p *Provisioner) CreateOSImage(ctx context.Context, volume *server.AggregateVolume) error {
+	log := p.log.WithValues("osImageName", volume.Requested.Image.Name)
+
+	if err := p.reconnect(ctx); err != nil {
+		return fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	options := librbd.NewRbdImageOptions()
+	defer options.Destroy()
+
+	//TODO: different pool for OS images?
+	if err := options.SetString(librbd.RbdImageOptionDataPool, p.cfg.Pool); err != nil {
+		return fmt.Errorf("failed to set data pool: %w", err)
+	}
+	log.V(2).Info("Configured pool", "pool", p.cfg.Pool)
+
+	if err = librbd.CreateImage(ioCtx, volume.Requested.Image.Name, volume.Requested.Image.Bytes, options); err != nil {
+		return fmt.Errorf("failed to create rbd image: %w", err)
+	}
+	log.V(2).Info("Created image", "bytes", volume.Requested.Image.Bytes)
+
+	img, err := librbd.OpenImage(ioCtx, volume.Requested.Image.Name, librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+	defer img.Close()
+
+	if err := populate.Image(ctx, log, volume.Requested.Image.Name, img); err != nil {
+		return fmt.Errorf("failed to populate os image: %w", err)
+	}
+	log.V(2).Info("Populated os image on rbd image", "os image", volume.Requested.Image.Name)
+
+	imgSnap, err := img.CreateSnapshot(p.cfg.OsImageSnapshotVersion)
+	if err != nil {
+		return fmt.Errorf("unable to create snapshot: %w", err)
+	}
+
+	if err := imgSnap.Protect(); err != nil {
+		return fmt.Errorf("unable to protect snapshot: %w", err)
+	}
+
+	volume.Provisioned.PopulatedImage = volume.Requested.Image.Name
+	return nil
+}
+
 func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.AggregateVolume) error {
 	log := p.log.WithValues("imageName", volume.Provisioned.Name)
 
@@ -220,16 +300,37 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 	}
 	log.V(2).Info("Configured pool", "pool", p.cfg.Pool)
 
-	if err = librbd.CreateImage(ioCtx, volume.Provisioned.Name, volume.Provisioned.Bytes, options); err != nil {
-		return fmt.Errorf("failed to create rbd image: %w", err)
+	if volume.Requested.Image != nil {
+		ioCtx2, err := p.conn.OpenIOContext(p.cfg.Pool)
+		if err != nil {
+			return fmt.Errorf("unable to get io context: %w", err)
+		}
+		defer ioCtx2.Destroy()
+
+		if err = librbd.CloneImage(ioCtx2, volume.Provisioned.PopulatedImage, p.cfg.OsImageSnapshotVersion, ioCtx, volume.Provisioned.Name, options); err != nil {
+			return fmt.Errorf("failed to clone rbd image: %w", err)
+		}
+
+		log.V(2).Info("Cloned image")
+	} else {
+		if err = librbd.CreateImage(ioCtx, volume.Provisioned.Name, volume.Provisioned.Bytes, options); err != nil {
+			return fmt.Errorf("failed to create rbd image: %w", err)
+		}
+		log.V(2).Info("Created image", "bytes", volume.Provisioned.Bytes)
 	}
-	log.V(2).Info("Created image", "bytes", volume.Provisioned.Bytes)
 
 	img, err := librbd.OpenImage(ioCtx, volume.Provisioned.Name, librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
 	defer img.Close()
+
+	if volume.Requested.Image != nil {
+		if err := img.Resize(volume.Provisioned.Bytes); err != nil {
+			return fmt.Errorf("failed to resize rbd image: %w", err)
+		}
+		log.V(2).Info("Resized cloned image", "bytes", volume.Provisioned.Bytes)
+	}
 
 	imageId, err := img.GetId()
 	if err != nil {

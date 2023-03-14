@@ -36,6 +36,9 @@ type Provisioner interface {
 	GetMapping(ctx context.Context, volumeName string) (string, bool, error)
 	GetAllMappings(ctx context.Context) (map[string]string, error)
 
+	OsImageExists(ctx context.Context, imageName string) (bool, error)
+	CreateOSImage(ctx context.Context, volume *AggregateVolume) error
+
 	GetCephImage(ctx context.Context, imageName string, image *Image) error
 	CreateCephImage(ctx context.Context, volume *AggregateVolume) error
 	DeleteCephImage(ctx context.Context, imageName string) error

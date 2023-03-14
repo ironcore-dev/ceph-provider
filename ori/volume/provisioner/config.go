@@ -29,6 +29,8 @@ const (
 	OmapPopulatedImageKeyDefault = "populatedImage"
 
 	LimitMetadataPrefixDefault = "conf_"
+
+	OsImageSnapshotVersionDefault = "v1"
 )
 
 type CephConfig struct {
@@ -50,6 +52,8 @@ type CephConfig struct {
 	OmapPopulatedImageKey string
 
 	LimitMetadataPrefix string
+
+	OsImageSnapshotVersion string
 }
 
 func (c *CephConfig) Defaults() {
@@ -89,6 +93,10 @@ func (c *CephConfig) Defaults() {
 
 	if c.LimitMetadataPrefix == "" {
 		c.LimitMetadataPrefix = LimitMetadataPrefixDefault
+	}
+
+	if c.OsImageSnapshotVersion == "" {
+		c.OsImageSnapshotVersion = OsImageSnapshotVersionDefault
 	}
 }
 
