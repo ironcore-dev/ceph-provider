@@ -17,6 +17,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,7 +114,7 @@ func (p *Provisioner) PutMapping(ctx context.Context, volumeName, imageName stri
 	if err := ioCtx.SetOmap(p.cfg.OmapNameMappings, map[string][]byte{
 		volumeName: []byte(imageName),
 	}); err != nil {
-		return fmt.Errorf("unablet to set omap values: %w", err)
+		return fmt.Errorf("unable to set omap values: %w", err)
 	}
 
 	return nil
@@ -201,8 +202,6 @@ func (p *Provisioner) GetCephImage(ctx context.Context, imageName string, image 
 }
 
 func (p *Provisioner) OsImageExists(ctx context.Context, imageName string) (bool, error) {
-	log := p.log.WithValues("osImageName", imageName)
-
 	if err := p.reconnect(ctx); err != nil {
 		return false, fmt.Errorf("unable to reconnect: %w", err)
 	}
@@ -213,19 +212,17 @@ func (p *Provisioner) OsImageExists(ctx context.Context, imageName string) (bool
 	}
 	defer ioCtx.Destroy()
 
-	log.V(2).Info("Try to open os image", "osImageName", imageName)
-	img, err := librbd.OpenImageReadOnly(ioCtx, imageName, p.cfg.OsImageSnapshotVersion)
+	idMap, err := ioCtx.GetAllOmapValues("p.cfg.OmapNameOsImages", "", "", 10)
 	if err != nil {
-		if errors.Is(err, librbd.ErrNotFound) {
+		if errors.Is(err, rados.ErrNotFound) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to open rbd image: %w", err)
+		return false, fmt.Errorf("unable to get omap: %w", err)
 	}
-	defer img.Close()
 
-	log.V(2).Info("Found os image", "osImageName", imageName, "snapshot", p.cfg.OsImageSnapshotVersion)
+	_, found := idMap[imageName]
 
-	return true, nil
+	return found, nil
 }
 
 func (p *Provisioner) CreateOSImage(ctx context.Context, volume *server.AggregateVolume) error {
@@ -234,7 +231,6 @@ func (p *Provisioner) CreateOSImage(ctx context.Context, volume *server.Aggregat
 	if err := p.reconnect(ctx); err != nil {
 		return fmt.Errorf("unable to reconnect: %w", err)
 	}
-
 	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
 	if err != nil {
 		return fmt.Errorf("unable to get io context: %w", err)
@@ -273,6 +269,12 @@ func (p *Provisioner) CreateOSImage(ctx context.Context, volume *server.Aggregat
 
 	if err := imgSnap.Protect(); err != nil {
 		return fmt.Errorf("unable to protect snapshot: %w", err)
+	}
+
+	if err := ioCtx.SetOmap(p.cfg.OmapNameOsImages, map[string][]byte{
+		volume.Requested.Image.Name: []byte(p.cfg.OsImageSnapshotVersion),
+	}); err != nil {
+		return fmt.Errorf("unable to set omap values: %w", err)
 	}
 
 	volume.Provisioned.PopulatedImage = volume.Requested.Image.Name
@@ -357,7 +359,7 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 	}
 
 	if err := ioCtx.SetOmap(p.cfg.OmapVolumeAttributesKey(volume.Provisioned.Name), attributes); err != nil {
-		return fmt.Errorf("unablet to set omap values: %w", err)
+		return fmt.Errorf("unable to set omap values: %w", err)
 	}
 	log.V(2).Info("Set image attributes", "omap", p.cfg.OmapVolumeAttributesKey(volume.Provisioned.Name))
 
@@ -418,6 +420,7 @@ func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (strin
 		return "", "", fmt.Errorf("unable to marshal command: %w", err)
 	}
 
+	p.log.V(2).Info("Try to fetch client", "name", p.cfg.Client)
 	data, _, err := p.conn.MonCommand(cmd1)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to execute mon command: %w", err)
@@ -428,7 +431,7 @@ func (p *Provisioner) FetchAuth(ctx context.Context, image *server.Image) (strin
 		return "", "", fmt.Errorf("unable to unmarshal response: %w", err)
 	}
 
-	return p.cfg.Client, response.Key, nil
+	return strings.TrimPrefix(p.cfg.Client, "client."), response.Key, nil
 }
 
 func (p *Provisioner) DeleteCephImage(ctx context.Context, imageName string) error {
@@ -448,7 +451,6 @@ func (p *Provisioner) DeleteCephImage(ctx context.Context, imageName string) err
 		if !errors.Is(err, librbd.ErrNotFound) {
 			return err
 		}
-		log.V(2).Info("Image attributes already deleted", "omap", p.cfg.OmapVolumeAttributesKey(imageName))
 	}
 	log.V(2).Info("Image attributes deleted", "name", p.cfg.OmapVolumeAttributesKey(imageName))
 
@@ -456,8 +458,86 @@ func (p *Provisioner) DeleteCephImage(ctx context.Context, imageName string) err
 		if !errors.Is(err, librbd.ErrNotFound) {
 			return err
 		}
-		log.V(2).Info("Image already deleted")
 	}
+	log.V(2).Info("Image deleted")
+
+	return nil
+}
+
+func (p *Provisioner) DeleteOsImage(ctx context.Context, imageName string) error {
+	log := p.log.WithValues("imageName", imageName)
+
+	if err := p.reconnect(ctx); err != nil {
+		return fmt.Errorf("unable to reconnect: %w", err)
+	}
+
+	ioCtx, err := p.conn.OpenIOContext(p.cfg.Pool)
+	if err != nil {
+		return fmt.Errorf("unable to get io context: %w", err)
+	}
+	defer ioCtx.Destroy()
+
+	if err := ioCtx.RmOmapKeys(p.cfg.OmapNameOsImages, []string{imageName}); err != nil {
+		if !errors.Is(err, rados.ErrNotFound) {
+			return fmt.Errorf("unable to delete omap value: %w", err)
+		}
+	}
+	log.V(2).Info("Os image deleted from omap", "name", imageName)
+
+	img, err := librbd.OpenImage(ioCtx, imageName, librbd.NoSnapshot)
+	if err != nil {
+		if errors.Is(err, rados.ErrNotFound) || errors.Is(err, librbd.RbdErrorNotFound) {
+			log.V(2).Info("Os image not found: done")
+			return nil
+		}
+	}
+	defer img.Close()
+
+	pools, imgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list children: %w", err)
+	}
+	log.V(2).Info("Os image references", "pools", len(pools), "images", len(imgs))
+
+	if len(pools) != 0 || len(imgs) != 0 {
+		return fmt.Errorf("unable to delete os image: still in use")
+	}
+
+	snaps, err := img.GetSnapshotNames()
+	if err != nil {
+		return fmt.Errorf("unable to list snapshots: %w", err)
+	}
+	log.V(2).Info("Found snapshots", "count", len(snaps))
+
+	for _, snapInfo := range snaps {
+		log.V(2).Info("Start to delete snapshot", "name", snapInfo.Name)
+
+		snap := img.GetSnapshot(snapInfo.Name)
+		isProtected, err := snap.IsProtected()
+		if err != nil {
+			return fmt.Errorf("unable to chek if image is protected: %w", err)
+		}
+
+		if isProtected {
+			if err := snap.Unprotect(); err != nil {
+				return fmt.Errorf("unable to unprotect os image: %w", err)
+			}
+		}
+
+		if err := snap.Remove(); err != nil {
+			return fmt.Errorf("unable to remove os image snapshot: %w", err)
+		}
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close os image: %w", err)
+	}
+
+	log.V(2).Info("Remove os image")
+	if err := img.Remove(); err != nil {
+		return fmt.Errorf("unable to remove os image: %w", err)
+	}
+
 	log.V(2).Info("Image deleted")
 
 	return nil

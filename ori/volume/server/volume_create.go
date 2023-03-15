@@ -163,6 +163,11 @@ func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, aggregateV
 		return nil
 	}
 
+	log.V(2).Info("Clean up leftovers, if any")
+	if err = s.provisioner.DeleteOsImage(ctx, osImageName); err != nil {
+		return fmt.Errorf("failed to clean up os image: %w", err)
+	}
+
 	log.V(2).Info("Create os image")
 	if err := s.provisioner.CreateOSImage(ctx, aggregateVolume); err != nil {
 		return fmt.Errorf("failed to create os image: %w", err)
@@ -171,8 +176,7 @@ func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, aggregateV
 
 	c.Add(func(ctx context.Context) error {
 		log.V(2).Info("Delete os image")
-		//TODO delete
-		return nil
+		return s.provisioner.DeleteOsImage(ctx, osImageName)
 	})
 
 	c.Reset()

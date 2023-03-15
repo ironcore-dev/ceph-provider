@@ -19,7 +19,9 @@ import "fmt"
 const (
 	OmapNameVolumesDefault  = "onmetal.csi.volume"
 	OmapNameMappingsDefault = "onmetal.csi.mappings"
+	OmapNameOsImagesDefault = "onmetal.csi.os-images"
 	ClientDefault           = "client.volumes-ceph"
+	ClientNamePrefixDefault = "client."
 
 	OmapImageIdKeyDefault        = "imageId"
 	OmapImageNameKeyDefault      = "imageName"
@@ -46,12 +48,14 @@ type CephConfig struct {
 
 	OmapImageIdKey        string
 	OmapImageNameKey      string
+	OmapNameOsImages      string
 	OmapVolumeNameKey     string
 	OmapWwnKey            string
 	OmapClassKey          string
 	OmapPopulatedImageKey string
 
 	LimitMetadataPrefix string
+	ClientNamePrefix    string
 
 	OsImageSnapshotVersion string
 }
@@ -66,9 +70,16 @@ func (c *CephConfig) Defaults() {
 	if c.Client == "" {
 		c.Client = ClientDefault
 	}
+	if c.ClientNamePrefix == "" {
+		c.ClientNamePrefix = ClientNamePrefixDefault
+	}
 
 	if c.OmapImageIdKey == "" {
 		c.OmapImageIdKey = OmapImageIdKeyDefault
+	}
+
+	if c.OmapNameOsImages == "" {
+		c.OmapNameOsImages = OmapNameOsImagesDefault
 	}
 
 	if c.OmapImageNameKey == "" {

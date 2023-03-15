@@ -45,6 +45,7 @@ type CephOptions struct {
 	User     string
 	KeyFile  string
 	Pool     string
+	Client   string
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
@@ -68,6 +69,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "CephKeyFile.")
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
+	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -115,6 +117,7 @@ func Run(ctx context.Context, opts Options) error {
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,
 	}, &provisioner.CephConfig{
+		Client:                 opts.Ceph.Client,
 		Pool:                   opts.Ceph.Pool,
 		BurstFactor:            opts.Ceph.BurstFactor,
 		BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,

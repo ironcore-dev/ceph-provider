@@ -38,6 +38,7 @@ type Provisioner interface {
 
 	OsImageExists(ctx context.Context, imageName string) (bool, error)
 	CreateOSImage(ctx context.Context, volume *AggregateVolume) error
+	DeleteOsImage(ctx context.Context, imageName string) error
 
 	GetCephImage(ctx context.Context, imageName string, image *Image) error
 	CreateCephImage(ctx context.Context, volume *AggregateVolume) error

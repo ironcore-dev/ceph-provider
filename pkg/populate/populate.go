@@ -59,6 +59,7 @@ func Image(ctx context.Context, log logr.Logger, imageName string, destination i
 	}
 	defer src.Close()
 
+	log.Info("Start to download image")
 	_, err = io.Copy(destination, src)
 	if err != nil {
 		return fmt.Errorf("failed to copy rootfs to device (%s): %w", destination, err)
