@@ -29,15 +29,21 @@ func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, id string) (
 
 	cephImage := &Image{}
 
-	if err := s.provisioner.GetCephImage(ctx, id, cephImage); err != nil {
+	found, err := s.provisioner.GetCephImage(ctx, id, cephImage)
+	if err != nil {
 		return nil, err
+	}
+
+	if !found {
+		log.V(1).Info("Inconsistent state: Failed to find image", "id", id)
+		return nil, fmt.Errorf("failed to find image")
 	}
 
 	return s.createOriVolume(ctx, log, cephImage)
 }
 
 func (s *Server) listOriVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volume, error) {
-	ids, err := s.provisioner.GetAllMappings(ctx)
+	ids, err := s.provisioner.GetAllMappings(ctx, RbdImage)
 	if err != nil {
 		return nil, fmt.Errorf("error listing volumes: %w", err)
 	}

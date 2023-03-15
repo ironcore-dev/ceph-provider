@@ -60,14 +60,15 @@ type PopulationImage struct {
 }
 
 type Image struct {
-	Name           string
-	Id             string
-	Wwn            string
-	Pool           string
-	Bytes          uint64
-	PopulatedImage string
-	Class          string
-	Created        time.Time
+	Name               string
+	Id                 string
+	Wwn                string
+	Pool               string
+	Bytes              uint64
+	PopulatedImageName string
+	PopulatedImageId   string
+	Class              string
+	Created            time.Time
 }
 
 func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Image) (*ori.Volume, error) {
@@ -82,7 +83,7 @@ func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Im
 	}
 
 	state := ori.VolumeState_VOLUME_AVAILABLE
-	log.V(2).Info("Set volume state", "state", state)
+	log.V(3).Info("Set volume state", "state", state)
 
 	access, err := s.createOriVolumeAccess(ctx, log, image)
 	if err != nil {
@@ -94,7 +95,7 @@ func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Im
 		Spec: &ori.VolumeSpec{
 			Class:     image.Class,
 			Resources: resources,
-			Image:     image.PopulatedImage,
+			Image:     image.PopulatedImageName,
 		},
 		Status: &ori.VolumeStatus{
 			State:  state,
@@ -107,7 +108,7 @@ func (s *Server) createOriVolumeAccess(ctx context.Context, log logr.Logger, ima
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch volume credentials: %w", err)
 	}
-	log.V(2).Info("Fetched volume access credentials", "userId", user)
+	log.V(3).Info("Fetched volume access credentials", "userId", user)
 
 	return &ori.VolumeAccess{
 		Driver: "ceph",

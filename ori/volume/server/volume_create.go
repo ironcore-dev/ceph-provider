@@ -18,14 +18,12 @@ import (
 	"context"
 	"fmt"
 
-	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/pkg/round"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	onmetalimage "github.com/onmetal/onmetal-image"
 	"github.com/onmetal/onmetal-image/oci/image"
 	"github.com/onmetal/onmetal-image/oci/remote"
-	"github.com/pkg/errors"
 )
 
 func (s *Server) validateName(volume *ori.Volume) (string, error) {
@@ -135,7 +133,7 @@ func (s *Server) getAggregateVolume(ctx context.Context, log logr.Logger, oriVol
 			Bytes: validatedSize,
 			Class: validatedClass.Name,
 			IOPS:  validatedClass.GetCapabilities().GetIops(),
-			TPS:   validatedClass.GetCapabilities().GetIops(),
+			TPS:   validatedClass.GetCapabilities().GetTps(),
 		},
 	}, nil
 
@@ -146,40 +144,63 @@ func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, aggregateV
 	defer cleanup()
 
 	osImageName := aggregateVolume.Requested.Image.Name
+
 	log.V(2).Info("Try to acquire lock for volume", "osImageName", osImageName)
-	if err := s.provisioner.Lock(osImageName); err != nil {
+	if err := s.Lock(osImageName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.provisioner.Release(osImageName)
+	defer s.Release(osImageName)
 
-	found, err := s.provisioner.OsImageExists(ctx, osImageName)
+	log.V(2).Info("Check if mapping exists")
+	osImageId, foundMapping, err := s.provisioner.GetMapping(ctx, osImageName, OsImage)
 	if err != nil {
-		return fmt.Errorf("failed to fetch os image: %w", err)
+		return fmt.Errorf("unable to fetch os volume mapping: %w", err)
 	}
 
-	if found {
-		log.V(2).Info("Found os image, skip creation", "osImageName", osImageName)
-		aggregateVolume.Provisioned.PopulatedImage = osImageName
+	if foundMapping {
+		foundImage, err := s.provisioner.GetOsImage(ctx, osImageId)
+		if err != nil {
+			return fmt.Errorf("unable to get os image: %w", err)
+		}
+
+		if !foundImage {
+			if err := s.provisioner.DeleteOsImage(ctx, osImageId); err != nil {
+				return fmt.Errorf("unable to delete os image: %w", err)
+			}
+			if err := s.provisioner.DeleteMapping(ctx, osImageName, OsImage); err != nil {
+				return fmt.Errorf("unable to delete os image mapping: %w", err)
+			}
+
+			return fmt.Errorf("corrupted os image stated: deleted image & mapping")
+		}
+
+		aggregateVolume.Provisioned.PopulatedImageId = osImageId
+		aggregateVolume.Provisioned.PopulatedImageName = osImageName
 		return nil
 	}
 
-	log.V(2).Info("Clean up leftovers, if any")
-	if err = s.provisioner.DeleteOsImage(ctx, osImageName); err != nil {
-		return fmt.Errorf("failed to clean up os image: %w", err)
-	}
-
+	osImageId = s.idGen.Generate()
+	aggregateVolume.Provisioned.PopulatedImageId = osImageId
 	log.V(2).Info("Create os image")
-	if err := s.provisioner.CreateOSImage(ctx, aggregateVolume); err != nil {
+	if err := s.provisioner.CreateOsImage(ctx, aggregateVolume); err != nil {
 		return fmt.Errorf("failed to create os image: %w", err)
 	}
-	log.V(2).Info("Created os image")
 
 	c.Add(func(ctx context.Context) error {
 		log.V(2).Info("Delete os image")
-		return s.provisioner.DeleteOsImage(ctx, osImageName)
+		return s.provisioner.DeleteOsImage(ctx, osImageId)
 	})
 
+	log.V(2).Info("Create os image mapping")
+	if err := s.provisioner.CreateMapping(ctx, osImageName, aggregateVolume.Provisioned.PopulatedImageId, OsImage); err != nil {
+		return fmt.Errorf("unable to write mapping: %w", err)
+	}
+	c.Add(func(ctx context.Context) error {
+		return s.provisioner.DeleteMapping(ctx, osImageName, OsImage)
+	})
 	c.Reset()
+
+	aggregateVolume.Provisioned.PopulatedImageName = osImageName
 
 	return
 }
@@ -190,10 +211,10 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 
 	volumeName := aggregateVolume.Requested.Name
 	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
-	if err := s.provisioner.Lock(volumeName); err != nil {
+	if err := s.Lock(volumeName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.provisioner.Release(volumeName)
+	defer s.Release(volumeName)
 
 	if aggregateVolume.Requested.Image != nil {
 		if err := s.prepareOSImage(ctx, log, aggregateVolume); err != nil {
@@ -202,25 +223,32 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 	}
 
 	log.V(2).Info("Check if mapping exists")
-	imageName, found, err := s.provisioner.GetMapping(ctx, volumeName)
+	imageName, foundMapping, err := s.provisioner.GetMapping(ctx, volumeName, RbdImage)
 	if err != nil {
 		return fmt.Errorf("unable to fetch volume mapping: %w", err)
 	}
 
-	if found {
+	if foundMapping {
 		aggregateVolume.Provisioned.Name = imageName
-		if err := s.provisioner.GetCephImage(ctx, imageName, &aggregateVolume.Provisioned); err != nil {
-			if errors.Is(err, librbd.ErrNotFound) {
-				if err := s.provisioner.DeleteMapping(ctx, volumeName); err != nil {
-					return fmt.Errorf("unable to delete mapping: %w", err)
-				}
 
-				return fmt.Errorf("corrupted state since image is missing: deleted mapping")
-			}
-			return fmt.Errorf("unable to get ceph image: %w", err)
+		foundImage, err := s.provisioner.GetCephImage(ctx, imageName, &aggregateVolume.Provisioned)
+		if err != nil {
+			return fmt.Errorf("unable to get image: %w", err)
 		}
-		log.V(2).Info("Nothing updated since update is not supported: Returning found ceph image.")
 
+		if !foundImage {
+			if err := s.provisioner.DeleteCephImage(ctx, imageName); err != nil {
+				return fmt.Errorf("unable to delete image: %w", err)
+			}
+
+			if err := s.provisioner.DeleteMapping(ctx, volumeName, RbdImage); err != nil {
+				return fmt.Errorf("unable to delete mapping: %w", err)
+			}
+
+			return fmt.Errorf("corrupted state since image is missing: deleted mapping")
+		}
+
+		log.V(2).Info("Nothing updated since update is not supported: Returning found ceph image.")
 		return nil
 	}
 
@@ -238,11 +266,11 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 
 	aggregateVolume.Provisioned.Class = aggregateVolume.Requested.Class
 
-	if err := s.provisioner.PutMapping(ctx, volumeName, imageName); err != nil {
+	if err := s.provisioner.CreateMapping(ctx, volumeName, imageName, RbdImage); err != nil {
 		return fmt.Errorf("unable to write volume mapping: %w", err)
 	}
 	c.Add(func(ctx context.Context) error {
-		return s.provisioner.DeleteMapping(ctx, volumeName)
+		return s.provisioner.DeleteMapping(ctx, volumeName, RbdImage)
 	})
 
 	if err := s.provisioner.CreateCephImage(ctx, aggregateVolume); err != nil {

@@ -18,30 +18,34 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/onmetal-api/broker/common/cleaner"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const (
+	OsImage  = true
+	RbdImage = false
+)
+
 type Provisioner interface {
-	Lock(name string) error
-	Release(name string)
+	CreateMapping(ctx context.Context, volumeName, value string, isOsImage bool) error
+	GetMapping(ctx context.Context, volumeName string, isOsImage bool) (string, bool, error)
+	DeleteMapping(ctx context.Context, volumeName string, isOsImage bool) error
+	GetAllMappings(ctx context.Context, isOsImage bool) (map[string]string, error)
 
-	PutMapping(ctx context.Context, volumeName, imageName string) error
-	DeleteMapping(ctx context.Context, volumeName string) error
-	GetMapping(ctx context.Context, volumeName string) (string, bool, error)
-	GetAllMappings(ctx context.Context) (map[string]string, error)
-
-	OsImageExists(ctx context.Context, imageName string) (bool, error)
-	CreateOSImage(ctx context.Context, volume *AggregateVolume) error
+	CreateOsImage(ctx context.Context, volume *AggregateVolume) error
+	GetOsImage(ctx context.Context, imageName string) (bool, error)
 	DeleteOsImage(ctx context.Context, imageName string) error
 
-	GetCephImage(ctx context.Context, imageName string, image *Image) error
 	CreateCephImage(ctx context.Context, volume *AggregateVolume) error
+	GetCephImage(ctx context.Context, imageName string, image *Image) (bool, error)
 	DeleteCephImage(ctx context.Context, imageName string) error
 	FetchAuth(ctx context.Context, volume *Image) (string, string, error)
 
@@ -52,8 +56,31 @@ type Server struct {
 	idGen       idgen.IDGen
 	provisioner Provisioner
 
+	inProgress     sets.Set[string]
+	inProgressLock sync.Mutex
+
 	VolumeNameLabelName    string
 	AvailableVolumeClasses map[string]ori.VolumeClass
+}
+
+func (s *Server) Lock(volumeName string) error {
+	s.inProgressLock.Lock()
+	defer s.inProgressLock.Unlock()
+
+	if s.inProgress.Has(volumeName) {
+		return fmt.Errorf("failed to acquire lock: %s already in use", volumeName)
+	}
+
+	s.inProgress.Insert(volumeName)
+
+	return nil
+}
+
+func (s *Server) Release(volumeName string) {
+	s.inProgressLock.Lock()
+	defer s.inProgressLock.Unlock()
+
+	s.inProgress.Delete(volumeName)
 }
 
 func (s *Server) loggerFrom(ctx context.Context, keysWithValues ...interface{}) logr.Logger {
@@ -109,6 +136,8 @@ func New(opts Options, provisioner Provisioner) (*Server, error) {
 		VolumeNameLabelName:    opts.VolumeNameLabelName,
 		AvailableVolumeClasses: classes,
 		provisioner:            provisioner,
+		inProgress:             map[string]sets.Empty{},
+		inProgressLock:         sync.Mutex{},
 	}, nil
 }
 

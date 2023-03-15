@@ -40,8 +40,11 @@ type CephConfig struct {
 	Client string
 
 	//Limits
+	LimitingEnabled        bool
 	BurstFactor            int64
 	BurstDurationInSeconds int64
+
+	PopulatorBufferSize int64
 
 	OmapNameVolumes  string
 	OmapNameMappings string

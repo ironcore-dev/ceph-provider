@@ -49,11 +49,16 @@ type CephOptions struct {
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
+
+	PopulatorBufferSize int64
+	LimitingEnabled     bool
 }
 
 func (o *Options) Defaults() {
+	o.Ceph.LimitingEnabled = true
 	o.Ceph.BurstFactor = 10
 	o.Ceph.BurstDurationInSeconds = 15
+	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -65,11 +70,14 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.Int64Var(&o.Ceph.BurstFactor, "limits-burst-factor", o.Ceph.BurstFactor, "Defines the factor to calculate the burst limits.")
 	fs.Int64Var(&o.Ceph.BurstDurationInSeconds, "limits-burst-duration", o.Ceph.BurstDurationInSeconds, "Defines the burst duration in seconds.")
 
+	fs.Int64Var(&o.Ceph.PopulatorBufferSize, "populator-buffer-size", o.Ceph.PopulatorBufferSize, "Defines the buffer size (in bytes) which is used for downloading a image.")
+
 	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "CephKeyFile.")
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
 	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
+	fs.BoolVar(&o.Ceph.LimitingEnabled, "ceph-limiting-enabled", o.Ceph.LimitingEnabled, "Enable limiting of ceph images according VolumeClass capabilities'")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -121,6 +129,8 @@ func Run(ctx context.Context, opts Options) error {
 		Pool:                   opts.Ceph.Pool,
 		BurstFactor:            opts.Ceph.BurstFactor,
 		BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
+		PopulatorBufferSize:    opts.Ceph.PopulatorBufferSize,
+		LimitingEnabled:        opts.Ceph.LimitingEnabled,
 	})
 
 	srv, err := server.New(server.Options{

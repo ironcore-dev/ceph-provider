@@ -23,7 +23,7 @@ import (
 )
 
 func (s *Server) findNameFromId(ctx context.Context, volumeId string) (string, bool, error) {
-	mappings, err := s.provisioner.GetAllMappings(ctx)
+	mappings, err := s.provisioner.GetAllMappings(ctx, RbdImage)
 	if err != nil {
 		return "", false, fmt.Errorf("unable to fetch all volume mapping: %w", err)
 	}
@@ -49,16 +49,16 @@ func (s *Server) deleteCephImage(ctx context.Context, log logr.Logger, volumeId 
 	}
 
 	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
-	if err := s.provisioner.Lock(volumeName); err != nil {
+	if err := s.Lock(volumeName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.provisioner.Release(volumeName)
+	defer s.Release(volumeName)
 
 	if err := s.provisioner.DeleteCephImage(ctx, volumeId); err != nil {
 		return fmt.Errorf("unable to delete ceph image: %w", err)
 	}
 
-	if err := s.provisioner.DeleteMapping(ctx, volumeName); err != nil {
+	if err := s.provisioner.DeleteMapping(ctx, volumeName, RbdImage); err != nil {
 		return fmt.Errorf("unable to delete mapping: %w", err)
 	}
 

@@ -18,14 +18,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/go-logr/logr"
 	onmetalimage "github.com/onmetal/onmetal-image"
-	"github.com/onmetal/onmetal-image/oci/image"
 	"github.com/onmetal/onmetal-image/oci/remote"
 )
 
-func Image(ctx context.Context, log logr.Logger, imageName string, destination io.Writer) error {
+func Image(ctx context.Context, log logr.Logger, imageName string, destination io.Writer, bufferSize int64) error {
 
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
@@ -37,30 +37,38 @@ func Image(ctx context.Context, log logr.Logger, imageName string, destination i
 		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
 	}
 
-	layers, err := img.Layers(ctx)
+	onmetalImage, err := onmetalimage.ResolveImage(ctx, img)
 	if err != nil {
-		return fmt.Errorf("failed to get layers for image: %w", err)
+		return fmt.Errorf("failed to resolve onmetal image: %w", err)
 	}
 
-	var rootFSLayer image.Layer
-	for _, l := range layers {
-		if l.Descriptor().MediaType == onmetalimage.RootFSLayerMediaType {
-			rootFSLayer = l
-			break
-		}
-	}
-	if rootFSLayer == nil {
-		return fmt.Errorf("failed to get rootFS layer for image: %w", err)
-	}
-
-	src, err := rootFSLayer.Content(ctx)
+	src, err := onmetalImage.RootFS.Content(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get content reader for layer: %w", err)
 	}
 	defer src.Close()
 
-	log.Info("Start to download image")
-	_, err = io.Copy(destination, src)
+	log.Info("Start to download image", "image buffer size", bufferSize)
+
+	rater := NewRater(src)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	done := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				log.Info("Populating", "rate", rater.String())
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer func() { done <- true }()
+
+	buffer := make([]byte, bufferSize)
+	_, err = io.CopyBuffer(destination, rater, buffer)
 	if err != nil {
 		return fmt.Errorf("failed to copy rootfs to device (%s): %w", destination, err)
 	}
