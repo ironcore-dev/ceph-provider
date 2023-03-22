@@ -150,7 +150,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Copy the go source
 COPY main.go main.go
-COPY cmd/ cmd/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY ori/ ori/
