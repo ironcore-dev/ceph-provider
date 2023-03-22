@@ -130,7 +130,7 @@ func (s *Server) getAggregateVolume(ctx context.Context, log logr.Logger, oriVol
 		Requested: Volume{
 			Name:  validatedName,
 			Image: validatedImage,
-			Bytes: validatedSize,
+			Size:  validatedSize,
 			Class: validatedClass.Name,
 			IOPS:  validatedClass.GetCapabilities().GetIops(),
 			TPS:   validatedClass.GetCapabilities().GetTps(),
@@ -146,10 +146,10 @@ func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, aggregateV
 	osImageName := aggregateVolume.Requested.Image.Name
 
 	log.V(2).Info("Try to acquire lock for volume", "osImageName", osImageName)
-	if err := s.Lock(osImageName); err != nil {
+	if err := s.lock(osImageName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.Release(osImageName)
+	defer s.release(osImageName)
 
 	log.V(2).Info("Check if mapping exists")
 	osImageId, foundMapping, err := s.provisioner.GetMapping(ctx, osImageName, OsImage)
@@ -211,10 +211,10 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 
 	volumeName := aggregateVolume.Requested.Name
 	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
-	if err := s.Lock(volumeName); err != nil {
+	if err := s.lock(volumeName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.Release(volumeName)
+	defer s.release(volumeName)
 
 	if aggregateVolume.Requested.Image != nil {
 		if err := s.prepareOSImage(ctx, log, aggregateVolume); err != nil {
@@ -256,8 +256,8 @@ func (s *Server) createCephImage(ctx context.Context, log logr.Logger, aggregate
 	aggregateVolume.Provisioned.Name = imageName
 	log.V(2).Info("Set image id.", "volumeName", volumeName, "volumeId", aggregateVolume.Provisioned.Name)
 
-	aggregateVolume.Provisioned.Bytes = round.OffBytes(aggregateVolume.Requested.Bytes)
-	log.V(2).Info("Set image size.", "volumeName", volumeName, "requested", aggregateVolume.Requested.Bytes, "configured", aggregateVolume.Provisioned.Bytes)
+	aggregateVolume.Provisioned.Size = round.OffBytes(aggregateVolume.Requested.Size)
+	log.V(2).Info("Set image size.", "volumeName", volumeName, "requested", aggregateVolume.Requested.Size, "configured", aggregateVolume.Provisioned.Size)
 
 	aggregateVolume.Provisioned.Wwn, err = generateWWN()
 	if err != nil {

@@ -47,14 +47,22 @@ func (r *rate) Read(b []byte) (n int, err error) {
 }
 
 func (r *rate) Rate() (n int64, d time.Duration) {
+	start := r.start
 	end := r.end
 	if end.IsZero() {
 		end = time.Now()
+	}
+	if start.IsZero() {
+		return r.count, 0
 	}
 	return r.count, end.Sub(r.start)
 }
 
 func (r *rate) String() string {
 	n, d := r.Rate()
+	if d.Seconds() == 0 {
+		return "0 b/s"
+	}
+
 	return fmt.Sprintf("%.0f b/s", float64(n)/(d.Seconds()))
 }

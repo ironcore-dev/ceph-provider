@@ -331,10 +331,10 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 
 		log.V(2).Info("Cloned image")
 	} else {
-		if err = librbd.CreateImage(ioCtx, volume.Provisioned.Name, volume.Provisioned.Bytes, options); err != nil {
+		if err = librbd.CreateImage(ioCtx, volume.Provisioned.Name, volume.Provisioned.Size, options); err != nil {
 			return fmt.Errorf("failed to create rbd image: %w", err)
 		}
-		log.V(2).Info("Created image", "bytes", volume.Provisioned.Bytes)
+		log.V(2).Info("Created image", "bytes", volume.Provisioned.Size)
 	}
 
 	img, err := librbd.OpenImage(ioCtx, volume.Provisioned.Name, librbd.NoSnapshot)
@@ -344,10 +344,10 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, volume *server.Aggreg
 	defer img.Close()
 
 	if volume.Requested.Image != nil {
-		if err := img.Resize(volume.Provisioned.Bytes); err != nil {
+		if err := img.Resize(volume.Provisioned.Size); err != nil {
 			return fmt.Errorf("failed to resize rbd image: %w", err)
 		}
-		log.V(2).Info("Resized cloned image", "bytes", volume.Provisioned.Bytes)
+		log.V(2).Info("Resized cloned image", "bytes", volume.Provisioned.Size)
 	}
 
 	imageId, err := img.GetId()

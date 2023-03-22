@@ -153,6 +153,7 @@ COPY main.go main.go
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY ori/ ori/
+COPY hack/ hack/
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -242,6 +243,19 @@ RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
 COPY --from=ori-volume-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
 
 COPY --from=ori-volume-builder /workspace/bin/ori-volume /ori-volume
+
+# Build stage used for validation of the output-image
+# See validate-container-linux-* targets in Makefile
+FROM ori-volume as validation-image
+
+COPY --from=busybox /usr/bin/ldd /usr/bin/find /usr/bin/xargs /usr/bin/
+COPY --from=builder /workspace/hack/print-missing-deps.sh /print-missing-deps.sh
+SHELL ["/bin/bash", "-c"]
+RUN /print-missing-deps.sh
+
+
+# Final build stage, create the real Docker image with ENTRYPOINT
+FROM ori-volume
 USER 65532:65532
 
 ENTRYPOINT ["/ori-volume"]

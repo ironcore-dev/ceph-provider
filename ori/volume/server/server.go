@@ -24,8 +24,8 @@ import (
 	"github.com/onmetal/onmetal-api/broker/common/cleaner"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -63,7 +63,7 @@ type Server struct {
 	AvailableVolumeClasses map[string]ori.VolumeClass
 }
 
-func (s *Server) Lock(volumeName string) error {
+func (s *Server) lock(volumeName string) error {
 	s.inProgressLock.Lock()
 	defer s.inProgressLock.Unlock()
 
@@ -76,7 +76,7 @@ func (s *Server) Lock(volumeName string) error {
 	return nil
 }
 
-func (s *Server) Release(volumeName string) {
+func (s *Server) release(volumeName string) {
 	s.inProgressLock.Lock()
 	defer s.inProgressLock.Unlock()
 
@@ -142,18 +142,21 @@ func New(opts Options, provisioner Provisioner) (*Server, error) {
 }
 
 func ReadVolumeClasses(path string) (map[string]ori.VolumeClass, error) {
-	content, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read volume class json file (%s): %w", path, err)
+		return nil, fmt.Errorf("unable to open volume class file (%s): %w", path, err)
 	}
 
 	var classList []ori.VolumeClass
-	if err := json.Unmarshal(content, &classList); err != nil {
+	if err := yaml.NewYAMLToJSONDecoder(file).Decode(classList); err != nil {
 		return nil, fmt.Errorf("unable to unmarshal volume class json file (%s): %w", path, err)
 	}
 
 	classes := map[string]ori.VolumeClass{}
 	for _, class := range classList {
+		if _, ok := classes[class.Name]; ok {
+			return nil, fmt.Errorf("multiple classes with same name (%s) found", class.Name)
+		}
 		classes[class.Name] = class
 	}
 

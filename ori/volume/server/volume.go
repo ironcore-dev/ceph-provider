@@ -45,7 +45,7 @@ type AggregateVolume struct {
 type Volume struct {
 	Name string
 
-	Bytes uint64
+	Size uint64
 
 	Class string
 	IOPS  int64
@@ -64,7 +64,7 @@ type Image struct {
 	Id                 string
 	Wwn                string
 	Pool               string
-	Bytes              uint64
+	Size               uint64
 	PopulatedImageName string
 	PopulatedImageId   string
 	Class              string
@@ -72,12 +72,12 @@ type Image struct {
 }
 
 func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Image) (*ori.Volume, error) {
-	metadata, err := s.createOriObjectMetadata(image)
+	metadata, err := s.getOriObjectMetadata(image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ori metadata: %w", err)
 	}
 
-	resources, err := s.createOriResources(image)
+	resources, err := s.getOriResources(image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ori resources: %w", err)
 	}
@@ -85,7 +85,7 @@ func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Im
 	state := ori.VolumeState_VOLUME_AVAILABLE
 	log.V(3).Info("Set volume state", "state", state)
 
-	access, err := s.createOriVolumeAccess(ctx, log, image)
+	access, err := s.getOriVolumeAccess(ctx, log, image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ori volume access: %w", err)
 	}
@@ -103,7 +103,7 @@ func (s *Server) createOriVolume(ctx context.Context, log logr.Logger, image *Im
 		},
 	}, nil
 }
-func (s *Server) createOriVolumeAccess(ctx context.Context, log logr.Logger, image *Image) (*ori.VolumeAccess, error) {
+func (s *Server) getOriVolumeAccess(ctx context.Context, log logr.Logger, image *Image) (*ori.VolumeAccess, error) {
 	user, key, err := s.provisioner.FetchAuth(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch volume credentials: %w", err)
@@ -124,13 +124,13 @@ func (s *Server) createOriVolumeAccess(ctx context.Context, log logr.Logger, ima
 	}, nil
 }
 
-func (s *Server) createOriResources(provisioned *Image) (*ori.VolumeResources, error) {
+func (s *Server) getOriResources(provisioned *Image) (*ori.VolumeResources, error) {
 	return &ori.VolumeResources{
-		StorageBytes: provisioned.Bytes,
+		StorageBytes: provisioned.Size,
 	}, nil
 }
 
-func (s *Server) createOriObjectMetadata(image *Image) (*orimeta.ObjectMetadata, error) {
+func (s *Server) getOriObjectMetadata(image *Image) (*orimeta.ObjectMetadata, error) {
 	return &orimeta.ObjectMetadata{
 		Id:         image.Name,
 		Generation: 0,

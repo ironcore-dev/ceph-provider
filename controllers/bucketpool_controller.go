@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	bucketPoolFinalizer = "cephlet.onmetal.de/bucketpool"
+	bucketPoolFinalizer = "cephlet.api.onmetal.de/bucketpool"
 )
 
 var (

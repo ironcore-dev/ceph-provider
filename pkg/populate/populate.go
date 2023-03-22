@@ -53,7 +53,7 @@ func Image(ctx context.Context, log logr.Logger, imageName string, destination i
 	rater := NewRater(src)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	done := make(chan bool)
+	done := make(chan struct{})
 
 	go func() {
 		for {
@@ -65,7 +65,7 @@ func Image(ctx context.Context, log logr.Logger, imageName string, destination i
 			}
 		}
 	}()
-	defer func() { done <- true }()
+	defer func() { close(done) }()
 
 	buffer := make([]byte, bufferSize)
 	_, err = io.CopyBuffer(destination, rater, buffer)

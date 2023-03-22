@@ -20,6 +20,8 @@ import (
 
 	"github.com/go-logr/logr"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (s *Server) findNameFromId(ctx context.Context, volumeId string) (string, bool, error) {
@@ -44,15 +46,15 @@ func (s *Server) deleteCephImage(ctx context.Context, log logr.Logger, volumeId 
 		return fmt.Errorf("unable to find volumeName from id: %w", err)
 	}
 	if !found {
-		log.V(1).Info("No mapping found: Already gone.", "imageId", volumeId)
-		return nil
+		log.V(1).Info("No mapping found: Already gone.", "volumeId", volumeId)
+		return status.Errorf(codes.NotFound, "volumeId %s not found", volumeId)
 	}
 
 	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
-	if err := s.Lock(volumeName); err != nil {
+	if err := s.lock(volumeName); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.Release(volumeName)
+	defer s.release(volumeName)
 
 	if err := s.provisioner.DeleteCephImage(ctx, volumeId); err != nil {
 		return fmt.Errorf("unable to delete ceph image: %w", err)
