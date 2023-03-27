@@ -25,24 +25,28 @@ import (
 	"github.com/onmetal/onmetal-image/oci/remote"
 )
 
-func Image(ctx context.Context, log logr.Logger, imageName string, destination io.Writer, bufferSize int64) error {
-
+func ResolveImage(ctx context.Context, log logr.Logger, imageName string) (*onmetalimage.Image, error) {
+	log.V(1).Info("Resolving image", "name", imageName)
 	reg, err := remote.DockerRegistry(nil)
 	if err != nil {
-		return fmt.Errorf("failed to initialize registry: %w", err)
+		return nil, fmt.Errorf("failed to initialize registry: %w", err)
 	}
 
 	img, err := reg.Resolve(ctx, imageName)
 	if err != nil {
-		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
+		return nil, fmt.Errorf("failed to resolve image ref in registry: %w", err)
 	}
 
 	onmetalImage, err := onmetalimage.ResolveImage(ctx, img)
 	if err != nil {
-		return fmt.Errorf("failed to resolve onmetal image: %w", err)
+		return nil, fmt.Errorf("failed to resolve onmetal image: %w", err)
 	}
 
-	src, err := onmetalImage.RootFS.Content(ctx)
+	return onmetalImage, nil
+}
+
+func Image(ctx context.Context, log logr.Logger, image *onmetalimage.Image, destination io.Writer, bufferSize int64) error {
+	src, err := image.RootFS.Content(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get content reader for layer: %w", err)
 	}

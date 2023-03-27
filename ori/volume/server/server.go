@@ -24,30 +24,23 @@ import (
 	"github.com/onmetal/onmetal-api/broker/common/cleaner"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const (
-	OsImage  = true
-	RbdImage = false
-)
-
 type Provisioner interface {
-	CreateMapping(ctx context.Context, volumeName, value string, isOsImage bool) error
-	GetMapping(ctx context.Context, volumeName string, isOsImage bool) (string, bool, error)
-	DeleteMapping(ctx context.Context, volumeName string, isOsImage bool) error
-	GetAllMappings(ctx context.Context, isOsImage bool) (map[string]string, error)
+	CreateOsImage(ctx context.Context, imageName, imageId string) error
+	GetOsImage(ctx context.Context, imageName string) (string, bool, error)
+	DeleteOsImage(ctx context.Context, imageName, imageId string) error
 
-	CreateOsImage(ctx context.Context, volume *AggregateVolume) error
-	GetOsImage(ctx context.Context, imageName string) (bool, error)
-	DeleteOsImage(ctx context.Context, imageName string) error
+	CreateCephImage(ctx context.Context, imageId string, volume *ori.Volume, class *ori.VolumeClass, osImageId string) (*CephImage, error)
+	GetCephImage(ctx context.Context, imageId string) (*CephImage, error)
+	ListCephImages(ctx context.Context) ([]*CephImage, error)
+	DeleteCephImage(ctx context.Context, imageId string) error
 
-	CreateCephImage(ctx context.Context, volume *AggregateVolume) error
-	GetCephImage(ctx context.Context, imageName string, image *Image) (bool, error)
-	DeleteCephImage(ctx context.Context, imageName string) error
-	FetchAuth(ctx context.Context, volume *Image) (string, string, error)
+	FetchAuth(ctx context.Context) (string, string, error)
 
 	Monitors() string
 }
@@ -61,6 +54,8 @@ type Server struct {
 
 	VolumeNameLabelName    string
 	AvailableVolumeClasses map[string]ori.VolumeClass
+
+	syncPopulation singleflight.Group
 }
 
 func (s *Server) lock(volumeName string) error {
@@ -147,8 +142,8 @@ func ReadVolumeClasses(path string) (map[string]ori.VolumeClass, error) {
 		return nil, fmt.Errorf("unable to open volume class file (%s): %w", path, err)
 	}
 
-	var classList []ori.VolumeClass
-	if err := yaml.NewYAMLToJSONDecoder(file).Decode(classList); err != nil {
+	classList := []ori.VolumeClass{}
+	if err := yaml.NewYAMLOrJSONDecoder(file, 100).Decode(&classList); err != nil {
 		return nil, fmt.Errorf("unable to unmarshal volume class json file (%s): %w", path, err)
 	}
 

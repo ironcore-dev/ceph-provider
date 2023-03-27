@@ -17,22 +17,23 @@ package provisioner
 import "fmt"
 
 const (
-	OmapNameVolumesDefault  = "onmetal.csi.volume"
-	OmapNameMappingsDefault = "onmetal.csi.mappings"
-	OmapNameOsImagesDefault = "onmetal.csi.os-images"
-	ClientDefault           = "client.volumes-ceph"
-	ClientNamePrefixDefault = "client."
-
-	OmapImageIdKeyDefault        = "imageId"
-	OmapImageNameKeyDefault      = "imageName"
-	OmapVolumeNameKeyDefault     = "volumeName"
-	OmapWwnKeyDefault            = "wwn"
-	OmapClassKeyDefault          = "class"
-	OmapPopulatedImageKeyDefault = "populatedImage"
-
-	LimitMetadataPrefixDefault = "conf_"
-
+	ClientDefault                 = "client.volumes-ceph"
+	ClientNamePrefixDefault       = "client."
+	LimitMetadataPrefixDefault    = "conf_"
 	OsImageSnapshotVersionDefault = "v1"
+)
+
+const (
+	OmapNameVolumes          = "onmetal.csi.volumes"
+	OmapNameVolumeAttributes = "onmetal.csi.volume"
+	OmapNameOsImages         = "onmetal.csi.os-images"
+
+	OmapImageAnnotationsKey    = "annotations"
+	OmapImageLabelsKey         = "labels"
+	OmapImageWwnKey            = "wwn"
+	OmapImageClassKey          = "class"
+	OmapImagePopulatedImageKey = "populatedImage"
+	OmapImageGenerationKey     = "generation"
 )
 
 type CephConfig struct {
@@ -46,17 +47,6 @@ type CephConfig struct {
 
 	PopulatorBufferSize int64
 
-	OmapNameVolumes  string
-	OmapNameMappings string
-
-	OmapImageIdKey        string
-	OmapImageNameKey      string
-	OmapNameOsImages      string
-	OmapVolumeNameKey     string
-	OmapWwnKey            string
-	OmapClassKey          string
-	OmapPopulatedImageKey string
-
 	LimitMetadataPrefix string
 	ClientNamePrefix    string
 
@@ -64,45 +54,12 @@ type CephConfig struct {
 }
 
 func (c *CephConfig) Defaults() {
-	if c.OmapNameVolumes == "" {
-		c.OmapNameVolumes = OmapNameVolumesDefault
-	}
-	if c.OmapNameMappings == "" {
-		c.OmapNameMappings = OmapNameMappingsDefault
-	}
 	if c.Client == "" {
 		c.Client = ClientDefault
 	}
+
 	if c.ClientNamePrefix == "" {
 		c.ClientNamePrefix = ClientNamePrefixDefault
-	}
-
-	if c.OmapImageIdKey == "" {
-		c.OmapImageIdKey = OmapImageIdKeyDefault
-	}
-
-	if c.OmapNameOsImages == "" {
-		c.OmapNameOsImages = OmapNameOsImagesDefault
-	}
-
-	if c.OmapImageNameKey == "" {
-		c.OmapImageNameKey = OmapImageNameKeyDefault
-	}
-
-	if c.OmapVolumeNameKey == "" {
-		c.OmapVolumeNameKey = OmapVolumeNameKeyDefault
-	}
-
-	if c.OmapWwnKey == "" {
-		c.OmapWwnKey = OmapWwnKeyDefault
-	}
-
-	if c.OmapClassKey == "" {
-		c.OmapClassKey = OmapClassKeyDefault
-	}
-
-	if c.OmapPopulatedImageKey == "" {
-		c.OmapPopulatedImageKey = OmapPopulatedImageKeyDefault
 	}
 
 	if c.LimitMetadataPrefix == "" {
@@ -115,5 +72,5 @@ func (c *CephConfig) Defaults() {
 }
 
 func (c *CephConfig) OmapVolumeAttributesKey(volumeName string) string {
-	return fmt.Sprintf("%s.%s", c.OmapNameVolumes, volumeName)
+	return fmt.Sprintf("%s.%s", OmapNameVolumeAttributes, volumeName)
 }

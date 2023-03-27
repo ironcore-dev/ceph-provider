@@ -25,39 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, id string) (*ori.Volume, error) {
-
-	cephImage := &Image{}
-
-	found, err := s.provisioner.GetCephImage(ctx, id, cephImage)
+func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, imageId string) (*ori.Volume, error) {
+	cephImage, err := s.provisioner.GetCephImage(ctx, imageId)
 	if err != nil {
-		return nil, err
-	}
-
-	if !found {
-		log.V(1).Info("Inconsistent state: Failed to find image", "id", id)
-		return nil, fmt.Errorf("failed to find image")
+		return nil, fmt.Errorf("failed to get image: %w", err)
 	}
 
 	return s.createOriVolume(ctx, log, cephImage)
-}
-
-func (s *Server) listOriVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volume, error) {
-	ids, err := s.provisioner.GetAllMappings(ctx, RbdImage)
-	if err != nil {
-		return nil, fmt.Errorf("error listing volumes: %w", err)
-	}
-
-	var res []*ori.Volume
-	for _, id := range ids {
-		volume, err := s.getOriVolume(ctx, log, id)
-		if err != nil {
-			return nil, err
-		}
-
-		res = append(res, volume)
-	}
-	return res, nil
 }
 
 func (s *Server) filterVolumes(volumes []*ori.Volume, filter *ori.VolumeFilter) []*ori.Volume {
@@ -79,6 +53,24 @@ func (s *Server) filterVolumes(volumes []*ori.Volume, filter *ori.VolumeFilter) 
 	return res
 }
 
+func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volume, error) {
+	cephImages, err := s.provisioner.ListCephImages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error listing volumes: %w", err)
+	}
+
+	var res []*ori.Volume
+	for _, cephImage := range cephImages {
+		oriVolume, err := s.createOriVolume(ctx, log, cephImage)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, oriVolume)
+	}
+	return res, nil
+}
+
 func (s *Server) ListVolumes(ctx context.Context, req *ori.ListVolumesRequest) (*ori.ListVolumesResponse, error) {
 	log := s.loggerFrom(ctx)
 
@@ -98,7 +90,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *ori.ListVolumesRequest) (
 		}, nil
 	}
 
-	volumes, err := s.listOriVolumes(ctx, log)
+	volumes, err := s.listVolumes(ctx, log)
 	if err != nil {
 		return nil, err
 	}

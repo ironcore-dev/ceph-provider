@@ -15,9 +15,19 @@
 package provisioner
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
+)
+
+const (
+	// worldwide number key
+	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
+	wwnPrefix string = ""
 )
 
 func IgnoreNotFoundError(err error) error {
@@ -29,4 +39,22 @@ func IgnoreNotFoundError(err error) error {
 	}
 
 	return err
+}
+
+// generate WWN as hex string (16 chars)
+func generateWWN() (string, error) {
+	// prefix is optional, set to 1100AA for private identifier
+	wwn := wwnPrefix
+
+	// use UUIDv4, because this will generate good random string
+	wwnUUID, err := uuid.NewRandom()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate UUIDv4 for WWN: %w", err)
+	}
+
+	// append hex string without "-"
+	wwn += strings.Replace(wwnUUID.String(), "-", "", -1)
+
+	// WWN is 64Bit number as hex, so only the first 16 chars are returned
+	return wwn[:16], nil
 }

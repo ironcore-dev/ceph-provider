@@ -20,48 +20,17 @@ import (
 
 	"github.com/go-logr/logr"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-func (s *Server) findNameFromId(ctx context.Context, volumeId string) (string, bool, error) {
-	mappings, err := s.provisioner.GetAllMappings(ctx, RbdImage)
-	if err != nil {
-		return "", false, fmt.Errorf("unable to fetch all volume mapping: %w", err)
-	}
-
-	for volumeName, imageId := range mappings {
-		if volumeId == imageId {
-			return volumeName, true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
-func (s *Server) deleteCephImage(ctx context.Context, log logr.Logger, volumeId string) (retErr error) {
-
-	volumeName, found, err := s.findNameFromId(ctx, volumeId)
-	if err != nil {
-		return fmt.Errorf("unable to find volumeName from id: %w", err)
-	}
-	if !found {
-		log.V(1).Info("No mapping found: Already gone.", "volumeId", volumeId)
-		return status.Errorf(codes.NotFound, "volumeId %s not found", volumeId)
-	}
-
-	log.V(2).Info("Try to acquire lock for volume", "volumeName", volumeName)
-	if err := s.lock(volumeName); err != nil {
+func (s *Server) deleteCephImage(ctx context.Context, log logr.Logger, imageId string) (retErr error) {
+	log.V(2).Info("Try to acquire lock for volume", "imageId", imageId)
+	if err := s.lock(imageId); err != nil {
 		return fmt.Errorf("unable to acquire lock: %w", err)
 	}
-	defer s.release(volumeName)
+	defer s.release(imageId)
 
-	if err := s.provisioner.DeleteCephImage(ctx, volumeId); err != nil {
+	if err := s.provisioner.DeleteCephImage(ctx, imageId); err != nil {
 		return fmt.Errorf("unable to delete ceph image: %w", err)
-	}
-
-	if err := s.provisioner.DeleteMapping(ctx, volumeName, RbdImage); err != nil {
-		return fmt.Errorf("unable to delete mapping: %w", err)
 	}
 
 	return nil
