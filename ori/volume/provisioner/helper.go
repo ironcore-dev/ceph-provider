@@ -24,12 +24,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	// worldwide number key
-	// to use WWN Company Identifiers, set wwnPrefix to Private "1100AA"
-	wwnPrefix string = ""
-)
-
 func IgnoreNotFoundError(err error) error {
 	switch {
 	case errors.Is(err, librbd.ErrNotFound):
@@ -42,7 +36,7 @@ func IgnoreNotFoundError(err error) error {
 }
 
 // generate WWN as hex string (16 chars)
-func generateWWN() (string, error) {
+func generateWWN(wwnPrefix string) (string, error) {
 	// prefix is optional, set to 1100AA for private identifier
 	wwn := wwnPrefix
 

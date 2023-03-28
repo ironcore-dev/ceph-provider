@@ -49,6 +49,7 @@ type CephConfig struct {
 
 	LimitMetadataPrefix string
 	ClientNamePrefix    string
+	WwnPrefix           string
 
 	OsImageSnapshotVersion string
 }

@@ -93,12 +93,6 @@ func (s *Server) prepareOSImage(ctx context.Context, log logr.Logger, osImageNam
 	c, cleanup := setupCleaner(ctx, log, &retErr)
 	defer cleanup()
 
-	log.V(2).Info("Try to acquire lock for volume", "osImageName", osImageName)
-	if err := s.lock(osImageName); err != nil {
-		return "", fmt.Errorf("unable to acquire lock: %w", err)
-	}
-	defer s.release(osImageName)
-
 	osImageId, found, err := s.provisioner.GetOsImage(ctx, osImageName)
 	if err != nil {
 		return "", fmt.Errorf("unable to get os image: %w", err)

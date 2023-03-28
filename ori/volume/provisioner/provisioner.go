@@ -323,7 +323,7 @@ func (p *Provisioner) CreateCephImage(ctx context.Context, imageId string, volum
 	}
 	defer ioCtx.Destroy()
 
-	wwn, err := generateWWN()
+	wwn, err := generateWWN(p.cfg.WwnPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("unable to generate wwn: %w", err)
 	}
