@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim as builder
+FROM debian:bookworm-slim as builder
 
 ARG GOARCH=''
 
@@ -170,7 +170,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM builder as ori-volume-builder
 # Install necessary dependencies
 
-RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev
+RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
 
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -238,6 +238,7 @@ COPY --from=ori-volume-builder /lib/x86_64-linux-gnu/librados.so.2 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libselinux.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpthread.so.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu
+RUN mkdir -p /lib64
 COPY --from=ori-volume-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
 RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
 COPY --from=ori-volume-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph

@@ -26,12 +26,12 @@ import (
 )
 
 func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, imageId string) (*ori.Volume, error) {
-	cephImage, err := s.provisioner.GetCephImage(ctx, imageId)
+	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get image: %w", err)
 	}
 
-	return s.createOriVolume(ctx, log, cephImage)
+	return s.convertImageToOriVolume(ctx, log, cephImage)
 }
 
 func (s *Server) filterVolumes(volumes []*ori.Volume, filter *ori.VolumeFilter) []*ori.Volume {
@@ -54,14 +54,14 @@ func (s *Server) filterVolumes(volumes []*ori.Volume, filter *ori.VolumeFilter) 
 }
 
 func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volume, error) {
-	cephImages, err := s.provisioner.ListCephImages(ctx)
+	cephImages, err := s.imageStore.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error listing volumes: %w", err)
 	}
 
 	var res []*ori.Volume
 	for _, cephImage := range cephImages {
-		oriVolume, err := s.createOriVolume(ctx, log, cephImage)
+		oriVolume, err := s.convertImageToOriVolume(ctx, log, cephImage)
 		if err != nil {
 			return nil, err
 		}

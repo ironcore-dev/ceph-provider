@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.19'
+          go-version: '1.20'
       - run: sudo apt update  && sudo apt install -y libcephfs-dev librbd-dev librados-dev
       - uses: actions/checkout@v3
       - name: golangci-lint

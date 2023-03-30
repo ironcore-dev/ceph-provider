@@ -12,22 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package server
+package sync_test
 
 import (
-	"context"
+	"testing"
 
-	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func (s *Server) ListVolumeClasses(ctx context.Context, req *ori.ListVolumeClassesRequest) (*ori.ListVolumeClassesResponse, error) {
-	log := s.loggerFrom(ctx)
-	log.V(1).Info("Listing onmetal volume classes")
-
-	classes := s.volumeClasses.List()
-
-	log.V(1).Info("Returning volume classes")
-	return &ori.ListVolumeClassesResponse{
-		VolumeClasses: classes,
-	}, nil
+func TestSync(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Sync Suite")
 }

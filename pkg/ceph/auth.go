@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package provisioner
+package ceph
 
 import (
 	"context"
@@ -27,7 +27,7 @@ type Credentials struct {
 	Keyfile  string
 }
 
-func (c *Credentials) Connect(ctx context.Context) (*rados.Conn, error) {
+func ConnectToRados(ctx context.Context, c Credentials) (*rados.Conn, error) {
 	args := []string{"-m", c.Monitors, "--keyfile=" + c.Keyfile}
 	conn, err := rados.NewConnWithUser(c.User)
 	if err != nil {

@@ -18,29 +18,22 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/pkg/store"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
-
-func (s *Server) deleteCephImage(ctx context.Context, log logr.Logger, imageId string) (retErr error) {
-	log.V(2).Info("Try to acquire lock for volume", "imageId", imageId)
-	if err := s.lock(imageId); err != nil {
-		return fmt.Errorf("unable to acquire lock: %w", err)
-	}
-	defer s.release(imageId)
-
-	if err := s.provisioner.DeleteCephImage(ctx, imageId); err != nil {
-		return fmt.Errorf("unable to delete ceph image: %w", err)
-	}
-
-	return nil
-}
 
 func (s *Server) DeleteVolume(ctx context.Context, req *ori.DeleteVolumeRequest) (*ori.DeleteVolumeResponse, error) {
 	log := s.loggerFrom(ctx)
 
-	if err := s.deleteCephImage(ctx, log, req.VolumeId); err != nil {
-		return nil, fmt.Errorf("unable to delete ceph volume: %w", err)
+	log.V(1).Info("Deleting volume")
+	if err := s.imageStore.Delete(ctx, req.VolumeId); err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("error deleting volume: %w", err)
+		}
+		return nil, status.Errorf(codes.NotFound, "volume %s not found", req.VolumeId)
 	}
 
 	return &ori.DeleteVolumeResponse{}, nil

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package populate
+package utils
 
 import (
 	"fmt"
@@ -20,19 +20,19 @@ import (
 	"time"
 )
 
-func NewRater(r io.Reader) *rate {
-	return &rate{
+func NewRater(r io.Reader) *Rater {
+	return &Rater{
 		r: r,
 	}
 }
 
-type rate struct {
+type Rater struct {
 	r          io.Reader
 	count      int64
 	start, end time.Time
 }
 
-func (r *rate) Read(b []byte) (n int, err error) {
+func (r *Rater) Read(b []byte) (n int, err error) {
 	if r.start.IsZero() {
 		r.start = time.Now()
 	}
@@ -46,7 +46,7 @@ func (r *rate) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (r *rate) Rate() (n int64, d time.Duration) {
+func (r *Rater) Rate() (n int64, d time.Duration) {
 	start := r.start
 	end := r.end
 	if end.IsZero() {
@@ -58,7 +58,7 @@ func (r *rate) Rate() (n int64, d time.Duration) {
 	return r.count, end.Sub(r.start)
 }
 
-func (r *rate) String() string {
+func (r *Rater) String() string {
 	n, d := r.Rate()
 	if d.Seconds() == 0 {
 		return "0 b/s"
