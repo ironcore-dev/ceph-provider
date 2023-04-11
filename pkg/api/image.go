@@ -28,6 +28,13 @@ const (
 	ImageStateAvailable ImageState = "Available"
 )
 
+type ImageSpec struct {
+	Size        uint64  `json:"size"`
+	Limits      Limits  `json:"limits"`
+	Image       string  `json:"image"`
+	SnapshotRef *string `json:"snapshotRef"`
+}
+
 type ImageStatus struct {
 	State  ImageState   `json:"state"`
 	Access *ImageAccess `json:"access"`
@@ -39,12 +46,8 @@ type ImageAccess struct {
 
 	User    string `json:"user"`
 	UserKey string `json:"userKey"`
-}
 
-type ImageSpec struct {
-	Size        int64   `json:"size"`
-	Limits      Limits  `json:"limits"`
-	SnapshotRef *string `json:"snapshotRef"`
+	WWN string `json:"wwn"`
 }
 
 type Limits map[LimitType]int64

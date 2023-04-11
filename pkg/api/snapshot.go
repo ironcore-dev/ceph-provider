@@ -30,7 +30,8 @@ const (
 )
 
 type SnapshotStatus struct {
-	State SnapshotState `json:"state"`
+	State  SnapshotState `json:"state"`
+	Digest string        `json:"digest"`
 }
 
 type SnapshotSource struct {

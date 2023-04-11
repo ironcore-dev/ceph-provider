@@ -16,28 +16,26 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
+	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
+	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/limits"
-	"github.com/onmetal/cephlet/pkg/round"
-	"github.com/onmetal/cephlet/pkg/store"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"github.com/opencontainers/go-digest"
-	"k8s.io/utils/pointer"
 )
 
 type CephVolumeConfig struct {
-	image    *api.Image
-	snapshot *api.Snapshot
+	image *api.Image
+}
+
+type AggregatedImage struct {
+	image *api.Image
 }
 
 func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volume *ori.Volume) (*CephVolumeConfig, error) {
-	log.V(2).Info("Starting volume validation")
-	defer log.V(2).Info("Finished volume validation")
+	log.V(2).Info("Getting ceph volume config")
 
 	if volume == nil {
 		return nil, fmt.Errorf("volume is nil")
@@ -51,78 +49,36 @@ func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volum
 
 	calculatedLimits := limits.Calculate(class.Capabilities.Iops, class.Capabilities.Tps, s.burstFactor, s.burstDurationInSeconds)
 
-	labels, annotations := map[string]string{}, map[string]string{}
-	for key, value := range volume.Metadata.Labels {
-		labels[oriMetadataKey(key)] = value
+	image := &api.Image{
+		Metadata: api.Metadata{
+			ID: s.idGen.Generate(),
+		},
+		Spec: api.ImageSpec{
+			Size:   volume.Spec.Resources.StorageBytes,
+			Limits: calculatedLimits,
+			Image:  volume.Spec.Image,
+		},
 	}
 
-	for key, value := range volume.Metadata.Annotations {
-		annotations[oriMetadataKey(key)] = value
+	if err := apiutils.SetObjectMetadata(image, volume.Metadata); err != nil {
+		return nil, fmt.Errorf("failed to set metadata: %w", err)
 	}
-
-	labels[volumeClassLabel] = volume.Spec.Class
-
-	var snapshotRef *string
-	var snapshot *api.Snapshot
-	if image := volume.Spec.Image; image != "" {
-		hash := sha256.New()
-		hash.Write([]byte(image))
-		digest := digest.NewDigest(digest.SHA256, hash)
-
-		snapshotID := digest.String()
-		snapshotRef = pointer.String(snapshotID)
-
-		snapshot = &api.Snapshot{
-			Metadata: api.Metadata{
-				ID: snapshotID,
-			},
-			Source: api.SnapshotSource{
-				OnmetalImage: image,
-			},
-		}
-		labels[snapshotNameLabel] = image
-	}
+	apiutils.SetClassLabel(image, volume.Spec.Class)
+	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
 
 	return &CephVolumeConfig{
-		image: &api.Image{
-			Metadata: api.Metadata{
-				ID:          s.idGen.Generate(),
-				Annotations: annotations,
-				Labels:      labels,
-			},
-			Spec: api.ImageSpec{
-				Size:        int64(round.OffBytes(volume.Spec.Resources.StorageBytes)),
-				Limits:      calculatedLimits,
-				SnapshotRef: snapshotRef,
-			},
-		},
-		snapshot: snapshot,
+		image: image,
 	}, nil
 
 }
 
-func (s *Server) createImage(ctx context.Context, log logr.Logger, cfg *CephVolumeConfig) (retErr error) {
-	if cfg.snapshot != nil {
-		_, err := s.snapshotStore.Get(ctx, cfg.snapshot.ID)
-		if err != nil {
-			if !errors.Is(err, store.ErrNotFound) {
-				return fmt.Errorf("failed to get snapshot: %w", err)
-			}
-
-			if _, err := s.snapshotStore.Create(ctx, cfg.snapshot); store.IgnoreAlreadyExists(err) != nil {
-				return fmt.Errorf("failed to create snapshot: %w", err)
-			}
-		}
-	}
-
+func (s *Server) createImage(ctx context.Context, log logr.Logger, cfg *CephVolumeConfig) (*AggregatedImage, error) {
 	image, err := s.imageStore.Create(ctx, cfg.image)
 	if err != nil {
-		return fmt.Errorf("failed to create image: %w", err)
+		return nil, fmt.Errorf("failed to create image: %w", err)
 	}
 
-	cfg.image = image
-
-	return nil
+	return &AggregatedImage{image: image}, nil
 }
 
 func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest) (res *ori.CreateVolumeResponse, retErr error) {
@@ -134,11 +90,12 @@ func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest)
 		return nil, fmt.Errorf("unable to get ceph volume config: %w", err)
 	}
 
-	if err := s.createImage(ctx, log, cfg); err != nil {
+	volume, err := s.createImage(ctx, log, cfg)
+	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
-	oriVolume, err := s.convertImageToOriVolume(ctx, log, cfg.image)
+	oriVolume, err := s.convertImageToOriVolume(ctx, log, volume.image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}

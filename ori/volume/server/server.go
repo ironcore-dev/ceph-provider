@@ -22,7 +22,6 @@ import (
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"github.com/onmetal/onmetal-image/oci/image"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -33,8 +32,6 @@ type VolumeClassRegistry interface {
 
 type Server struct {
 	idGen idgen.IDGen
-
-	registry image.Source
 
 	imageStore    store.Store[*cephapi.Image]
 	snapshotStore store.Store[*cephapi.Snapshot]
@@ -67,14 +64,13 @@ var _ ori.VolumeRuntimeServer = (*Server)(nil)
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
 
-func New(registry image.Source, imageStore store.Store[*cephapi.Image], snapshotStore store.Store[*cephapi.Snapshot], volumeClassRegistry VolumeClassRegistry, opts Options) (*Server, error) {
+func New(imageStore store.Store[*cephapi.Image], snapshotStore store.Store[*cephapi.Snapshot], volumeClassRegistry VolumeClassRegistry, opts Options) (*Server, error) {
 
 	setOptionsDefaults(&opts)
 
 	return &Server{
 		idGen:         opts.IDGen,
 		imageStore:    imageStore,
-		registry:      registry,
 		snapshotStore: snapshotStore,
 		volumeClasses: volumeClassRegistry,
 

@@ -24,8 +24,8 @@ jobs:
         image:
           - name: cephlet
             target: manager
-          - name: ori-volume
-            target: ori-volume
+          - name: cephlet-volume
+            target: cephlet-volume
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

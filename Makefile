@@ -101,8 +101,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build --target manager -t ${CONTROLLER_IMG} .
-	docker build --target populator -t ${POPULATOR_IMG} .
-	docker build --target ori-volume -t ${ORI_VOLUME_IMG} .
+	docker build --target cephlet-volume -t ${ORI_VOLUME_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

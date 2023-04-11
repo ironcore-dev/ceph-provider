@@ -1316,8 +1316,8 @@ github.com/okta/okta-sdk-golang/v2 v2.0.0/go.mod h1:fQubbeV8gksr8e1pmRVSE8kIj1TF
 github.com/okta/okta-sdk-golang/v2 v2.12.1 h1:U+smE7trkHSZO8Mval3Ow85dbxawO+pMAr692VZq9gM=
 github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/olekukonko/tablewriter v0.0.0-20180130162743-b8a9be070da4/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
-github.com/onmetal/controller-utils v0.7.0 h1:EHLPb/XimNas1VkeZZLP4g31aSz+ipiwvwWhklaQob0=
-github.com/onmetal/controller-utils v0.7.0/go.mod h1:91KV/s0VaB8PC+hqsxo6OBsAhi3ICFgIFLv/36V0ng8=
+github.com/onmetal/controller-utils v0.7.1-0.20230414090910-d7fb3b0c14ee h1:KMXzij96kmHP7z1vyRBGKvww5iC7haoZJ0fTHlomPjI=
+github.com/onmetal/controller-utils v0.7.1-0.20230414090910-d7fb3b0c14ee/go.mod h1:wuM+iehTTM6oWWgWIaWEwqJxoVU32wGIosv/clbOClU=
 github.com/onmetal/onmetal-api v0.1.0 h1:SOEiBOsLc9RTKpeqaeMe7CLWK2dcVzd0sj4Wj0HhY7U=
 github.com/onmetal/onmetal-api v0.1.0/go.mod h1:OPmHPCH/WesxdBF2xVPyjEdD5eTvDKCh3Kh2pfzQRZU=
 github.com/onmetal/onmetal-image v0.1.1 h1:sGnK2a1OH2iHZSbOrFJEdP7UvFLXb+o9OhJM4/hMy/M=
@@ -2403,8 +2403,8 @@ k8s.io/apiextensions-apiserver v0.15.7/go.mod h1:ctb/NYtsiBt6CGN42Z+JrOkxi9nJYaK
 k8s.io/apiextensions-apiserver v0.18.3/go.mod h1:TMsNGs7DYpMXd+8MOCX8KzPOCx8fnZMoIGB24m03+JE=
 k8s.io/apiextensions-apiserver v0.20.1/go.mod h1:ntnrZV+6a3dB504qwC5PN/Yg9PBiDNt1EVqbW2kORVk=
 k8s.io/apiextensions-apiserver v0.22.2/go.mod h1:2E0Ve/isxNl7tWLSUDgi6+cmwHi5fQRdwGVCxbC+KFA=
-k8s.io/apiextensions-apiserver v0.26.1 h1:cB8h1SRk6e/+i3NOrQgSFij1B2S0Y0wDoNl66bn8RMI=
-k8s.io/apiextensions-apiserver v0.26.1/go.mod h1:AptjOSXDGuE0JICx/Em15PaoO7buLwTs0dGleIHixSM=
+k8s.io/apiextensions-apiserver v0.26.3 h1:5PGMm3oEzdB1W/FTMgGIDmm100vn7IaUP5er36dB+YE=
+k8s.io/apiextensions-apiserver v0.26.3/go.mod h1:jdA5MdjNWGP+njw1EKMZc64xAT5fIhN6VJrElV3sfpQ=
 k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d/go.mod h1:ccL7Eh7zubPUSh9A3USN90/OzHNSVN6zxzde07TDCL0=
 k8s.io/apimachinery v0.0.0-20190409092423-760d1845f48b/go.mod h1:FW86P8YXVLsbuplGMZeb20J3jYHscrDqw4jELaFJvRU=
 k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655/go.mod h1:nL6pwRT8NgfF8TT68DBI8uEePRt89cSvoXUVqbkWHq4=

@@ -16,9 +16,13 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
+	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
+	"github.com/onmetal/cephlet/ori/volume/apiutils"
+	"github.com/onmetal/cephlet/pkg/store"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,7 +32,14 @@ import (
 func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, imageId string) (*ori.Volume, error) {
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Errorf(codes.NotFound, "image %s not found", imageId)
+		}
 		return nil, fmt.Errorf("failed to get image: %w", err)
+	}
+
+	if !apiutils.IsManagedBy(cephImage, volumev1alpha1.VolumeManager) {
+		return nil, status.Errorf(codes.NotFound, "image %s not found", imageId)
 	}
 
 	return s.convertImageToOriVolume(ctx, log, cephImage)
@@ -61,6 +72,10 @@ func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volum
 
 	var res []*ori.Volume
 	for _, cephImage := range cephImages {
+		if !apiutils.IsManagedBy(cephImage, volumev1alpha1.VolumeManager) {
+			continue
+		}
+
 		oriVolume, err := s.convertImageToOriVolume(ctx, log, cephImage)
 		if err != nil {
 			return nil, err

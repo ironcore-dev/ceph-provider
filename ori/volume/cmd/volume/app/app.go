@@ -169,9 +169,15 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize snapshot events: %w", err)
 	}
 
+	reg, err := remote.DockerRegistry(nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize docker registry: %w", err)
+	}
+
 	imageReconciler, err := controllers.NewImageReconciler(
 		log.WithName("image-reconciler"),
-		conn, imageStore, snapshotStore,
+		conn, reg,
+		imageStore, snapshotStore,
 		imageEvents,
 		snapshotEvents,
 		controllers.ImageReconcilerOptions{
@@ -191,11 +197,6 @@ func Run(ctx context.Context, opts Options) error {
 			log.Error(err, "failed to start image reconciler")
 		}
 	}()
-
-	reg, err := remote.DockerRegistry(nil)
-	if err != nil {
-		return fmt.Errorf("failed to initialize docker registry: %w", err)
-	}
 
 	snapshotReconciler, err := controllers.NewSnapshotReconciler(
 		log.WithName("snapshot-reconciler"),
@@ -245,7 +246,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize volume class registry : %w", err)
 	}
 
-	srv, err := server.New(reg, imageStore, snapshotStore, classRegistry, server.Options{
+	srv, err := server.New(imageStore, snapshotStore, classRegistry, server.Options{
 		BurstFactor:            opts.Ceph.BurstFactor,
 		BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
 	})

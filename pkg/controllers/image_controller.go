@@ -16,7 +16,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,18 +26,23 @@ import (
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
+	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/event"
+	"github.com/onmetal/cephlet/pkg/round"
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/cephlet/pkg/utils"
-	"github.com/pkg/errors"
+	"github.com/onmetal/onmetal-api/broker/common/idgen"
+	"github.com/onmetal/onmetal-image/oci/image"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/utils/pointer"
 )
 
 const (
 	LimitMetadataPrefix = "conf_"
+	imageDigestLabel    = "image-digest"
 )
 
 type ImageReconcilerOptions struct {
@@ -47,6 +54,7 @@ type ImageReconcilerOptions struct {
 func NewImageReconciler(
 	log logr.Logger,
 	conn *rados.Conn,
+	registry image.Source,
 	images store.Store[*api.Image],
 	snapshots store.Store[*api.Snapshot],
 	imageEvents event.Source[*api.Image],
@@ -55,6 +63,10 @@ func NewImageReconciler(
 ) (*ImageReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
+	}
+
+	if registry == nil {
+		return nil, fmt.Errorf("must specify registry")
 	}
 
 	if images == nil {
@@ -88,6 +100,8 @@ func NewImageReconciler(
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
+		wwnGen:         idgen.NewIDGen(rand.Reader, 16),
+		registry:       registry,
 		queue:          workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		images:         images,
 		snapshots:      snapshots,
@@ -103,7 +117,10 @@ type ImageReconciler struct {
 	log  logr.Logger
 	conn *rados.Conn
 
-	queue workqueue.RateLimitingInterface
+	wwnGen idgen.IDGen
+
+	registry image.Source
+	queue    workqueue.RateLimitingInterface
 
 	images    store.Store[*api.Image]
 	snapshots store.Store[*api.Snapshot]
@@ -251,6 +268,56 @@ func (r *ImageReconciler) fetchAuth(ctx context.Context, log logr.Logger) (strin
 	return strings.TrimPrefix(r.client, "client."), response.Key, nil
 }
 
+func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger, img *api.Image) error {
+	if !(img.Spec.Image != "" && img.Spec.SnapshotRef == nil) {
+		return nil
+	}
+
+	spec, err := reference.Parse(img.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("failed to parse image reference: %w", err)
+	}
+
+	resolvedImg, err := r.registry.Resolve(ctx, img.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
+	}
+
+	snapshotDigest := resolvedImg.Descriptor().Digest.String()
+	resolvedImageName := fmt.Sprintf("%s@%s", spec.Locator, snapshotDigest)
+
+	//TODO select later by label
+	snap, err := r.snapshots.Get(ctx, snapshotDigest)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			snap, err = r.snapshots.Create(ctx, &api.Snapshot{
+				Metadata: api.Metadata{
+					ID: snapshotDigest,
+					Labels: map[string]string{
+						imageDigestLabel: snapshotDigest,
+					},
+				},
+				Source: api.SnapshotSource{
+					OnmetalImage: resolvedImageName,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create snapshot: %w", err)
+			}
+		default:
+			return fmt.Errorf("failed to get snapshot: %w", err)
+		}
+	}
+
+	img.Spec.SnapshotRef = pointer.String(snap.ID)
+	if _, err := r.images.Update(ctx, img); err != nil {
+		return fmt.Errorf("failed to update image snapshot ref: %w", err)
+	}
+
+	return nil
+}
+
 func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	log := logr.FromContextOrDiscard(ctx)
 	ioCtx, err := r.conn.OpenIOContext(r.pool)
@@ -281,9 +348,15 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		return nil
 	}
 
-	img.Finalizers = append(img.Finalizers, ImageFinalizer)
-	if _, err := r.images.Update(ctx, img); err != nil {
-		return fmt.Errorf("failed to set finalizers: %w", err)
+	if !slices.Contains(img.Finalizers, ImageFinalizer) {
+		img.Finalizers = append(img.Finalizers, ImageFinalizer)
+		if _, err := r.images.Update(ctx, img); err != nil {
+			return fmt.Errorf("failed to set finalizers: %w", err)
+		}
+	}
+
+	if err := r.reconcileSnapshot(ctx, log, img); err != nil {
+		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
 
 	options := librbd.NewRbdImageOptions()
@@ -323,9 +396,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 
 	img.Status.Access = &api.ImageAccess{
 		Monitors: r.monitors,
-		Handle:   fmt.Sprintf("%s/%s", "image.Pool", img.ID),
+		Handle:   fmt.Sprintf("%s/%s", r.pool, img.ID),
 		User:     user,
 		UserKey:  key,
+		WWN:      r.wwnGen.Generate(),
 	}
 	img.Status.State = api.ImageStateAvailable
 	if _, err = r.images.Update(ctx, img); err != nil {
@@ -345,6 +419,9 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 
 	for limit, value := range image.Spec.Limits {
 		if err := img.SetMetadata(fmt.Sprintf("%s%s", LimitMetadataPrefix, limit), strconv.FormatInt(value, 10)); err != nil {
+			if closeErr := img.Close(); closeErr != nil {
+				return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+			}
 			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
 		}
 		log.V(3).Info("Set image limit", "limit", limit, "value", value)
@@ -358,7 +435,7 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 }
 
 func (r *ImageReconciler) createEmptyImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image, options *librbd.ImageOptions) error {
-	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), uint64(image.Spec.Size), options); err != nil {
+	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), round.OffBytes(image.Spec.Size), options); err != nil {
 		return fmt.Errorf("failed to create rbd image: %w", err)
 	}
 	log.V(2).Info("Created image", "bytes", image.Spec.Size)
@@ -398,7 +475,10 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, fmt.Errorf("failed to open rbd image: %w", err)
 	}
 
-	if err := img.Resize(uint64(image.Spec.Size)); err != nil {
+	if err := img.Resize(round.OffBytes(image.Spec.Size)); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return false, errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
 		return false, fmt.Errorf("failed to resize rbd image: %w", err)
 	}
 	log.V(2).Info("Resized cloned image", "bytes", image.Spec.Size)

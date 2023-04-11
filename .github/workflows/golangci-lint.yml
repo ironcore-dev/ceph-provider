@@ -10,11 +10,11 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.20'
+          go-version-file: 'go.mod'
       - run: sudo apt update  && sudo apt install -y libcephfs-dev librbd-dev librados-dev
-      - uses: actions/checkout@v3
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
