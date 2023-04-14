@@ -42,8 +42,7 @@ import (
 )
 
 const (
-	bucketPoolFinalizer        = "cephlet.onmetal.de/bucketpool"
-	bucketPoolSecretAnnotation = "ceph-client-secret-name"
+	bucketPoolFinalizer = "cephlet.api.onmetal.de/bucketpool"
 )
 
 var (
@@ -189,7 +188,7 @@ func (r *BucketPoolReconciler) applyStorageClass(ctx context.Context, log logr.L
 		return fmt.Errorf("failed to set ownerreference for storage class %s: %w", client.ObjectKeyFromObject(storageClass), err)
 	}
 
-	if err := r.Patch(ctx, storageClass, client.Apply, volumeFieldOwner, client.ForceOwnership); err != nil {
+	if err := r.Patch(ctx, storageClass, client.Apply, bucketPoolFieldOwner, client.ForceOwnership); err != nil {
 		return fmt.Errorf("failed to patch storageClass %s for volumepool %s: %w", client.ObjectKeyFromObject(storageClass), client.ObjectKeyFromObject(pool), err)
 	}
 

@@ -1,10 +1,10 @@
-// Copyright 2022 OnMetal authors
+// Copyright 2023 OnMetal authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,17 @@
 
 package controllers
 
-import "fmt"
+const (
+	ImageRBDIDPrefix    = "img_"
+	SnapshotRBDIDPrefix = "snap_"
 
-func GetClusterBucketPoolName(clusterId, poolName string) string {
-	return fmt.Sprintf("bucket-%s-%s", clusterId, poolName)
+	ImageSnapshotVersion = "v1"
+)
+
+func ImageIDToRBDID(imageID string) string {
+	return ImageRBDIDPrefix + imageID
+}
+
+func SnapshotIDToRBDID(snapshotID string) string {
+	return SnapshotRBDIDPrefix + snapshotID
 }

@@ -18,27 +18,22 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/onmetal/cephlet/pkg/store"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func (s *Server) DeleteVolume(ctx context.Context, req *ori.DeleteVolumeRequest) (*ori.DeleteVolumeResponse, error) {
-	volumeID := req.VolumeId
-	log := s.loggerFrom(ctx, "VolumeID", volumeID)
-
-	onmetalVolume, err := s.getAggregateCephVolume(ctx, req.VolumeId)
-	if err != nil {
-		return nil, err
-	}
+	log := s.loggerFrom(ctx)
 
 	log.V(1).Info("Deleting volume")
-	if err := s.client.Delete(ctx, onmetalVolume.Pvc); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("error deleting onmetal volume: %w", err)
+	if err := s.imageStore.Delete(ctx, req.VolumeId); err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("error deleting volume: %w", err)
 		}
-		return nil, status.Errorf(codes.NotFound, "volume %s not found", volumeID)
+		return nil, status.Errorf(codes.NotFound, "volume %s not found", req.VolumeId)
 	}
 
 	return &ori.DeleteVolumeResponse{}, nil

@@ -15,19 +15,16 @@
 package apiutils
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
 	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
+	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/controller-utils/metautils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	orimeta "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetObjectMetadata(o metav1.Object) (*orimeta.ObjectMetadata, error) {
+func GetObjectMetadata(o api.Metadata) (*orimeta.ObjectMetadata, error) {
 	annotations, err := GetAnnotationsAnnotation(o)
 	if err != nil {
 		return nil, err
@@ -39,21 +36,21 @@ func GetObjectMetadata(o metav1.Object) (*orimeta.ObjectMetadata, error) {
 	}
 
 	var deletedAt int64
-	if !o.GetDeletionTimestamp().IsZero() {
-		deletedAt = o.GetDeletionTimestamp().UnixNano()
+	if !o.DeletedAt.IsZero() {
+		deletedAt = o.DeletedAt.UnixNano()
 	}
 
 	return &orimeta.ObjectMetadata{
-		Id:          o.GetName(),
+		Id:          o.ID,
 		Annotations: annotations,
 		Labels:      labels,
 		Generation:  o.GetGeneration(),
-		CreatedAt:   o.GetCreationTimestamp().UnixNano(),
+		CreatedAt:   o.CreatedAt.UnixNano(),
 		DeletedAt:   deletedAt,
 	}, nil
 }
 
-func SetObjectMetadata(o metav1.Object, metadata *orimeta.ObjectMetadata) error {
+func SetObjectMetadata(o api.Object, metadata *orimeta.ObjectMetadata) error {
 	if err := SetAnnotationsAnnotation(o, metadata.Annotations); err != nil {
 		return err
 	}
@@ -63,40 +60,7 @@ func SetObjectMetadata(o metav1.Object, metadata *orimeta.ObjectMetadata) error 
 	return nil
 }
 
-func SetCreatedLabel(o metav1.Object) {
-	metautils.SetLabel(o, volumev1alpha1.CreatedLabel, "true")
-}
-
-func SetVolumeClassLabel(o metav1.Object, class string) {
-	metautils.SetLabel(o, volumev1alpha1.VolumeClassLabel, class)
-}
-
-func GetVolumeClass(o metav1.Object) string {
-	return o.GetLabels()[volumev1alpha1.VolumeClassLabel]
-}
-
-func SetImageAnnotation(o metav1.Object, class string) {
-	metautils.SetAnnotation(o, volumev1alpha1.ImageLabel, class)
-}
-
-func GetImage(o metav1.Object) string {
-	return o.GetAnnotations()[volumev1alpha1.ImageLabel]
-}
-
-func IsCreated(o metav1.Object) bool {
-	return metautils.HasLabel(o, volumev1alpha1.CreatedLabel)
-}
-
-func PatchCreated(ctx context.Context, c client.Client, o client.Object) error {
-	base := o.DeepCopyObject().(client.Object)
-	SetCreatedLabel(o)
-	if err := c.Patch(ctx, o, client.MergeFrom(base)); err != nil {
-		return fmt.Errorf("error patching object to created: %w", err)
-	}
-	return nil
-}
-
-func SetLabelsAnnotation(o metav1.Object, labels map[string]string) error {
+func SetLabelsAnnotation(o api.Object, labels map[string]string) error {
 	data, err := json.Marshal(labels)
 	if err != nil {
 		return fmt.Errorf("error marshalling labels: %w", err)
@@ -105,7 +69,7 @@ func SetLabelsAnnotation(o metav1.Object, labels map[string]string) error {
 	return nil
 }
 
-func GetLabelsAnnotation(o metav1.Object) (map[string]string, error) {
+func GetLabelsAnnotation(o api.Metadata) (map[string]string, error) {
 	data, ok := o.GetAnnotations()[volumev1alpha1.LabelsAnnotation]
 	if !ok {
 		return nil, fmt.Errorf("object has no labels at %s", volumev1alpha1.LabelsAnnotation)
@@ -119,16 +83,17 @@ func GetLabelsAnnotation(o metav1.Object) (map[string]string, error) {
 	return labels, nil
 }
 
-func SetAnnotationsAnnotation(o metav1.Object, annotations map[string]string) error {
+func SetAnnotationsAnnotation(o api.Object, annotations map[string]string) error {
 	data, err := json.Marshal(annotations)
 	if err != nil {
 		return fmt.Errorf("error marshalling annotations: %w", err)
 	}
 	metautils.SetAnnotation(o, volumev1alpha1.AnnotationsAnnotation, string(data))
+
 	return nil
 }
 
-func GetAnnotationsAnnotation(o metav1.Object) (map[string]string, error) {
+func GetAnnotationsAnnotation(o api.Metadata) (map[string]string, error) {
 	data, ok := o.GetAnnotations()[volumev1alpha1.AnnotationsAnnotation]
 	if !ok {
 		return nil, fmt.Errorf("object has no annotations at %s", volumev1alpha1.AnnotationsAnnotation)
@@ -142,11 +107,20 @@ func GetAnnotationsAnnotation(o metav1.Object) (map[string]string, error) {
 	return annotations, nil
 }
 
-func SetVolumeManagerLabel(volume *storagev1alpha1.Volume, manager string) {
-	metautils.SetLabel(volume, volumev1alpha1.ManagerLabel, manager)
+func SetManagerLabel(o api.Object, manager string) {
+	metautils.SetLabel(o, volumev1alpha1.ManagerLabel, manager)
 }
 
-func IsManagedBy(o metav1.Object, manager string) bool {
+func SetClassLabel(o api.Object, class string) {
+	metautils.SetLabel(o, volumev1alpha1.ClassLabel, class)
+}
+
+func GetClassLabel(o api.Object) (string, bool) {
+	class, found := o.GetLabels()[volumev1alpha1.ClassLabel]
+	return class, found
+}
+
+func IsManagedBy(o api.Object, manager string) bool {
 	actual, ok := o.GetLabels()[volumev1alpha1.ManagerLabel]
 	return ok && actual == manager
 }

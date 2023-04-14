@@ -23,7 +23,6 @@ import (
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	popv1beta1 "github.com/kubernetes-csi/volume-data-source-validator/client/apis/volumepopulator/v1beta1"
-	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
@@ -32,15 +31,12 @@ import (
 	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/prometheus/client_golang/prometheus"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -57,21 +53,11 @@ const (
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute
 
-	volumePoolName        = "my-pool"
-	volumePoolProviderID  = "custom://pool"
-	volumePoolReplication = 3
-
 	bucketPoolName        = "my-pool"
 	bucketPoolProviderID  = "custom://pool"
 	bucketPoolReplication = 3
 
 	bucketBaseURL = "example.com"
-
-	defaultDevicePath     = "/dev/block"
-	defaultPopulatorImage = "populator-image"
-	defaultPrefix         = "my-prefix"
-
-	cephClientSecretValue = "test"
 )
 
 var (
@@ -84,12 +70,6 @@ var (
 	volumeClassSelector = map[string]string{
 		"suitable-for": "testing",
 	}
-	volumePoolLabels = map[string]string{
-		"some": "label",
-	}
-	volumePoolAnnotations = map[string]string{
-		"some": "annotation",
-	}
 
 	bucketClassSelector = map[string]string{
 		"suitable-for": "testing",
@@ -100,8 +80,6 @@ var (
 	bucketPoolAnnotations = map[string]string{
 		"some": "annotation",
 	}
-
-	volumeEventRecorder = record.NewFakeRecorder(100)
 )
 
 func TestAPIs(t *testing.T) {
@@ -232,42 +210,6 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 		rookConfig = rook.NewConfigWithDefaults()
 		rookConfig.Namespace = rookNamespace.Name
 
-		volumeMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "test",
-		}, []string{
-			"pool",
-			"resource",
-		})
-
-		bucketMetrics := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "test",
-		}, []string{
-			"pool",
-			"resource",
-		})
-
-		Expect((&VolumeReconciler{
-			Client:         k8sManager.GetClient(),
-			Scheme:         k8sManager.GetScheme(),
-			VolumePoolName: volumePoolName,
-			RookConfig:     rookConfig,
-			CephClient:     &cephMock{},
-			PoolUsage:      volumeMetrics,
-			EventRecorder:  volumeEventRecorder,
-		}).SetupWithManager(k8sManager)).To(Succeed())
-
-		Expect((&VolumePoolReconciler{
-			Client:                k8sManager.GetClient(),
-			Scheme:                k8sManager.GetScheme(),
-			VolumePoolName:        volumePoolName,
-			VolumePoolProviderID:  volumePoolProviderID,
-			VolumePoolLabels:      volumePoolLabels,
-			VolumePoolAnnotations: volumePoolAnnotations,
-			VolumeClassSelector:   volumeClassSelector,
-			VolumePoolReplication: volumePoolReplication,
-			RookConfig:            rookConfig,
-		}).SetupWithManager(k8sManager)).To(Succeed())
-
 		Expect((&BucketPoolReconciler{
 			Client:                k8sManager.GetClient(),
 			Scheme:                k8sManager.GetScheme(),
@@ -286,17 +228,6 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 			BucketPoolName: bucketPoolName,
 			BucketBaseUrl:  bucketBaseURL,
 			RookConfig:     rookConfig,
-			PoolUsage:      bucketMetrics,
-		}).SetupWithManager(k8sManager)).To(Succeed())
-
-		Expect((&ImagePopulatorReconciler{
-			Client:                 k8sManager.GetClient(),
-			Scheme:                 k8sManager.GetScheme(),
-			PopulatorImageName:     defaultPopulatorImage,
-			PopulatorPodDevicePath: defaultDevicePath,
-			PopulatorNamespace:     populatorNamespace.Name,
-			Prefix:                 defaultPrefix,
-			RookConfig:             rookConfig,
 		}).SetupWithManager(k8sManager)).To(Succeed())
 
 		go func() {
@@ -312,10 +243,4 @@ func SetupTest(ctx context.Context) (*corev1.Namespace, *corev1.Namespace, *core
 	})
 
 	return testNamespace, rookNamespace, populatorNamespace
-}
-
-type cephMock struct{}
-
-func (c *cephMock) SetVolumeLimit(ctx context.Context, poolName, volumeName, volumeNamespace string, limits map[ceph.LimitType]resource.Quantity) error {
-	return nil
 }

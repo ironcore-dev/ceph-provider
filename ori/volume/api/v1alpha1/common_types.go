@@ -15,21 +15,16 @@
 package v1alpha1
 
 const (
-	LabelsAnnotation = "volume.cephlet.api.onmetal.de/labels"
+	LabelsAnnotation = "cephlet.api.onmetal.de/labels"
 
-	AnnotationsAnnotation = "volume.cephlet.api.onmetal.de/annotations"
-
-	CreatedLabel = "volume.cephlet.api.onmetal.de/created"
-
-	VolumeClassLabel = "volume.cephlet.api.onmetal.de/volume-class"
-
-	ImageLabel = "volume.cephlet.api.onmetal.de/image"
+	AnnotationsAnnotation = "cephlet.api.onmetal.de/annotations"
 )
 
 const (
-	ManagerLabel = "volume.cephlet.api.onmetal.de/manager"
+	ManagerLabel = "cephlet.api.onmetal.de/manager"
+	ClassLabel   = "cephlet.api.onmetal.de/class"
 )
 
 const (
-	VolumeCephletManager = "volume.cephlet"
+	VolumeManager = "cephlet-volume"
 )
