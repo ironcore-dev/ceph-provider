@@ -67,7 +67,7 @@ func (o *Options) Defaults() {
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&o.Address, "address", "/var/run/ori-volume.sock", "Address to listen on.")
+	fs.StringVar(&o.Address, "address", "/var/run/cephlet-volume.sock", "Address to listen on.")
 
 	fs.StringVar(&o.PathSupportedVolumeClasses, "supported-volume-classes", o.PathSupportedVolumeClasses, "File containing supported volume classes.")
 
