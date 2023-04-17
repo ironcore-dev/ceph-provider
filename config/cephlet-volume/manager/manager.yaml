@@ -20,7 +20,7 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: volume-ori
+        kubectl.kubernetes.io/default-container: cephlet-volume
       labels:
         control-plane: controller-manager
     spec:
@@ -58,9 +58,9 @@ spec:
             - name: var-run
               mountPath: /var/run
         - command:
-            - /ori-volume
-          image: volume-ori:latest
-          name: volume-ori
+            - /cephlet-volume
+          image: cephlet-volume:latest
+          name: cephlet-volume
           securityContext:
             allowPrivilegeEscalation: false
           livenessProbe:
