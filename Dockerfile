@@ -203,7 +203,7 @@ ENV LIB_DIR_PREFIX aarch64
 ENV LIB_DIR_PREFIX_MINUS aarch64
 
 
-FROM busybox:1.35.0-uclibc as busybox
+FROM busybox:1.36.0-uclibc as busybox
 FROM distroless-$TARGETARCH  as cephlet-volume
 WORKDIR /
 COPY --from=busybox /bin/sh /bin/sh
