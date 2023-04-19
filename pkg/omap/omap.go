@@ -298,6 +298,9 @@ func (s *Store[E]) List(ctx context.Context) ([]E, error) {
 
 	omap, err := ioCtx.GetAllOmapValues(s.omapName, "", "", 10)
 	if err != nil {
+		if errors.Is(err, rados.ErrNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
