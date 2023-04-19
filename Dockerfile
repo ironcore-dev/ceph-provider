@@ -238,6 +238,8 @@ COPY --from=cephlet-volume-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libselinux.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpthread.so.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu
+RUN mkdir -p /lib64
+COPY --from=cephlet-volume-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
 RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
 COPY --from=cephlet-volume-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
 
