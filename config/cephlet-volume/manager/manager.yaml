@@ -24,8 +24,9 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-      securityContext:
-        runAsNonRoot: true
+#TODO: fix
+#      securityContext:
+#        runAsNonRoot: true
       containers:
         - command:
             - /volumepoollet
