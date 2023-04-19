@@ -2,7 +2,7 @@
 # Image URL to use all building/pushing image targets
 CONTROLLER_IMG ?= controller:latest
 POPULATOR_IMG ?= populator:latest
-ORI_VOLUME_IMG ?= ori-volume:latest
+CEPHLET_VOLUME_IMG ?= cephlet-volume:latest
 
 # Docker image name for the mkdocs based local development setup
 MKDOCS_IMG=onmetal/cephlet-docs
@@ -101,7 +101,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build --target manager -t ${CONTROLLER_IMG} .
-	docker build --target cephlet-volume -t ${ORI_VOLUME_IMG} .
+	docker build --target cephlet-volume -t ${CEPHLET_VOLUME_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
