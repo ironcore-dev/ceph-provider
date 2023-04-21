@@ -24,9 +24,9 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-#TODO: fix
-#      securityContext:
-#        runAsNonRoot: true
+      securityContext:
+        runAsUser: 1001
+        fsGroup: 2000
       containers:
         - command:
             - /volumepoollet

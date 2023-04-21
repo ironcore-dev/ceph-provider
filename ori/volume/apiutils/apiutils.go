@@ -36,7 +36,7 @@ func GetObjectMetadata(o api.Metadata) (*orimeta.ObjectMetadata, error) {
 	}
 
 	var deletedAt int64
-	if !o.DeletedAt.IsZero() {
+	if o.DeletedAt != nil && !o.DeletedAt.IsZero() {
 		deletedAt = o.DeletedAt.UnixNano()
 	}
 
