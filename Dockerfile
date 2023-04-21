@@ -165,6 +165,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/manager main.go
 
+FROM builder as cephlet-bucket-builder
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-bucket ./ori/bucket/cmd/bucket/main.go
+
 
 # Start from Kubernetes Debian base.
 FROM builder as cephlet-volume-builder
@@ -260,3 +265,10 @@ FROM cephlet-volume
 USER 65532:65532
 
 ENTRYPOINT ["/cephlet-volume"]
+
+
+
+FROM distroless-base  as cephlet-bucket
+COPY --from=cephlet-bucket-builder /workspace/bin/cephlet-bucket /cephlet-bucket
+USER 65532:65532
+ENTRYPOINT ["/cephlet-bucket"]

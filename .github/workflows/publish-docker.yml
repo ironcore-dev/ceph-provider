@@ -22,8 +22,8 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: cephlet
-            target: manager
+          - name: cephlet-bucket
+            target: cephlet-bucket
           - name: cephlet-volume
             target: cephlet-volume
     runs-on: ubuntu-latest
