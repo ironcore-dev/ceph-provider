@@ -3,7 +3,7 @@ module github.com/onmetal/cephlet
 go 1.20
 
 require (
-	github.com/ceph/go-ceph v0.20.0
+	github.com/ceph/go-ceph v0.21.0
 	github.com/containerd/containerd v1.6.16
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
