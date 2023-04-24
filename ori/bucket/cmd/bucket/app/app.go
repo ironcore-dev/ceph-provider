@@ -18,11 +18,11 @@ import (
 	"context"
 	goflag "flag"
 	"fmt"
-	"github.com/onmetal/cephlet/ori/bucket/server"
-	"github.com/onmetal/onmetal-api/broker/common"
 	"net"
 
+	"github.com/onmetal/cephlet/ori/bucket/server"
 	"github.com/onmetal/controller-utils/configutils"
+	"github.com/onmetal/onmetal-api/broker/common"
 	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

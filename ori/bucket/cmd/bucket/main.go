@@ -16,9 +16,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
 	"os"
 
+	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 

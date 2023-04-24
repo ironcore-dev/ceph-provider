@@ -149,21 +149,12 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go mod download
 
 # Copy the go source
-COPY main.go main.go
-COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY ori/ ori/
 COPY hack/ hack/
 
 ARG TARGETOS
 ARG TARGETARCH
-
-
-FROM builder as controller
-# Build
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/manager main.go
 
 FROM builder as cephlet-bucket-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \

@@ -1,8 +1,7 @@
 
 # Image URL to use all building/pushing image targets
-CONTROLLER_IMG ?= controller:latest
-POPULATOR_IMG ?= populator:latest
 CEPHLET_VOLUME_IMG ?= cephlet-volume:latest
+CEPHLET_BUCKET_IMG ?= cephlet-bucket:latest
 
 # Docker image name for the mkdocs based local development setup
 MKDOCS_IMG=onmetal/cephlet-docs
@@ -91,23 +90,31 @@ clean-docs: ## Remove all local mkdocs Docker images (cleanup).
 
 ##@ Build
 
-.PHONY: build
-build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+.PHONY: build-volume
+build-volume: generate fmt vet ## Build manager binary.
+	CGO_ENABLED=1 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-volume ./ori/volume/cmd/volume/main.go
 
-.PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+.PHONY: build-bucket
+build-bucket: generate fmt vet ## Build manager binary.
+	CGO_ENABLED=0 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-bucket ./ori/bucket/cmd/bucket/main.go
+
+.PHONY: run-volume
+run-volume: manifests generate fmt vet ## Run a controller from your host.
+	go run ./ori/bucket/cmd/volume/main.go
+
+.PHONY: run-bucket
+run-bucket: manifests generate fmt vet ## Run a controller from your host.
+	go run ./ori/bucket/cmd/bucket/main.go
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --target manager -t ${CONTROLLER_IMG} .
 	docker build --target cephlet-volume -t ${CEPHLET_VOLUME_IMG} .
+	docker build --target cephlet-bucket -t ${CEPHLET_BUCKET_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${CONTROLLER_IMG}
-	docker push ${POPULATOR_IMG}
+	docker push ${CEPHLET_VOLUME_IMG}
+	docker push ${CEPHLET_BUCKET_IMG}
 
 ##@ Deployment
 
@@ -115,14 +122,6 @@ ifndef ignore-not-found
   ignore-not-found = false
 endif
 
-.PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
-
-.PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Build Dependencies
 
