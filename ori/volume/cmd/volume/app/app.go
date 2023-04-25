@@ -124,6 +124,7 @@ func Run(ctx context.Context, opts Options) error {
 	setupLog := log.WithName("setup")
 	var wg sync.WaitGroup
 
+	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User)
 	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
 		Monitors: opts.Ceph.Monitors,
 		User:     opts.Ceph.User,
@@ -133,6 +134,11 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to establish rados connection: %w", err)
 	}
 
+	if err := ceph.CheckIfPoolExists(conn, opts.Ceph.Pool); err != nil {
+		return fmt.Errorf("configuration invalid: %w", err)
+	}
+
+	setupLog.Info("Configuring image store", "OmapName", omap.OmapNameVolumes)
 	imageStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*api.Image]{
 		OmapName:       omap.OmapNameVolumes,
 		NewFunc:        func() *api.Image { return &api.Image{} },
@@ -151,6 +157,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize image events: %w", err)
 	}
 
+	setupLog.Info("Configuring snapshot store", "OmapName", omap.OmapNameOsImages)
 	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*api.Snapshot]{
 		OmapName:       omap.OmapNameOsImages,
 		NewFunc:        func() *api.Snapshot { return &api.Snapshot{} },
@@ -193,6 +200,7 @@ func Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		setupLog.Info("Starting image reconciler")
 		if err := imageReconciler.Start(ctx); err != nil {
 			log.Error(err, "failed to start image reconciler")
 		}
@@ -214,6 +222,7 @@ func Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		setupLog.Info("Starting snapshot reconciler")
 		if err := snapshotReconciler.Start(ctx); err != nil {
 			log.Error(err, "failed to start snapshot reconciler")
 		}
@@ -223,6 +232,7 @@ func Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		setupLog.Info("Starting image events")
 		if err := imageEvents.Start(ctx); err != nil {
 			log.Error(err, "failed to start image events")
 		}
@@ -231,6 +241,7 @@ func Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		setupLog.Info("Starting snapshot events")
 		if err := snapshotEvents.Start(ctx); err != nil {
 			log.Error(err, "failed to start snapshot events")
 		}
