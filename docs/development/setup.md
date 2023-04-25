@@ -11,7 +11,7 @@
 
 ### Setup Ceph Cluster
 
-[//]: # (https://rook.io/docs/rook/v1.9/Contributing/development-environment/?h=mini#minikube)
+Reference:  [rook docs](https://rook.io/docs/rook/v1.9/Contributing/development-environment/?h=mini#minikube)
 
 
 ### Install cert-manager
@@ -24,14 +24,13 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 
 ### Setup `onmetal-api`
 
+Reference: [onmetal-api docs](https://github.com/onmetal/onmetal-api/blob/main/docs/development/setup.md)
+
 ### Setup `Rook`
 
 1. Install Rook operator and `CRD`s
 ```shell
-kubectl apply \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/crds.yaml \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/common.yaml \
- -f https://raw.githubusercontent.com/rook/rook/v1.10.8/deploy/examples/operator.yaml
+kubectl apply -k ./rook
 ```
 
 2. Verify the rook-ceph-operator is in the Running state before proceeding 
@@ -48,15 +47,31 @@ kubectl -n rook-ceph get pod
 In the end you should see all pods `Running` or `Completed` and have at least one `rook-ceph-osd-*` Pod:
 ```
 NAME                                            READY   STATUS      RESTARTS   AGE
-csi-cephfsplugin-b7ktv                          3/3     Running     6          63d
-csi-cephfsplugin-provisioner-59499cbcdd-wvnfq   6/6     Running     136        63d
+csi-cephfsplugin-b7ktv                          3/3     Running     0          63d
+csi-cephfsplugin-provisioner-59499cbcdd-wvnfq   6/6     Running     0          63d
 csi-rbdplugin-bs4tn                             3/3     Running     6          63d
-csi-rbdplugin-provisioner-857d65496c-mxjp4      6/6     Running     144        63d
-rook-ceph-mgr-a-769964c967-9kmxq                1/1     Running     17         26d
-rook-ceph-mon-a-66b5cfc47f-8d4ts                1/1     Running     94         63d
-rook-ceph-operator-75c6d6bbfc-b9q9n             1/1     Running     3          63d
-rook-ceph-osd-0-7464fbbd49-szdrp                1/1     Running     100        63d
+csi-rbdplugin-provisioner-857d65496c-mxjp4      6/6     Running     0          63d
+rook-ceph-mgr-a-769964c967-9kmxq                1/1     Running     0          26d
+rook-ceph-mon-a-66b5cfc47f-8d4ts                1/1     Running     0          63d
+rook-ceph-operator-75c6d6bbfc-b9q9n             1/1     Running     0          63d
+rook-ceph-osd-0-7464fbbd49-szdrp                1/1     Running     0          63d
 rook-ceph-osd-prepare-minikube-7t4mk            0/1     Completed   0          6d8h
+```
+
+
+5. Deploy a `CephCluster`
+```shell
+kubectl apply -f ./rook/cluster.yaml
+```
+Ensure that the cluster is in `Ready` phase
+
+```shell
+kubectl get cephcluster -A
+```
+
+6. Deploy a `CephBlockPool`, `CephObjectStore` & `StorageClass`
+```shell
+kubectl apply -f ./rook/pool.yaml
 ```
 
 ## Clone the Repository
@@ -66,4 +81,128 @@ To bring up and start locally the `cephlet` project for development purposes you
 ```shell
 git clone git@github.com:onmetal/cephlet.git
 cd cephlet
+```
+
+## Build the `cephlet`
+
+
+1. Build the `volume-cephlet`
+```shell
+make build-volume
+```
+
+2. Build the `bucket-cephlet`
+```shell
+make build-bucket
+```
+
+## Run the `cephlet-volume`
+
+The required `cephlet` flags needs to be defined in order to connect to ceph. 
+
+The following command starts a `volume-cephlet` and connects to a local `ceph` cluster.
+```shell
+go run ./ori/volume/cmd/volume/main.go \
+    --address=./ori-volume.sock
+    --supported-volume-classes=./classes.json
+    --zap-log-level=2
+    --ceph-key-file=./key
+    --ceph-monitors=192.168.64.23:6789
+    --ceph-user=admin
+    --ceph-pool=cephlet-pool
+    --ceph-client=client.cephlet-pool
+```
+
+
+Sample `supported-volume-classes.json` file: 
+```json
+[
+  {
+    "name": "experimental",
+    "capabilities": {
+      "tps": 262144000,
+      "iops": 15000
+    }
+  }
+]
+```
+
+The `ceph key` can be retrieved from the keyring by decoding (base64) the keyring and using only the `key`. 
+```shell
+kubectl get secrets -n rook-ceph rook-ceph-admin-keyring -o yaml
+```
+
+
+## Run the `cephlet-bucket`
+
+The required `cephlet` flags needs to be defined in order to work with rook.
+
+The following command starts a `bucket-cephlet`. 
+The flag `bucket-pool-storage-class-name` defines the `StorageClass` and hereby implicit the `CephBlockPool` (see rook [docs](https://rook.io/docs/rook/v1.11/Storage-Configuration/Object-Storage-RGW/object-storage/)). 
+```shell
+go run ./ori/bucket/cmd/bucket/main.go \
+    --address=./ori-bucket.sock
+    --bucket-pool-storage-class-name=rook-ceph-bucket
+```
+
+
+## Interact with the  `cephlet`
+
+### Prerequisites
+* orictl-volume
+    * locally running or
+    * https://github.com/onmetal/onmetal-api/pkgs/container/onmetal-api-orictl-volume
+* orictl-bucket
+    * locally running or
+    * https://github.com/onmetal/onmetal-api/pkgs/container/onmetal-api-orictl-bucket
+
+### Listing supported `VolumeClass` 
+```shell
+orictl-volume --address=unix:./ori-volume.sock get volumeclass
+Name           TPS         IOPS
+experimental   262144000   15000
+```
+
+### Listing supported `VolumeClass`
+```shell
+orictl-volume --address=unix:./ori-volume.sock get volumeclass
+Name           TPS         IOPS
+experimental   262144000   15000
+```
+
+### Creating a  `Volume`
+```shell
+orictl-volume --address=unix:./ori-volume.sock create volume -f ./volume.json
+
+Created volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2
+```
+
+Sample volume.json
+```json
+{
+  "metadata": {
+    "labels": {
+      "test.api.onmetal.de/volume-name": "test"
+    }
+  },
+  "spec": {
+    "class":  "experimental",
+    "resources":  {
+      "storage_bytes": 10070703360
+    }
+  }
+}
+```
+
+### Listing `Volume`s
+```shell
+orictl-volume --address=unix:./ori-volume.sock get  volume
+ID                                                                Class          Image   State              Age
+796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2   experimental           VOLUME_AVAILABLE   2s
+```
+
+### Deleting a `Volume`s
+```shell
+orictl-volume --address=unix:./ori-volume.sock delete  volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2
+Volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2 deleted
 ```

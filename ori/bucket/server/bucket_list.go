@@ -42,7 +42,7 @@ func (s *Server) listManagedAndCreated(ctx context.Context, list client.ObjectLi
 func (s *Server) listAggregateBuckets(ctx context.Context) ([]AggregateBucket, error) {
 	bucketClaimList := &objectbucketv1alpha1.ObjectBucketClaimList{}
 	if err := s.listManagedAndCreated(ctx, bucketClaimList); err != nil {
-		return nil, fmt.Errorf("error listing onmetal buckets: %w", err)
+		return nil, fmt.Errorf("error listing buckets: %w", err)
 	}
 
 	secretList := &corev1.SecretList{}
@@ -63,13 +63,13 @@ func (s *Server) listAggregateBuckets(ctx context.Context) ([]AggregateBucket, e
 
 	var res []AggregateBucket
 	for i := range bucketClaimList.Items {
-		onmetalBucket := &bucketClaimList.Items[i]
-		aggregateOnmetalBucket, err := s.aggregateBucket(onmetalBucket, secretByNameGetter.Get)
+		bucketClaim := &bucketClaimList.Items[i]
+		aggregateBucket, err := s.aggregateBucket(bucketClaim, secretByNameGetter.Get)
 		if err != nil {
-			return nil, fmt.Errorf("error aggregating onmetal bucket %s: %w", onmetalBucket.Name, err)
+			return nil, fmt.Errorf("error aggregating bucket %s: %w", bucketClaim.Name, err)
 		}
 
-		res = append(res, *aggregateOnmetalBucket)
+		res = append(res, *aggregateBucket)
 	}
 
 	return res, nil

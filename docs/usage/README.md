@@ -1,6 +1,6 @@
 # Usage Guides
 
-This section provides an overview on how `Volume`s from the [onmetal-api](https://github.com/onmetal/onmetal-api) project can be provisioned using the `cephlet` provider.
+This section provides an overview on how `Volume`s from the [onmetal-api](https://github.com/onmetal/onmetal-api) project can be provisioned using the `cephlet` provider. The samples are equivalent for `Bucket`s. 
 
 ## Available Pools and Classes
 
@@ -85,22 +85,4 @@ The `secretRef` in the status defines the `secret` with the  access credentials 
 kubectl get secrets
 NAME            TYPE     DATA   AGE
 sample-volume   Opaque   2      93s
-```
-
-## Rook resources
-
-Administrators can also observe the Rook related resources. Every `Namespace` contains a  
-`CephBlockPoolRadosNamespace` and a `CephClient` resource. Under the hood, Rook generates a RADOS namespace inside the 
-Ceph cluster and grants access to it for the specific Ceph client user.
-
-```shell
-kubectl get cephblockpoolradosnamespaces
-NAMESPACE   NAME            AGE
-rook-ceph   default   94s
-```
-
-```shell
-kubectl get cephclients.ceph.rook.io 
-NAMESPACE   NAME            PHASE
-rook-ceph   default   Ready
 ```

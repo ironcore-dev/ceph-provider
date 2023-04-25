@@ -35,7 +35,7 @@ func (s *Server) convertAggregateBucket(bucket *AggregateBucket) (*ori.Bucket, e
 
 	class, ok := apiutils.GetClassLabel(bucket.BucketClaim)
 	if !ok {
-		return nil, fmt.Errorf("failed to get volume class")
+		return nil, fmt.Errorf("failed to get bucket class")
 	}
 
 	access, err := s.convertBucketAccess(bucket)
@@ -70,7 +70,7 @@ func (s *Server) convertBucketClaimState(state objectbucketv1alpha1.ObjectBucket
 	if state, ok := bucketClaimStateToORIState[state]; ok {
 		return state, nil
 	}
-	return 0, fmt.Errorf("unknown onmetal bucket state %q", state)
+	return 0, fmt.Errorf("unknown bucket state %q", state)
 }
 
 func (s *Server) convertBucketAccess(bucket *AggregateBucket) (*ori.BucketAccess, error) {
