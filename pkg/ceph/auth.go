@@ -45,3 +45,23 @@ func ConnectToRados(ctx context.Context, c Credentials) (*rados.Conn, error) {
 
 	return conn, nil
 }
+
+func CheckIfPoolExists(conn *rados.Conn, pool string) error {
+	pools, err := conn.ListPools()
+	if err != nil {
+		return fmt.Errorf("failed to list pools: %w", err)
+	}
+
+	var found bool
+	for _, p := range pools {
+		if p == pool {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("pool %s not found", pool)
+	}
+
+	return nil
+}
