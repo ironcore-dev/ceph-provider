@@ -149,8 +149,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go mod download
 
 # Copy the go source
-COPY main.go main.go
-COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY ori/ ori/
 COPY hack/ hack/
@@ -158,12 +156,10 @@ COPY hack/ hack/
 ARG TARGETOS
 ARG TARGETARCH
 
-
-FROM builder as controller
-# Build
+FROM builder as cephlet-bucket-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/manager main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-bucket ./ori/bucket/cmd/bucket/main.go
 
 
 # Start from Kubernetes Debian base.
@@ -260,3 +256,10 @@ FROM cephlet-volume
 USER 65532:65532
 
 ENTRYPOINT ["/cephlet-volume"]
+
+
+
+FROM distroless-base  as cephlet-bucket
+COPY --from=cephlet-bucket-builder /workspace/bin/cephlet-bucket /cephlet-bucket
+USER 65532:65532
+ENTRYPOINT ["/cephlet-bucket"]

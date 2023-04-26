@@ -1,12 +1,12 @@
 # Adds namespace to all resources.
-namespace: cephlet-volume-system
+namespace: cephlet-bucket-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: cephlet-volume-
+namePrefix: cephlet-bucket-
 
 # Labels to add to all resources and selectors.
 #commonLabels:
