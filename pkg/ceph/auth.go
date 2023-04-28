@@ -15,8 +15,13 @@
 package ceph
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/ceph/go-ceph/rados"
 )
@@ -44,6 +49,42 @@ func ConnectToRados(ctx context.Context, c Credentials) (*rados.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func GetKeyFromKeyring(keyringFile string) (string, error) {
+	data, err := os.ReadFile(keyringFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	b64 := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+	_, err = base64.StdEncoding.Decode(b64, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode keyring file: %w", err)
+	}
+
+	var key string
+
+	sc := bufio.NewScanner(bytes.NewReader(b64))
+	for sc.Scan() {
+		if line := sc.Text(); strings.Contains(line, "key") {
+			line = strings.Trim(line, "\t")
+			line = strings.TrimSpace(line)
+			line = strings.TrimPrefix(line, "key")
+			line = strings.TrimSpace(line)
+			line = strings.TrimPrefix(line, "=")
+			line = strings.TrimSpace(line)
+			key = line
+			break
+		}
+	}
+
+	if key == "" {
+		return "", fmt.Errorf("failed to extract key from keyring")
+	}
+
+	return key, nil
+
 }
 
 func CheckIfPoolExists(conn *rados.Conn, pool string) error {

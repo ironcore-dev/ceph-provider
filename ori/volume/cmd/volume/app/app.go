@@ -19,6 +19,7 @@ import (
 	goflag "flag"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/onmetal/cephlet/ori/volume/server"
@@ -48,11 +49,12 @@ type Options struct {
 }
 
 type CephOptions struct {
-	Monitors string
-	User     string
-	KeyFile  string
-	Pool     string
-	Client   string
+	Monitors    string
+	User        string
+	KeyFile     string
+	KeyringFile string
+	Pool        string
+	Client      string
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
@@ -78,7 +80,8 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
-	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "CephKeyFile.")
+	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence). ceph-key-file contains contains only the ceph key.")
+	fs.StringVar(&o.Ceph.KeyringFile, "ceph-keyring-file", o.Ceph.KeyringFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence)s. ceph-keyring-file contains the ceph key and client information.")
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
 	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
 }
@@ -86,7 +89,6 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("available-volume-classes")
 	_ = cmd.MarkFlagRequired("ceph-monitors")
-	_ = cmd.MarkFlagRequired("ceph-key-file")
 	_ = cmd.MarkFlagRequired("ceph-pool")
 }
 
@@ -119,10 +121,54 @@ func Command() *cobra.Command {
 	return cmd
 }
 
+func configureCephAuth(opts *CephOptions) (func() error, error) {
+	noOpCleanup := func() error { return nil }
+	if opts.KeyFile == "" && opts.KeyringFile == "" {
+		return noOpCleanup, fmt.Errorf("ceph-key-file or ceph-keyring-file needs to be defined")
+	}
+
+	if opts.KeyFile != "" {
+		return noOpCleanup, nil
+	}
+
+	key, err := ceph.GetKeyFromKeyring(opts.KeyringFile)
+	if err != nil {
+		return noOpCleanup, fmt.Errorf("failed to get key from keyring: %w", err)
+	}
+
+	file, err := os.CreateTemp("", "key")
+	if err != nil {
+		return noOpCleanup, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	cleanup := func() error {
+		return os.Remove(file.Name())
+	}
+
+	_, err = file.WriteString(key)
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to write key to temp file: %w:", err)
+	}
+
+	opts.KeyFile = file.Name()
+
+	return cleanup, nil
+}
+
 func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 	var wg sync.WaitGroup
+
+	cleanup, err := configureCephAuth(&opts.Ceph)
+	if err != nil {
+		return fmt.Errorf("failed to configure ceph auth: %w", err)
+	}
+	defer func() {
+		err := cleanup()
+		if err != nil {
+			setupLog.Error(err, "failed to cleanup")
+		}
+	}()
 
 	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User)
 	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
