@@ -434,6 +434,34 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 	return nil
 }
 
+func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == api.EncryptionTypeUnencrypted {
+		return nil
+	}
+
+	log.V(2).Info("Configuring encryption")
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+
+	if err := img.EncryptionFormat(librbd.EncryptionOptionsLUKS2{
+		Alg:        librbd.EncryptionAlgorithmAES256,
+		Passphrase: image.Spec.Encryption.Passphrase,
+	}); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to set encryption format: %w", err)
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("failed to close rbd image: %w", err)
+	}
+
+	return nil
+}
+
 func (r *ImageReconciler) createEmptyImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image, options *librbd.ImageOptions) error {
 	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), round.OffBytes(image.Spec.Size), options); err != nil {
 		return fmt.Errorf("failed to create rbd image: %w", err)
