@@ -43,32 +43,33 @@ func LoadVolumeClassesFile(filename string) ([]ori.VolumeClass, error) {
 
 func NewVolumeClassRegistry(classes []ori.VolumeClass) (*Vcr, error) {
 	registry := Vcr{
-		classes: map[string]*ori.VolumeClass{},
+		classes: map[string]ori.VolumeClass{},
 	}
 
 	for _, class := range classes {
 		if _, ok := registry.classes[class.Name]; ok {
 			return nil, fmt.Errorf("multiple classes with same name (%s) found", class.Name)
 		}
-		registry.classes[class.Name] = &class
+		registry.classes[class.Name] = class
 	}
 
 	return &registry, nil
 }
 
 type Vcr struct {
-	classes map[string]*ori.VolumeClass
+	classes map[string]ori.VolumeClass
 }
 
 func (v *Vcr) Get(volumeClassName string) (*ori.VolumeClass, bool) {
 	class, found := v.classes[volumeClassName]
-	return class, found
+	return &class, found
 }
 
 func (v *Vcr) List() []*ori.VolumeClass {
 	var classes []*ori.VolumeClass
-	for _, class := range v.classes {
-		classes = append(classes, class)
+	for name := range v.classes {
+		class := v.classes[name]
+		classes = append(classes, &class)
 	}
 	return classes
 }
