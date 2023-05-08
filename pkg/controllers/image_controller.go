@@ -383,6 +383,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		}
 	}
 
+	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {
+		return fmt.Errorf("failed to set encryption header: %w", err)
+	}
+
 	if len(img.Spec.Limits) > 0 {
 		if err := r.setImageLimits(ctx, log, ioCtx, img); err != nil {
 			return fmt.Errorf("failed to set limits: %w", err)
