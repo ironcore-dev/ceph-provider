@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -57,15 +56,9 @@ func GetKeyFromKeyring(keyringFile string) (string, error) {
 		return "", fmt.Errorf("failed to read file: %w", err)
 	}
 
-	b64 := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
-	_, err = base64.StdEncoding.Decode(b64, data)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode keyring file: %w", err)
-	}
-
 	var key string
 
-	sc := bufio.NewScanner(bytes.NewReader(b64))
+	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		if line := sc.Text(); strings.Contains(line, "key") {
 			line = strings.Trim(line, "\t")
