@@ -76,8 +76,13 @@ func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volum
 			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
 		}
 
+		encryptedPassphrase, err := s.keyEncryption.Encrypt(passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+		}
+
 		image.Spec.Encryption.Type = api.EncryptionTypeEncrypted
-		image.Spec.Encryption.Passphrase = passphrase
+		image.Spec.Encryption.EncryptedPassphrase = encryptedPassphrase
 	}
 
 	if err := apiutils.SetObjectMetadata(image, volume.Metadata); err != nil {

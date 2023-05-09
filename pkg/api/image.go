@@ -44,8 +44,8 @@ const (
 )
 
 type EncryptionSpec struct {
-	Type       EncryptionType `json:"type"`
-	Passphrase []byte         `json:"passphrase"`
+	Type                EncryptionType `json:"type"`
+	EncryptedPassphrase []byte         `json:"encryptedPassphrase"`
 }
 
 type ImageStatus struct {
