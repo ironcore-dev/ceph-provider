@@ -400,7 +400,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 
 	img.Status.Access = &api.ImageAccess{
 		Monitors: r.monitors,
-		Handle:   fmt.Sprintf("%s/%s", r.pool, img.ID),
+		Handle:   fmt.Sprintf("%s/%s", r.pool, ImageIDToRBDID(img.ID)),
 		User:     user,
 		UserKey:  key,
 		WWN:      r.wwnGen.Generate(),
