@@ -19,10 +19,10 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
 	google.golang.org/grpc v1.55.0
-	k8s.io/api v0.26.4
-	k8s.io/apimachinery v0.26.4
+	k8s.io/api v0.27.1
+	k8s.io/apimachinery v0.27.1
 	k8s.io/client-go v0.26.4
-	k8s.io/utils v0.0.0-20230202215443-34013725500c
+	k8s.io/utils v0.0.0-20230209194617-a36077c30491
 	sigs.k8s.io/controller-runtime v0.14.6
 )
 
@@ -63,7 +63,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
+	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
@@ -145,10 +145,10 @@ require (
 	k8s.io/apiserver v0.26.4 // indirect
 	k8s.io/component-base v0.26.4 // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20230202010329-39b3636cbaa3 // indirect
+	k8s.io/kube-openapi v0.0.0-20230308215209-15aac26d736a // indirect
 	oras.land/oras-go v1.2.2 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.36 // indirect
-	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
+	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
