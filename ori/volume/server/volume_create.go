@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	EncryptionSecretDataPassphraseKey = "passphrase"
+	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
 type CephVolumeConfig struct {
