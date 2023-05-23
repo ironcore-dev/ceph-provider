@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 	cephapi "github.com/onmetal/cephlet/pkg/api"
+	"github.com/onmetal/cephlet/pkg/encryption"
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
@@ -40,6 +41,8 @@ type Server struct {
 
 	burstFactor            int64
 	burstDurationInSeconds int64
+
+	keyEncryption encryption.Encryptor
 }
 
 func (s *Server) loggerFrom(ctx context.Context, keysWithValues ...interface{}) logr.Logger {
@@ -64,7 +67,12 @@ var _ ori.VolumeRuntimeServer = (*Server)(nil)
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
 
-func New(imageStore store.Store[*cephapi.Image], snapshotStore store.Store[*cephapi.Snapshot], volumeClassRegistry VolumeClassRegistry, opts Options) (*Server, error) {
+func New(imageStore store.Store[*cephapi.Image],
+	snapshotStore store.Store[*cephapi.Snapshot],
+	volumeClassRegistry VolumeClassRegistry,
+	keyEncryption encryption.Encryptor,
+	opts Options,
+) (*Server, error) {
 
 	setOptionsDefaults(&opts)
 
@@ -73,6 +81,8 @@ func New(imageStore store.Store[*cephapi.Image], snapshotStore store.Store[*ceph
 		imageStore:    imageStore,
 		snapshotStore: snapshotStore,
 		volumeClasses: volumeClassRegistry,
+
+		keyEncryption: keyEncryption,
 
 		burstFactor:            opts.BurstFactor,
 		burstDurationInSeconds: opts.BurstDurationInSeconds,

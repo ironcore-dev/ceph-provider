@@ -26,6 +26,10 @@ import (
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
+const (
+	EncryptionSecretDataPassphraseKey = "encryptionKey"
+)
+
 type CephVolumeConfig struct {
 	image *api.Image
 }
@@ -57,7 +61,28 @@ func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volum
 			Size:   volume.Spec.Resources.StorageBytes,
 			Limits: calculatedLimits,
 			Image:  volume.Spec.Image,
+			Encryption: api.EncryptionSpec{
+				Type: api.EncryptionTypeUnencrypted,
+			},
 		},
+	}
+
+	if encryption := volume.Spec.Encryption; encryption != nil {
+		if encryption.SecretData == nil {
+			return nil, fmt.Errorf("encryption enabled but SecretData missing")
+		}
+		passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
+		if !found {
+			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
+		}
+
+		encryptedPassphrase, err := s.keyEncryption.Encrypt(passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+		}
+
+		image.Spec.Encryption.Type = api.EncryptionTypeEncrypted
+		image.Spec.Encryption.EncryptedPassphrase = encryptedPassphrase
 	}
 
 	if err := apiutils.SetObjectMetadata(image, volume.Metadata); err != nil {

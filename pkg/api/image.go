@@ -29,10 +29,23 @@ const (
 )
 
 type ImageSpec struct {
-	Size        uint64  `json:"size"`
-	Limits      Limits  `json:"limits"`
-	Image       string  `json:"image"`
-	SnapshotRef *string `json:"snapshotRef"`
+	Size        uint64         `json:"size"`
+	Limits      Limits         `json:"limits"`
+	Image       string         `json:"image"`
+	SnapshotRef *string        `json:"snapshotRef"`
+	Encryption  EncryptionSpec `json:"encryption"`
+}
+
+type EncryptionType string
+
+const (
+	EncryptionTypeEncrypted   EncryptionType = "Encrypted"
+	EncryptionTypeUnencrypted EncryptionType = "Unencrypted"
+)
+
+type EncryptionSpec struct {
+	Type                EncryptionType `json:"type"`
+	EncryptedPassphrase []byte         `json:"encryptedPassphrase"`
 }
 
 type ImageStatus struct {
