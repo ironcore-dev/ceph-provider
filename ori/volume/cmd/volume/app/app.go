@@ -169,11 +169,6 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize volume class registry : %w", err)
 	}
 
-	abc := classRegistry.List()
-	for _, v := range abc {
-		println(v.String())
-	}
-
 	cleanup, err := configureCephAuth(&opts.Ceph)
 	if err != nil {
 		return fmt.Errorf("failed to configure ceph auth: %w", err)

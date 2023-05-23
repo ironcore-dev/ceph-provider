@@ -140,9 +140,6 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	workerSize := 15
 
 	imgEventReg, err := r.imageEvents.AddHandler(event.HandlerFunc[*api.Image](func(evt event.Event[*api.Image]) {
-		if evt.Type == event.TypeUpdated {
-			return
-		}
 		r.queue.Add(evt.Object.ID)
 	}))
 	if err != nil {
@@ -318,7 +315,50 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	return nil
 }
 
+func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open image: %w", err)
+	}
+
+	currentSize, err := img.GetSize()
+	if err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to get image size: %w", err)
+	}
+
+	requestedSize := round.OffBytes(image.Spec.Size)
+
+	switch {
+	case currentSize == requestedSize:
+		return nil
+	case requestedSize < currentSize:
+		err := fmt.Errorf("failed to shrink image: not supported")
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return err
+	}
+
+	if err := img.Resize(requestedSize); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to resize image: %w", err)
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close image: %w", err)
+	}
+
+	return nil
+}
+
 func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
+
+	//TODO: handle storage expansion in controller
 	log := logr.FromContextOrDiscard(ctx)
 	ioCtx, err := r.conn.OpenIOContext(r.pool)
 	if err != nil {
@@ -345,6 +385,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 
 	if img.Status.State == api.ImageStateAvailable {
 		log.V(1).Info("Image already provisioned")
+		if err := r.updateImage(ctx, log, ioCtx, img); err != nil {
+			return fmt.Errorf("failed to update image: %w", err)
+		}
+
 		return nil
 	}
 
