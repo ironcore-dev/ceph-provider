@@ -94,7 +94,7 @@ func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("available-volume-classes")
 	_ = cmd.MarkFlagRequired("ceph-monitors")
 	_ = cmd.MarkFlagRequired("ceph-pool")
-	_ = cmd.MarkFlagRequired("ceph-kek")
+	_ = cmd.MarkFlagRequired("ceph-kek-path")
 }
 
 func Command() *cobra.Command {
