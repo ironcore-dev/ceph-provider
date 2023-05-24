@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/pkg/api"
+	"github.com/onmetal/cephlet/pkg/encryption"
 	"github.com/onmetal/cephlet/pkg/event"
 	"github.com/onmetal/cephlet/pkg/round"
 	"github.com/onmetal/cephlet/pkg/store"
@@ -59,6 +60,7 @@ func NewImageReconciler(
 	snapshots store.Store[*api.Snapshot],
 	imageEvents event.Source[*api.Image],
 	snapshotEvents event.Source[*api.Snapshot],
+	keyEncryption encryption.Encryptor,
 	opts ImageReconcilerOptions,
 ) (*ImageReconciler, error) {
 	if conn == nil {
@@ -83,6 +85,10 @@ func NewImageReconciler(
 
 	if snapshotEvents == nil {
 		return nil, fmt.Errorf("must specify snapshot events")
+	}
+
+	if keyEncryption == nil {
+		return nil, fmt.Errorf("must specify key encryption")
 	}
 
 	if opts.Pool == "" {
@@ -110,6 +116,7 @@ func NewImageReconciler(
 		monitors:       opts.Monitors,
 		client:         opts.Client,
 		pool:           opts.Pool,
+		keyEncryption:  keyEncryption,
 	}, nil
 }
 
@@ -131,6 +138,8 @@ type ImageReconciler struct {
 	monitors string
 	client   string
 	pool     string
+
+	keyEncryption encryption.Encryptor
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
@@ -427,6 +436,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		}
 	}
 
+	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {
+		return fmt.Errorf("failed to set encryption header: %w", err)
+	}
+
 	if len(img.Spec.Limits) > 0 {
 		if err := r.setImageLimits(ctx, log, ioCtx, img); err != nil {
 			return fmt.Errorf("failed to set limits: %w", err)
@@ -469,6 +482,39 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
 		}
 		log.V(3).Info("Set image limit", "limit", limit, "value", value)
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("failed to close rbd image: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == api.EncryptionTypeUnencrypted {
+		return nil
+	}
+
+	log.V(2).Info("Configuring encryption")
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+
+	passphrase, err := r.keyEncryption.Decrypt(image.Spec.Encryption.EncryptedPassphrase)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt passphrase: %w", err)
+	}
+
+	if err := img.EncryptionFormat(librbd.EncryptionOptionsLUKS2{
+		Alg:        librbd.EncryptionAlgorithmAES256,
+		Passphrase: passphrase,
+	}); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to set encryption format: %w", err)
 	}
 
 	if err := img.Close(); err != nil {

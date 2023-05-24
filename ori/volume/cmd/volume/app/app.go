@@ -26,6 +26,7 @@ import (
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/controllers"
+	"github.com/onmetal/cephlet/pkg/encryption"
 	"github.com/onmetal/cephlet/pkg/event"
 	"github.com/onmetal/cephlet/pkg/omap"
 	"github.com/onmetal/cephlet/pkg/utils"
@@ -60,6 +61,8 @@ type CephOptions struct {
 	BurstDurationInSeconds int64
 
 	PopulatorBufferSize int64
+
+	KeyEncryptionKeyPath string
 }
 
 func (o *Options) Defaults() {
@@ -84,12 +87,14 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Ceph.KeyringFile, "ceph-keyring-file", o.Ceph.KeyringFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence)s. ceph-keyring-file contains the ceph key and client information.")
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
 	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
+	fs.StringVar(&o.Ceph.KeyEncryptionKeyPath, "ceph-kek-path", o.Ceph.KeyEncryptionKeyPath, "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("available-volume-classes")
 	_ = cmd.MarkFlagRequired("ceph-monitors")
 	_ = cmd.MarkFlagRequired("ceph-pool")
+	_ = cmd.MarkFlagRequired("ceph-kek-path")
 }
 
 func Command() *cobra.Command {
@@ -146,7 +151,7 @@ func configureCephAuth(opts *CephOptions) (func() error, error) {
 
 	_, err = file.WriteString(key)
 	if err != nil {
-		return cleanup, fmt.Errorf("failed to write key to temp file: %w:", err)
+		return cleanup, fmt.Errorf("failed to write key to temp file: %w", err)
 	}
 
 	opts.KeyFile = file.Name()
@@ -159,16 +164,6 @@ func Run(ctx context.Context, opts Options) error {
 	setupLog := log.WithName("setup")
 	var wg sync.WaitGroup
 
-	supportedClasses, err := vcr.LoadVolumeClassesFile(opts.PathSupportedVolumeClasses)
-	if err != nil {
-		return fmt.Errorf("failed to load supported volume classes: %w", err)
-	}
-
-	classRegistry, err := vcr.NewVolumeClassRegistry(supportedClasses)
-	if err != nil {
-		return fmt.Errorf("failed to initialize volume class registry : %w", err)
-	}
-
 	cleanup, err := configureCephAuth(&opts.Ceph)
 	if err != nil {
 		return fmt.Errorf("failed to configure ceph auth: %w", err)
@@ -179,6 +174,12 @@ func Run(ctx context.Context, opts Options) error {
 			setupLog.Error(err, "failed to cleanup")
 		}
 	}()
+
+	setupLog.Info("Initializing key encryptor")
+	encryptor, err := encryption.NewAesGcmEncryptor(opts.Ceph.KeyEncryptionKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to init encryptor: %w", err)
+	}
 
 	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User)
 	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
@@ -239,10 +240,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	imageReconciler, err := controllers.NewImageReconciler(
 		log.WithName("image-reconciler"),
-		conn, reg,
+		conn,
+		reg,
 		imageStore, snapshotStore,
 		imageEvents,
 		snapshotEvents,
+		encryptor,
 		controllers.ImageReconcilerOptions{
 			Monitors: opts.Ceph.Monitors,
 			Client:   opts.Ceph.Client,
@@ -264,7 +267,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	snapshotReconciler, err := controllers.NewSnapshotReconciler(
 		log.WithName("snapshot-reconciler"),
-		conn, reg, snapshotStore,
+		conn,
+		reg,
+		snapshotStore,
 		snapshotEvents,
 		controllers.SnapshotReconcilerOptions{
 			Pool:                opts.Ceph.Pool,
@@ -303,10 +308,26 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 
-	srv, err := server.New(imageStore, snapshotStore, classRegistry, server.Options{
-		BurstFactor:            opts.Ceph.BurstFactor,
-		BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
-	})
+	supportedClasses, err := vcr.LoadVolumeClassesFile(opts.PathSupportedVolumeClasses)
+	if err != nil {
+		return fmt.Errorf("failed to load supported volume classes: %w", err)
+	}
+
+	classRegistry, err := vcr.NewVolumeClassRegistry(supportedClasses)
+	if err != nil {
+		return fmt.Errorf("failed to initialize volume class registry : %w", err)
+	}
+
+	srv, err := server.New(
+		imageStore,
+		snapshotStore,
+		classRegistry,
+		encryptor,
+		server.Options{
+			BurstFactor:            opts.Ceph.BurstFactor,
+			BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}
