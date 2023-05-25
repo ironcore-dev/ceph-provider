@@ -149,9 +149,6 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	workerSize := 15
 
 	imgEventReg, err := r.imageEvents.AddHandler(event.HandlerFunc[*api.Image](func(evt event.Event[*api.Image]) {
-		if evt.Type == event.TypeUpdated {
-			return
-		}
 		r.queue.Add(evt.Object.ID)
 	}))
 	if err != nil {
@@ -327,6 +324,63 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	return nil
 }
 
+func (r *ImageReconciler) isImageExisting(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) (bool, error) {
+	images, err := librbd.GetImageNames(ioCtx)
+	if err != nil {
+		return false, fmt.Errorf("failed to list images: %w", err)
+	}
+
+	for _, img := range images {
+		if ImageIDToRBDID(image.ID) == img {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open image: %w", err)
+	}
+
+	currentSize, err := img.GetSize()
+	if err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to get image size: %w", err)
+	}
+
+	requestedSize := round.OffBytes(image.Spec.Size)
+
+	switch {
+	case currentSize == requestedSize:
+		return nil
+	case requestedSize < currentSize:
+		err := fmt.Errorf("failed to shrink image: not supported")
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return err
+	}
+
+	if err := img.Resize(requestedSize); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to resize image: %w", err)
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close image: %w", err)
+	}
+
+	log.V(1).Info("Expanded image", "requestedSize", requestedSize, "currentSize", currentSize)
+	return nil
+}
+
 func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	log := logr.FromContextOrDiscard(ctx)
 	ioCtx, err := r.conn.OpenIOContext(r.pool)
@@ -352,43 +406,56 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		return nil
 	}
 
-	if img.Status.State == api.ImageStateAvailable {
-		log.V(1).Info("Image already provisioned")
-		return nil
-	}
-
 	if !slices.Contains(img.Finalizers, ImageFinalizer) {
 		img.Finalizers = append(img.Finalizers, ImageFinalizer)
 		if _, err := r.images.Update(ctx, img); err != nil {
 			return fmt.Errorf("failed to set finalizers: %w", err)
 		}
+		return nil
 	}
 
 	if err := r.reconcileSnapshot(ctx, log, img); err != nil {
 		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
 
-	options := librbd.NewRbdImageOptions()
-	defer options.Destroy()
-	if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
-		return fmt.Errorf("failed to set data pool: %w", err)
+	imageExists, err := r.isImageExisting(ctx, log, ioCtx, img)
+	if err != nil {
+		return fmt.Errorf("failed to check image existence: %w", err)
 	}
-	log.V(2).Info("Configured pool", "pool", r.pool)
+	log.V(1).Info("Checked image existence", "imageExists", imageExists)
 
-	switch {
-	case img.Spec.SnapshotRef != nil:
-		snapshotRef := img.Spec.SnapshotRef
-		ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
-		if err != nil {
-			return fmt.Errorf("failed to create image from snapshot: %w", err)
-		}
-		if !ok {
+	if imageExists {
+		if img.Status.State == api.ImageStateAvailable {
+			if err := r.updateImage(ctx, log, ioCtx, img); err != nil {
+				return fmt.Errorf("failed to update image: %w", err)
+			}
 			return nil
 		}
+	} else {
+		options := librbd.NewRbdImageOptions()
+		defer options.Destroy()
+		if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
+			return fmt.Errorf("failed to set data pool: %w", err)
+		}
+		log.V(2).Info("Configured pool", "pool", r.pool)
 
-	default:
-		if err := r.createEmptyImage(ctx, log, ioCtx, img, options); err != nil {
-			return fmt.Errorf("failed to create empty image: %w", err)
+		switch {
+		case img.Spec.SnapshotRef != nil:
+			snapshotRef := img.Spec.SnapshotRef
+			log.V(2).Info("Creating image from snapshot", "snapshotRef", snapshotRef)
+			ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
+			if err != nil {
+				return fmt.Errorf("failed to create image from snapshot: %w", err)
+			}
+			if !ok {
+				return nil
+			}
+
+		default:
+			log.V(2).Info("Creating empty image")
+			if err := r.createEmptyImage(ctx, log, ioCtx, img, options); err != nil {
+				return fmt.Errorf("failed to create empty image: %w", err)
+			}
 		}
 	}
 
@@ -396,10 +463,8 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to set encryption header: %w", err)
 	}
 
-	if len(img.Spec.Limits) > 0 {
-		if err := r.setImageLimits(ctx, log, ioCtx, img); err != nil {
-			return fmt.Errorf("failed to set limits: %w", err)
-		}
+	if err := r.setImageLimits(ctx, log, ioCtx, img); err != nil {
+		return fmt.Errorf("failed to set limits: %w", err)
 	}
 
 	user, key, err := r.fetchAuth(ctx, log)
@@ -419,12 +484,17 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to update image metadate: %w", err)
 	}
 
-	log.V(1).Info("Successfully created image")
+	log.V(1).Info("Successfully reconciled image")
 
 	return nil
 }
 
 func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	if len(image.Spec.Limits) <= 0 {
+		return nil
+	}
+
+	log.V(1).Info("Configuring limits")
 	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
@@ -448,11 +518,11 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 }
 
 func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
-	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == api.EncryptionTypeUnencrypted {
+	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == api.EncryptionTypeUnencrypted || image.Status.Encryption == api.EncryptionStateHeaderSet {
 		return nil
 	}
 
-	log.V(2).Info("Configuring encryption")
+	log.V(1).Info("Configuring encryption")
 	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
@@ -475,6 +545,11 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 
 	if err := img.Close(); err != nil {
 		return fmt.Errorf("failed to close rbd image: %w", err)
+	}
+
+	image.Status.Encryption = api.EncryptionStateHeaderSet
+	if _, err = r.images.Update(ctx, image); err != nil {
+		return fmt.Errorf("failed to update image encryption state: %w", err)
 	}
 
 	return nil
