@@ -28,6 +28,12 @@ const (
 	ImageStateAvailable ImageState = "Available"
 )
 
+type EncryptionState string
+
+const (
+	EncryptionStateHeaderSet EncryptionState = "EncryptionHeaderSet"
+)
+
 type ImageSpec struct {
 	Size        uint64         `json:"size"`
 	Limits      Limits         `json:"limits"`
@@ -49,8 +55,9 @@ type EncryptionSpec struct {
 }
 
 type ImageStatus struct {
-	State  ImageState   `json:"state"`
-	Access *ImageAccess `json:"access"`
+	State      ImageState      `json:"state"`
+	Encryption EncryptionState `json:"encryption"`
+	Access     *ImageAccess    `json:"access"`
 }
 
 type ImageAccess struct {
