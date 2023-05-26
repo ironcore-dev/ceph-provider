@@ -340,6 +340,7 @@ func (r *ImageReconciler) isImageExisting(ctx context.Context, log logr.Logger, 
 }
 
 func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	log.V(2).Info("Updating image")
 	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open image: %w", err)
@@ -357,6 +358,10 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 
 	switch {
 	case currentSize == requestedSize:
+		log.V(2).Info("No update needed: Old and new image size same")
+		if err := img.Close(); err != nil {
+			return fmt.Errorf("unable to close image: %w", err)
+		}
 		return nil
 	case requestedSize < currentSize:
 		err := fmt.Errorf("failed to shrink image: not supported")
@@ -523,14 +528,14 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 	}
 
 	log.V(1).Info("Configuring encryption")
-	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
-	if err != nil {
-		return fmt.Errorf("failed to open rbd image: %w", err)
-	}
-
 	passphrase, err := r.keyEncryption.Decrypt(image.Spec.Encryption.EncryptedPassphrase)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt passphrase: %w", err)
+	}
+
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
 
 	if err := img.EncryptionFormat(librbd.EncryptionOptionsLUKS2{
