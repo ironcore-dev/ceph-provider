@@ -72,6 +72,7 @@ type Options struct {
 	IDGen idgen.IDGen
 
 	Namespace                  string
+	BucketEndpoint             string
 	BucketPoolStorageClassName string
 	BucketClassSelector        map[string]string
 }
@@ -114,6 +115,7 @@ func New(cfg *rest.Config, opts Options) (*Server, error) {
 		bucketClassSelector:        opts.BucketClassSelector,
 		namespace:                  opts.Namespace,
 		bucketPoolStorageClassName: opts.BucketPoolStorageClassName,
+		bucketEndpoint:             opts.BucketEndpoint,
 	}, nil
 }
 
