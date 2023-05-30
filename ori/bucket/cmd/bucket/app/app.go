@@ -40,6 +40,7 @@ type Options struct {
 
 	PathSupportedBucketClasses string
 	BucketClassSelector        map[string]string
+	BucketEndpoint             string
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -48,12 +49,14 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 	fs.StringVar(&o.Namespace, "namespace", o.Namespace, "Target Kubernetes namespace to use.")
 	fs.StringVar(&o.BucketPoolStorageClassName, "bucket-pool-storage-class-name", o.BucketPoolStorageClassName, "Name of the target bucket pool storage class.")
+	fs.StringVar(&o.BucketEndpoint, "bucket-endpoint", o.BucketEndpoint, "Endpoint at which the buckets are reachable.")
 
 	fs.StringToStringVar(&o.BucketClassSelector, "bucket-class-selector", nil, "Selector for bucket classes to report as available.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("bucket-pool-storage-class-name")
+	_ = cmd.MarkFlagRequired("bucket-endpoint")
 }
 
 func Command() *cobra.Command {
@@ -97,6 +100,7 @@ func Run(ctx context.Context, opts Options) error {
 		Namespace:                  opts.Namespace,
 		BucketPoolStorageClassName: opts.BucketPoolStorageClassName,
 		BucketClassSelector:        opts.BucketClassSelector,
+		BucketEndpoint:             opts.BucketEndpoint,
 	})
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
