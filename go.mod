@@ -11,7 +11,7 @@ require (
 	github.com/onmetal/controller-utils v0.7.1-0.20230414090910-d7fb3b0c14ee
 	github.com/onmetal/onmetal-api v0.1.2-0.20230522120840-6e3b13de7ae3
 	github.com/onmetal/onmetal-image v0.1.1
-	github.com/onsi/ginkgo/v2 v2.9.6
+	github.com/onsi/ginkgo/v2 v2.9.7
 	github.com/onsi/gomega v1.27.7
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.11.6
