@@ -174,9 +174,6 @@ func (s *ListWatchSource[E]) Start(ctx context.Context) error {
 		}
 	}()
 
-	ticker := time.NewTicker(s.resyncDuration)
-	defer ticker.Stop()
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -195,7 +192,6 @@ func (s *ListWatchSource[E]) Start(ctx context.Context) error {
 				})
 			}
 		}, s.resyncDuration)
-
 	}()
 
 	wg.Wait()

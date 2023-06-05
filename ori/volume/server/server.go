@@ -22,6 +22,7 @@ import (
 	"github.com/onmetal/cephlet/pkg/encryption"
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
+	orimetrics "github.com/onmetal/onmetal-api/ori/apis/metrics/v1alpha1"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -31,13 +32,19 @@ type VolumeClassRegistry interface {
 	List() []*ori.VolumeClass
 }
 
+type MetricCollector interface {
+	GetMetrics() []*orimetrics.Metric
+	GetMetricDescriptors() []*orimetrics.MetricDescriptor
+}
+
 type Server struct {
 	idGen idgen.IDGen
 
 	imageStore    store.Store[*cephapi.Image]
 	snapshotStore store.Store[*cephapi.Snapshot]
 
-	volumeClasses VolumeClassRegistry
+	volumeClasses    VolumeClassRegistry
+	metricsCollector MetricCollector
 
 	burstFactor            int64
 	burstDurationInSeconds int64
@@ -67,9 +74,11 @@ var _ ori.VolumeRuntimeServer = (*Server)(nil)
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=volumes,verbs=get;list;watch;create;update;patch;delete
 
-func New(imageStore store.Store[*cephapi.Image],
+func New(
+	imageStore store.Store[*cephapi.Image],
 	snapshotStore store.Store[*cephapi.Snapshot],
 	volumeClassRegistry VolumeClassRegistry,
+	metricsCollector MetricCollector,
 	keyEncryption encryption.Encryptor,
 	opts Options,
 ) (*Server, error) {
@@ -80,7 +89,9 @@ func New(imageStore store.Store[*cephapi.Image],
 		idGen:         opts.IDGen,
 		imageStore:    imageStore,
 		snapshotStore: snapshotStore,
-		volumeClasses: volumeClassRegistry,
+
+		volumeClasses:    volumeClassRegistry,
+		metricsCollector: metricsCollector,
 
 		keyEncryption: keyEncryption,
 

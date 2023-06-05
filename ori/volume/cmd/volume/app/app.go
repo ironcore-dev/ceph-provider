@@ -21,7 +21,9 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/onmetal/cephlet/ori/volume/metrics"
 	"github.com/onmetal/cephlet/ori/volume/server"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/ceph"
@@ -44,6 +46,7 @@ import (
 type Options struct {
 	Address string
 
+	MetricsRefreshInterval     int64
 	PathSupportedVolumeClasses string
 
 	Ceph CephOptions
@@ -66,6 +69,7 @@ type CephOptions struct {
 }
 
 func (o *Options) Defaults() {
+	o.MetricsRefreshInterval = 5
 	o.Ceph.BurstFactor = 10
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
@@ -74,6 +78,7 @@ func (o *Options) Defaults() {
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Address, "address", "/var/run/cephlet-volume.sock", "Address to listen on.")
 
+	fs.Int64Var(&o.MetricsRefreshInterval, "metrics-refresh-interval", o.MetricsRefreshInterval, "Interval (in minutes) in which metrics are recalculated.")
 	fs.StringVar(&o.PathSupportedVolumeClasses, "supported-volume-classes", o.PathSupportedVolumeClasses, "File containing supported volume classes.")
 
 	fs.Int64Var(&o.Ceph.BurstFactor, "limits-burst-factor", o.Ceph.BurstFactor, "Defines the factor to calculate the burst limits.")
@@ -318,10 +323,23 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize volume class registry : %w", err)
 	}
 
+	metricsCollector := metrics.New(
+		imageStore.List,
+		snapshotStore.List,
+		time.Minute*time.Duration(opts.MetricsRefreshInterval),
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		setupLog.Info("Starting metrics collector")
+		metricsCollector.Start(ctx)
+	}()
+
 	srv, err := server.New(
 		imageStore,
 		snapshotStore,
 		classRegistry,
+		metricsCollector,
 		encryptor,
 		server.Options{
 			BurstFactor:            opts.Ceph.BurstFactor,
