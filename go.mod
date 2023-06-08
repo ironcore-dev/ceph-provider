@@ -12,7 +12,7 @@ require (
 	github.com/onmetal/onmetal-api v0.1.2-0.20230522120840-6e3b13de7ae3
 	github.com/onmetal/onmetal-image v0.1.1
 	github.com/onsi/ginkgo/v2 v2.9.7
-	github.com/onsi/gomega v1.27.7
+	github.com/onsi/gomega v1.27.8
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.11.7
 	github.com/spf13/cobra v1.7.0
