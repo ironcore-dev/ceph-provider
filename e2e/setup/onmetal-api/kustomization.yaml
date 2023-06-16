@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/onmetal/onmetal-api/config/default?ref=93abcc29608df1f1e0f655273501f1a966078b71
+  - certificates.yaml
+
+images:
+  - name: apiserver
+    newName: ghcr.io/onmetal/onmetal-api-apiserver
+    digest: sha256:08c94ce8c946db29c32cf11947b3a6c2b49b246e9a6011d1550a2d9460bb1e2d
+  - name: controller
+    newName: ghcr.io/onmetal/onmetal-api-controller-manager
+    digest: sha256:64b962ff219fe36f55cf852c94e9dab7c0f6028f97b650e7a39a0c6e39f17878
+
+patchesStrategicMerge:
+  - patch-apiserver-deployment.yaml
+  - patch-manager-deployment.yaml

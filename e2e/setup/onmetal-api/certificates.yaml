@@ -1,0 +1,24 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  namespace: onmetal-system
+  name: onmetal-apiserver-machinepoollet-client
+spec:
+  secretName: onmetal-apiserver-machinepoollet-client
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  commonName: onmetal-apiserver-machinepoollet-client
+  subject:
+    organizations:
+    - system:masters
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+  - signing
+  - client auth
+  issuerRef:
+    name: onmetal-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
