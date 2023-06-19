@@ -11,7 +11,12 @@
    ## Introduction
    End-to-end (e2e) in Cephlet testing provides a mechanism to test the end-to-end behavior
    of the cephlet, and it will involve the CRUD operations over the volume.
-
+1. Install K8S cluster
+2. Install Go.
+3. Take pull of new cephlet & onmetal-api
+4. Run new cephlet (Cephlet)
+5. Run volumepoollet (onmetal-api)
+6. Try to do CRUD operations with volume.yaml
 
    ## Install Kubernetes
    k3s installation script
