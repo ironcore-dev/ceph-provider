@@ -25,5 +25,13 @@
 
    ## Test parameters
 
+   In addition to standard go tests parameters, the following custom parameters are
+  available while running tests:
+
+    | flag              | description                                                                                       |
+    | ----------------- | ------------------------------------------------------------------------------------------------- |
+    | list-volume    | List the volume  |
+    | create-volume  | Create the volume with manifest provided |
+    | delete-volume  | Delete the volume with Volume ID  |
 
    ## Running E2E
