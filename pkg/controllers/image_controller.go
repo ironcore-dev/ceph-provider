@@ -16,7 +16,6 @@ package controllers
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +33,6 @@ import (
 	"github.com/onmetal/cephlet/pkg/round"
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/cephlet/pkg/utils"
-	"github.com/onmetal/onmetal-api/broker/common/idgen"
 	"github.com/onmetal/onmetal-image/oci/image"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
@@ -43,6 +41,7 @@ import (
 
 const (
 	LimitMetadataPrefix = "conf_"
+	WWNKey              = "wwn"
 	imageDigestLabel    = "image-digest"
 )
 
@@ -106,7 +105,6 @@ func NewImageReconciler(
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
-		wwnGen:         idgen.NewIDGen(rand.Reader, 16),
 		registry:       registry,
 		queue:          workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		images:         images,
@@ -123,8 +121,6 @@ func NewImageReconciler(
 type ImageReconciler struct {
 	log  logr.Logger
 	conn *rados.Conn
-
-	wwnGen idgen.IDGen
 
 	registry image.Source
 	queue    workqueue.RateLimitingInterface
@@ -464,6 +460,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		}
 	}
 
+	if err := r.setWWN(ctx, log, ioCtx, img); err != nil {
+		return fmt.Errorf("failed to set limits: %w", err)
+	}
+
 	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {
 		return fmt.Errorf("failed to set encryption header: %w", err)
 	}
@@ -482,7 +482,6 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		Handle:   fmt.Sprintf("%s/%s", r.pool, ImageIDToRBDID(img.ID)),
 		User:     user,
 		UserKey:  key,
-		WWN:      r.wwnGen.Generate(),
 	}
 	img.Status.State = api.ImageStateAvailable
 	if _, err = r.images.Update(ctx, img); err != nil {
@@ -514,6 +513,28 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 		}
 		log.V(3).Info("Set image limit", "limit", limit, "value", value)
 	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("failed to close rbd image: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ImageReconciler) setWWN(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+	log.V(1).Info("Setting WWN")
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to open rbd image: %w", err)
+	}
+
+	if err := img.SetMetadata(WWNKey, image.Spec.WWN); err != nil {
+		if closeErr := img.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+		}
+		return fmt.Errorf("failed to set wwn (%s): %w", image.Spec.WWN, err)
+	}
+	log.V(3).Info("Set image wwn", "wwn", image.Spec.WWN)
 
 	if err := img.Close(); err != nil {
 		return fmt.Errorf("failed to close rbd image: %w", err)
