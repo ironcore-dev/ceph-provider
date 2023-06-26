@@ -14,7 +14,12 @@
 
 package utils
 
-import "github.com/onmetal/cephlet/pkg/api"
+import (
+	"crypto/rand"
+
+	"github.com/onmetal/cephlet/pkg/api"
+	"github.com/onmetal/onmetal-api/broker/common/idgen"
+)
 
 var SnapshotStrategy = snapshotStrategy{}
 
@@ -24,10 +29,15 @@ func (snapshotStrategy) PrepareForCreate(obj *api.Snapshot) {
 	obj.Status = api.SnapshotStatus{State: api.SnapshotStatePending}
 }
 
-var ImageStrategy = imageStrategy{}
+var ImageStrategy = imageStrategy{
+	WWNGen: idgen.NewIDGen(rand.Reader, 16),
+}
 
-type imageStrategy struct{}
+type imageStrategy struct {
+	WWNGen idgen.IDGen
+}
 
-func (imageStrategy) PrepareForCreate(obj *api.Image) {
+func (i imageStrategy) PrepareForCreate(obj *api.Image) {
+	obj.Spec.WWN = i.WWNGen.Generate()
 	obj.Status = api.ImageStatus{State: api.ImageStatePending}
 }
