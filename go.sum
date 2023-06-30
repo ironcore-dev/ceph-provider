@@ -1097,8 +1097,8 @@ github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6L
 github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4/go.mod h1:qgYeAmZ5ZIpBWTGllZSQnw97Dj+woV0toclVaRGI8pc=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
-github.com/rook/rook v1.11.8 h1:xKCxIjFDvOfbWS087ryF0sQZRqJTM64GfmJGHJFmzxk=
-github.com/rook/rook v1.11.8/go.mod h1:4RohsipwRF3OPo+QgzI1GnImo/euZH6t91CtTpwPyhM=
+github.com/rook/rook v1.11.9 h1:/twnEDz6RW9oMlcVDaLYxhwbArTC/mhsf8V8j0y2s2w=
+github.com/rook/rook v1.11.9/go.mod h1:4RohsipwRF3OPo+QgzI1GnImo/euZH6t91CtTpwPyhM=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/russross/blackfriday/v2 v2.0.1/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
