@@ -83,7 +83,7 @@ func (s *Server) convertBucketAccess(bucket *AggregateBucket) (*ori.BucketAccess
 	}
 
 	return &ori.BucketAccess{
-		Endpoint:   s.bucketEndpoint,
+		Endpoint:   fmt.Sprintf("%s.%s", bucket.BucketClaim.Spec.BucketName, s.bucketEndpoint),
 		SecretData: bucket.AccessSecret.Data,
 	}, nil
 }

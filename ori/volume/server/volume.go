@@ -74,7 +74,7 @@ func (s *Server) getOriVolumeAccess(ctx context.Context, log logr.Logger, image 
 
 	return &ori.VolumeAccess{
 		Driver: DriverName,
-		Handle: access.WWN,
+		Handle: image.Spec.WWN,
 		Attributes: map[string]string{
 			MonitorsKey: access.Monitors,
 			ImageKey:    access.Handle,

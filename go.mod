@@ -3,7 +3,7 @@ module github.com/onmetal/cephlet
 go 1.20
 
 require (
-	github.com/ceph/go-ceph v0.21.0
+	github.com/ceph/go-ceph v0.22.0
 	github.com/containerd/containerd v1.6.16
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
@@ -11,10 +11,10 @@ require (
 	github.com/onmetal/controller-utils v0.8.0
 	github.com/onmetal/onmetal-api v0.1.2-0.20230601132730-829044613382
 	github.com/onmetal/onmetal-image v0.1.1
-	github.com/onsi/ginkgo/v2 v2.9.7
-	github.com/onsi/gomega v1.27.7
+	github.com/onsi/ginkgo/v2 v2.11.0
+	github.com/onsi/gomega v1.27.8
 	github.com/pkg/errors v0.9.1
-	github.com/rook/rook v1.11.7
+	github.com/rook/rook v1.11.9
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
@@ -29,6 +29,7 @@ require (
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
+	github.com/aws/aws-sdk-go v1.44.275 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.0.2 // indirect
@@ -85,6 +86,7 @@ require (
 	github.com/hashicorp/vault/sdk v0.8.1 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
@@ -128,11 +130,11 @@ require (
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.9.1 // indirect
+	golang.org/x/tools v0.9.3 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4 // indirect
