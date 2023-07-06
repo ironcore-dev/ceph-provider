@@ -58,7 +58,7 @@ func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controllers Suite")
 }
-/*
+
 var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
@@ -108,4 +108,4 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
 
-})*/
+})
