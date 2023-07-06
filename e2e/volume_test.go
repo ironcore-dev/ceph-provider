@@ -58,9 +58,7 @@ var _ = Describe("cephlet-volume", func() {
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 	})
 
-	It("Should get the volume", func(ctx SpecContext) {
-		fmt.Println("Gingo working...........")
-
+	It("Should get the volume", func(ctx SpecContext) {		
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
