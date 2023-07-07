@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/ceph/go-ceph v0.22.0
-	github.com/containerd/containerd v1.7.0
+	github.com/containerd/containerd v1.7.2
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -41,7 +41,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20230601102743-20bbbf26f4d8 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/docker/cli v20.10.21+incompatible // indirect
+	github.com/docker/cli v23.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/docker v23.0.4+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
