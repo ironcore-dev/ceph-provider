@@ -30,8 +30,8 @@
 
     | flag              | description                                                                                       |
     | ----------------- | ------------------------------------------------------------------------------------------------- |
-    | list-volume    | List the volume  |
     | create-volume  | Create the volume with manifest provided |
+    | get-volume    | Get the volume  |
     | delete-volume  | Delete the volume with Volume ID  |
 
    ## Running E2E
