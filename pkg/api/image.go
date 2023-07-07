@@ -36,6 +36,7 @@ const (
 
 type ImageSpec struct {
 	Size        uint64         `json:"size"`
+	WWN         string         `json:"wwn"`
 	Limits      Limits         `json:"limits"`
 	Image       string         `json:"image"`
 	SnapshotRef *string        `json:"snapshotRef"`
@@ -66,8 +67,6 @@ type ImageAccess struct {
 
 	User    string `json:"user"`
 	UserKey string `json:"userKey"`
-
-	WWN string `json:"wwn"`
 }
 
 type Limits map[LimitType]int64
