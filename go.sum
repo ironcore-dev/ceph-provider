@@ -1529,8 +1529,8 @@ github.com/okta/okta-sdk-golang/v2 v2.12.1 h1:U+smE7trkHSZO8Mval3Ow85dbxawO+pMAr
 github.com/okta/okta-sdk-golang/v2 v2.12.1/go.mod h1:KRoAArk1H216oiRnQT77UN6JAhBOnOWkK27yA1SM7FQ=
 github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/olekukonko/tablewriter v0.0.0-20180130162743-b8a9be070da4/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
-github.com/onmetal/controller-utils v0.8.1-0.20230622062802-a3439c6ee51f h1:MvKyk1m3qXpObtA6coXBapW/QiZFYHtQ9GjFZrJa4pk=
-github.com/onmetal/controller-utils v0.8.1-0.20230622062802-a3439c6ee51f/go.mod h1:xNMcXrOc6ixm9I6DINwzeRqwKIxAa6yOIJ6kuUHHevg=
+github.com/onmetal/controller-utils v0.8.0 h1:8rMDhtsoFGq1x26sha8W+Y7mGK5E4ALpudfoIL/w6hI=
+github.com/onmetal/controller-utils v0.8.0/go.mod h1:w57S36LruaLsRZ7DXC9E7TCa+H2iiXZW3JhvT8Hdilc=
 github.com/onmetal/onmetal-api v0.1.2-0.20230706225717-3f3c3abf2428 h1:v3sR+FZVKmcfXa8NvHRSff69MVpooN4PBqJEVSeGjiw=
 github.com/onmetal/onmetal-api v0.1.2-0.20230706225717-3f3c3abf2428/go.mod h1:OZt7A1VjuTurRsQ5FU3bbppZ+KCkkQ9K+rcKmvEvFcQ=
 github.com/onmetal/onmetal-image v0.1.1 h1:sGnK2a1OH2iHZSbOrFJEdP7UvFLXb+o9OhJM4/hMy/M=

@@ -8,7 +8,7 @@ require (
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
-	github.com/onmetal/controller-utils v0.8.1-0.20230622062802-a3439c6ee51f
+	github.com/onmetal/controller-utils v0.8.0
 	github.com/onmetal/onmetal-api v0.1.2-0.20230706225717-3f3c3abf2428
 	github.com/onmetal/onmetal-image v0.1.1
 	github.com/onsi/ginkgo/v2 v2.11.0
