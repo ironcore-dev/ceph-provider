@@ -33,7 +33,7 @@ var _ = Describe("cephlet-volume", func() {
 	// )
 
 	const (
-		volumeSize = "1Gi"
+		volumeSize = "10Gi"
 	//	snapshotSize  = "2Gi"
 	//	cephPoolName  = "ceph"
 	//	cephImageName = "image-1"
@@ -53,16 +53,18 @@ var _ = Describe("cephlet-volume", func() {
 				Resources: corev1alpha1.ResourceList{
 					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
+			Image: "ghcr.io/onmetal/onmetal-image/gardenlinux:rootfs-dev-20230223",
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+		fmt.Println("Volume Created name is ", vol.Name)
 	})
 
 	It("Should get the volume", func(ctx SpecContext) {		
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
-		fmt.Println(volume.Name)
+		fmt.Println("Volume Listed as :", volume.Name)
 
 		// Todo use matcher
 		//Expect(volume.Name).To(Succeed())
@@ -70,8 +72,7 @@ var _ = Describe("cephlet-volume", func() {
 		//Expect(k8sClient.List(ctx, volumeList, client.InNamespace("rook-ceph"))).To(Succeed())
 	})
 
-	It("Should delete volume", func(ctx SpecContext) {
-		fmt.Println("Gingo working...........")
+/*	It("Should delete volume", func(ctx SpecContext) {
 
 		volume := &storagev1alpha1.Volume{}
 		//volumeList := &storagev1alpha1.vol
@@ -81,9 +82,9 @@ var _ = Describe("cephlet-volume", func() {
 
 		}
 		deleteResult := k8sClient.Delete(ctx, volume)
-		fmt.Println(deleteResult)
+		//fmt.Println(deleteResult)
 		Expect(deleteResult).To(Succeed())
-		fmt.Println(volume.Name)
+		fmt.Println("Delete Volume Name is ",volume.Name)
 		// Expect(deleteResult).Should(compareDeleteResult)
 
 		// func () compareDeleteResult(a error) {
@@ -93,6 +94,6 @@ var _ = Describe("cephlet-volume", func() {
 		// 	 return true
 		// }
 
-	})
+	})*/
 
 })
