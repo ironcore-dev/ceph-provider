@@ -57,14 +57,16 @@ var _ = Describe("cephlet-volume", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
-		fmt.Println("Volume Created name is ", vol.Name)
+		fmt.Println("Here the Volume is getting created############")
+		fmt.Println("Volume created name is ", vol.Name)
 	})
 
 	It("Should get the volume", func(ctx SpecContext) {		
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
-		fmt.Println("Volume Listed as :", volume.Name)
+		fmt.Println("Here the Volume is getting listed##############")
+		fmt.Println("Volume listed as :", volume.Name)
 
 		// Todo use matcher
 		//Expect(volume.Name).To(Succeed())
@@ -72,7 +74,7 @@ var _ = Describe("cephlet-volume", func() {
 		//Expect(k8sClient.List(ctx, volumeList, client.InNamespace("rook-ceph"))).To(Succeed())
 	})
 
-/*	It("Should delete volume", func(ctx SpecContext) {
+	It("Should delete volume", func(ctx SpecContext) {
 
 		volume := &storagev1alpha1.Volume{}
 		//volumeList := &storagev1alpha1.vol
@@ -84,16 +86,9 @@ var _ = Describe("cephlet-volume", func() {
 		deleteResult := k8sClient.Delete(ctx, volume)
 		//fmt.Println(deleteResult)
 		Expect(deleteResult).To(Succeed())
-		fmt.Println("Delete Volume Name is ",volume.Name)
-		// Expect(deleteResult).Should(compareDeleteResult)
+		fmt.Println("Here the Volume is getting deleted which was ealier created.###########")
+		fmt.Println("Deleted Volume name is ",volume.Name)
 
-		// func () compareDeleteResult(a error) {
-		// 	if a != nil {
-		// 		return false
-		// 	 }
-		// 	 return true
-		// }
-
-	})*/
+	})
 
 })
