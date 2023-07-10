@@ -15,13 +15,10 @@
 package e2e
 
 import (
-	//"github.com/onmetal/onmetal-api/testutils"
-	//"flag"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-
-	//. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -29,36 +26,83 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	//"k8s.io/apimachinery/pkg/types
-
-	//testutils "github.com/onmetal/onmetal-api/utils/testing"
-
-	//. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	//. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
+	//"github.com/onmetal/cephlet/pkg/rook"
+	//"github.com/onmetal/controller-utils/clientutils"
+
+
 )
 
 var _ = Describe("cephlet-volume", func() {
 
-	// var (
-	// 	volumeClass *storagev1alpha1.VolumeClass
-	// 	volumePool  *storagev1alpha1.VolumePool
-	// )
+
+	var (
+	 	volumeClass *storagev1alpha1.VolumeClass
+	 	volumePool  *storagev1alpha1.VolumePool
+//		rookConfig                 *rook.Config
+		//volumePoolSecretAnnotation = "ceph-client-secret-name"
+	 )
 
 	const (
 		volumeSize = "10Gi"
+//		cephClientSecretValue = "test"
 	//	snapshotSize  = "2Gi"
 	//	cephPoolName  = "ceph"
 	//	cephImageName = "image-1"
 	)
+
+	It("VolumeClass and valumePool Creation",func(ctx SpecContext) {
+		volumeClass = &storagev1alpha1.VolumeClass{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tsi",
+			},
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
+
+		By("checking that a VolumePool has been created")
+		volumePool = &storagev1alpha1.VolumePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tsi",
+				//Namespace:    "rok-ceph",
+			},
+			Spec: storagev1alpha1.VolumePoolSpec{
+				ProviderID: "cephlet",
+			},
+		}
+		Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
+/*
+		fmt.Println(rookConfig.ClusterId)
+		fmt.Println(volumePool.Name)
+
+		//cephClientSecret := getCephClientSecret("rook-ceph", GetClusterVolumePoolName(rookConfig.ClusterId, volumePool.Name), cephClientSecretValue)
+		//Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
+
+		volumePoolBase := volumePool.DeepCopy()
+		if volumePool.Annotations == nil {
+			volumePool.Annotations = map[string]string{}
+		}
+		volumePool.Annotations[volumePoolSecretAnnotation] = cephClientSecret.Name
+		Expect(k8sClient.Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+
+		volumePoolBase = volumePool.DeepCopy()
+		volumePool.Status.State = storagev1alpha1.VolumePoolStateAvailable
+		Expect(k8sClient.Status().Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
+*/
+	})
+
+
 
 	It("should create volume", func(ctx SpecContext) {
 		By("checking that a Volume has been created")
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "tsi",
-				//GenerateName: "volume-",
 				Namespace: "rook-ceph",
 			},
 			Spec: storagev1alpha1.VolumeSpec{
@@ -105,4 +149,20 @@ var _ = Describe("cephlet-volume", func() {
 
 	})
 
+
+	It("should delete volumeclass", func(ctx SpecContext) {
+		By("checking the finalizer is present")
+		fmt.Println(client.ObjectKeyFromObject(volumeClass))
+		By("issuing a delete request for the volume class")
+		Expect(k8sClient.Delete(ctx, volumeClass)).Should(Succeed())
+	})
+
+	It("should delete volumepool", func(ctx SpecContext) {
+		By("checking the finalizer is present")
+		fmt.Println(client.ObjectKeyFromObject(volumePool))
+		By("issuing a delete request for the volume pool")
+		Expect(k8sClient.Delete(ctx, volumePool)).Should(Succeed())
+	})
+
 })
+
