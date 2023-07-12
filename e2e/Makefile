@@ -11,11 +11,9 @@ create-env:  ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObj
 
 .PHONY: envtest
 envtest:  
-	   export PATH=$PATH:/usr/local/go/bin 
-	   ginkgo
+	   export PATH=$PATH:/usr/local/go/bin && ginkgo
 
 .PHONY: delete-env
 envtest:
 	   export PATH=$PATH:/opt/local/bin
 	   kubectl delete -k. 
-	   ginkgo
