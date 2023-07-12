@@ -15,5 +15,6 @@ envtest: #test
 
 .PHONY: delete-env
 delete-env:
-	  export PATH=$PATH:/opt/local/bin 
-	  kubectl delete -k. 
+	export PATH=$PATH:/opt/local/bin
+	/usr/local/bin/k3s-uninstall.sh 
+	kubectl delete -k. 
