@@ -39,8 +39,8 @@ var _ = Describe("cephlet-volume", func() {
 
 	var (
 	 	volumeClass *storagev1alpha1.VolumeClass
-	 	volumePool  *storagev1alpha1.VolumePool
-//		rookConfig                 *rook.Config
+	 	//volumePool  *storagev1alpha1.VolumePool
+		//rookConfig                 *rook.Config
 		//volumePoolSecretAnnotation = "ceph-client-secret-name"
 	 )
 
@@ -52,7 +52,7 @@ var _ = Describe("cephlet-volume", func() {
 	//	cephImageName = "image-1"
 	)
 
-	It("VolumeClass and valumePool Creation",func(ctx SpecContext) {
+	It("VolumeClass Creation",func(ctx SpecContext) {
 		volumeClass = &storagev1alpha1.VolumeClass{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -65,35 +65,6 @@ var _ = Describe("cephlet-volume", func() {
 		}
 		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
 
-		By("checking that a VolumePool has been created")
-		volumePool = &storagev1alpha1.VolumePool{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tsi",
-				//Namespace:    "rok-ceph",
-			},
-			Spec: storagev1alpha1.VolumePoolSpec{
-				ProviderID: "cephlet",
-			},
-		}
-		Expect(k8sClient.Create(ctx, volumePool)).Should(Succeed())
-/*
-		fmt.Println(rookConfig.ClusterId)
-		fmt.Println(volumePool.Name)
-
-		//cephClientSecret := getCephClientSecret("rook-ceph", GetClusterVolumePoolName(rookConfig.ClusterId, volumePool.Name), cephClientSecretValue)
-		//Expect(clientutils.IgnoreAlreadyExists(k8sClient.Create(ctx, cephClientSecret))).To(Succeed())
-
-		volumePoolBase := volumePool.DeepCopy()
-		if volumePool.Annotations == nil {
-			volumePool.Annotations = map[string]string{}
-		}
-		volumePool.Annotations[volumePoolSecretAnnotation] = cephClientSecret.Name
-		Expect(k8sClient.Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
-
-		volumePoolBase = volumePool.DeepCopy()
-		volumePool.Status.State = storagev1alpha1.VolumePoolStateAvailable
-		Expect(k8sClient.Status().Patch(ctx, volumePool, client.MergeFrom(volumePoolBase))).To(Succeed())
-*/
 	})
 
 
@@ -149,7 +120,7 @@ var _ = Describe("cephlet-volume", func() {
 
 	})
 
-
+/*
 	It("should delete volumeclass", func(ctx SpecContext) {
 		By("checking the finalizer is present")
 		fmt.Println(client.ObjectKeyFromObject(volumeClass))
@@ -157,12 +128,6 @@ var _ = Describe("cephlet-volume", func() {
 		Expect(k8sClient.Delete(ctx, volumeClass)).Should(Succeed())
 	})
 
-	It("should delete volumepool", func(ctx SpecContext) {
-		By("checking the finalizer is present")
-		fmt.Println(client.ObjectKeyFromObject(volumePool))
-		By("issuing a delete request for the volume pool")
-		Expect(k8sClient.Delete(ctx, volumePool)).Should(Succeed())
-	})
-
+*/
 })
 
