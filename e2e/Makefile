@@ -3,8 +3,7 @@
 .PHONY: create-env
 create-env:  ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	curl -sfL https://get.k3s.io | sh -s - --docker 
-	kubectl apply -k.
-
+	cd setup/rook/ && kubectl apply -k.
 
 # Integration Test
 
@@ -15,6 +14,6 @@ envtest: #test
 
 .PHONY: delete-env
 delete-env:
-	export PATH=$PATH:/opt/local/bin
+	#export PATH=$PATH:/opt/local/bin
 	/usr/local/bin/k3s-uninstall.sh 
-	kubectl delete -k. 
+	cd setup/rook/ && kubectl delete -k. 
