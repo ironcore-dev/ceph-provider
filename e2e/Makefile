@@ -2,7 +2,8 @@
 
 .PHONY: create-env
 create-env:  ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	curl -sfL https://get.k3s.io | sh -s - --docker 
+	curl -sfL https://get.k3s.io | sh -s - --docker
+	export KUBECONFIG=/etc/rancher/k3s/k3s.yaml	
 	cd setup/rook/ && kubectl apply -k.
 
 # Integration Test
