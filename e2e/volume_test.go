@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	//"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -37,36 +37,20 @@ import (
 var _ = Describe("cephlet-volume", func() {
 
 
-	var (
+	/*var (
 	 	volumeClass *storagev1alpha1.VolumeClass
 	 	//volumePool  *storagev1alpha1.VolumePool
 		//rookConfig                 *rook.Config
 		//volumePoolSecretAnnotation = "ceph-client-secret-name"
-	 )
+	 )*/
 
 	const (
 		volumeSize = "10Gi"
-//		cephClientSecretValue = "test"
+	//	cephClientSecretValue = "test"
 	//	snapshotSize  = "2Gi"
 	//	cephPoolName  = "ceph"
 	//	cephImageName = "image-1"
 	)
-
-	It("VolumeClass Creation",func(ctx SpecContext) {
-		volumeClass = &storagev1alpha1.VolumeClass{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tsi",
-			},
-			Capabilities: corev1alpha1.ResourceList{
-				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
-				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
-			},
-		}
-		Expect(k8sClient.Create(ctx, volumeClass)).To(Succeed())
-
-	})
-
 
 
 	It("should create volume", func(ctx SpecContext) {
@@ -120,14 +104,5 @@ var _ = Describe("cephlet-volume", func() {
 
 	})
 
-/*
-	It("should delete volumeclass", func(ctx SpecContext) {
-		By("checking the finalizer is present")
-		fmt.Println(client.ObjectKeyFromObject(volumeClass))
-		By("issuing a delete request for the volume class")
-		Expect(k8sClient.Delete(ctx, volumeClass)).Should(Succeed())
-	})
-
-*/
 })
 
