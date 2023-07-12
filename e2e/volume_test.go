@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	//"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -27,9 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	. "github.com/onsi/gomega"
-	//. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
-	//"github.com/onmetal/cephlet/pkg/rook"
-	//"github.com/onmetal/controller-utils/clientutils"
 
 
 )
@@ -70,16 +66,14 @@ var _ = Describe("cephlet-volume", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
-		fmt.Println("Here the Volume is getting created############")
-		fmt.Println("Volume created name is ", vol.Name)
+		fmt.Println("Here the Volume is getting created############", vol.Name)
 	})
 
 	It("Should get the volume", func(ctx SpecContext) {		
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
-		fmt.Println("Here the Volume is getting listed##############")
-		fmt.Println("Volume listed as :", volume.Name)
+		fmt.Println("Here the Volume is getting listed##############", volume.Name)
 
 		// Todo use matcher
 		//Expect(volume.Name).To(Succeed())
@@ -99,8 +93,7 @@ var _ = Describe("cephlet-volume", func() {
 		deleteResult := k8sClient.Delete(ctx, volume)
 		//fmt.Println(deleteResult)
 		Expect(deleteResult).To(Succeed())
-		fmt.Println("Here the Volume is getting deleted which was ealier created.###########")
-		fmt.Println("Deleted Volume name is ",volume.Name)
+		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
 
 	})
 
