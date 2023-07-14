@@ -12,7 +12,6 @@ envtest: #test
 	ginkgo
 
 .PHONY: delete-env
-delete-env:
-	#export PATH=$PATH:/opt/local/bin
-	/usr/local/bin/k3s-uninstall.sh 
+delete-env: 
 	cd setup/rook/ && kubectl delete -k. 
+	#sh scripts/uninstall.sh
