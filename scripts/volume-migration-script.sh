@@ -78,14 +78,9 @@ for val in ${list[@]}; do
 	DEFAULT_BURST_FACTOR=10
 
 	IOPS_BURST_LIMIT=`expr $DEFAULT_BURST_FACTOR \* $IOPS`
-	echo $IOPS_BURST_LIMIT
+	#echo $IOPS_BURST_LIMIT
 	TPS_BURST_LIMIT=`expr $DEFAULT_BURST_FACTOR \* $TPS`
-        echo $TPS_BURST_LIMIT
-
-
-
-
-#JSON_STRING=$( jq -n \
+        #echo $TPS_BURST_LIMIT
 
 	JSON_STR='{
   		"metadata": {
