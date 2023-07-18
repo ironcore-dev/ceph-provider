@@ -55,7 +55,7 @@ const (
 	consistentlyDuration = 1 * time.Second
 )
 
-/*
+
 type CephOptions struct {
 	Monitors    string
 	User        string
@@ -64,14 +64,15 @@ type CephOptions struct {
 	Pool        string
 	Client      string
 }
-*/
-
-var cephpool, cephuser string
 
 // Register your flags in an init function.  This ensures they are registered _before_ `go test` calls flag.Parse().
 func init() {
-  flag.StringVar(&cephpool,"ceph-pool","","ceph pool")
-  flag.StringVar(&cephuser,"ceph-user","","ceph user")
+  flag.StringVar(&cephOptions.Pool,"ceph-pool","","ceph pool")
+  flag.StringVar(&cephOptions.User,"ceph-user","","ceph user")
+  flag.StringVar(&cephOptions.Client,"ceph-client","","ceph client")
+  flag.StringVar(&cephOptions.KeyFile,"ceph-keyfile","","ceph keyfile")
+  flag.StringVar(&cephOptions.KeyringFile,"ceph-keyringfile","","ceph-keyring file")
+  flag.StringVar(&cephOptions.Monitors,"ceph-mornitors","","ceph monitors")
 }
 
 func TestControllers(t *testing.T) {
@@ -126,7 +127,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
         
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "volume-rook-ceph--ceph",
+			Name:      cephOptions.Client,
 			Namespace: "rook-ceph",
 		},
 	}
@@ -134,18 +135,18 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
 
-	/*
-			conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
-				Monitors: opts.Ceph.Monitors,
-				User:     opts.Ceph.User,
-				Keyfile:  opts.Ceph.KeyFile,
-			})
+	
+	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
+	      Monitors: cephOptions.Monitors,
+	      User:     cephOptions.User,
+	      Keyfile:  cephOptions.KeyFile,
+	})
 
-		Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
-		err = ceph.CheckIfPoolExists(conn, opts.Ceph.Pool)
-		Expect(err).NotTo(HaveOccurred())
-	*/
+	//err = ceph.CheckIfPoolExists(conn, opts.Ceph.Pool)
+	//Expect(err).NotTo(HaveOccurred())
+	
 
 })
 
