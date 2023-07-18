@@ -21,17 +21,16 @@ import (
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	. "github.com/onsi/gomega"
-
-
 )
 
 var _ = Describe("cephlet-volume", func() {
-
+	InitFlags()
+	fmt.Println("Pool in volume_test file: ", cephOptions.Pool)
 
 	/*var (
 	 	volumeClass *storagev1alpha1.VolumeClass
@@ -48,28 +47,27 @@ var _ = Describe("cephlet-volume", func() {
 	//	cephImageName = "image-1"
 	)
 
-
 	It("should create volume", func(ctx SpecContext) {
 		By("checking that a Volume has been created")
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "tsi",
+				Name:      "tsi",
 				Namespace: "rook-ceph",
 			},
 			Spec: storagev1alpha1.VolumeSpec{
 				VolumeClassRef: &corev1.LocalObjectReference{Name: "fast"},
-				VolumePoolRef:  &corev1.LocalObjectReference{Name: "ceph"},
+				VolumePoolRef:  &corev1.LocalObjectReference{Name: cephOptions.Pool},
 				Resources: corev1alpha1.ResourceList{
 					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
 				},
-			Image: "ghcr.io/onmetal/onmetal-image/gardenlinux:rootfs-dev-20230223",
+				Image: "ghcr.io/onmetal/onmetal-image/gardenlinux:rootfs-dev-20230223",
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 		fmt.Println("Here the Volume is getting created############", vol.Name)
 	})
 
-	It("Should get the volume", func(ctx SpecContext) {		
+	It("Should get the volume", func(ctx SpecContext) {
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
@@ -98,4 +96,3 @@ var _ = Describe("cephlet-volume", func() {
 	})
 
 })
-

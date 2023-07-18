@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"flag"
+	"fmt"
 	"testing"
 	"time"
 
@@ -93,7 +94,6 @@ func TestControllers(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	InitFlags()
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	var err error
@@ -182,9 +182,8 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 		_ = cmd.MarkFlagRequired("ceph-kek-path")
 	}
 */
-//var myFlag string
 
 func InitFlags() {
-	cephOptions := CephOptions{}
-	flag.StringVar(&cephOptions.Pool, "ceph-pool", "ceph11", "Ceph pool which is used to store objects.")
+	flag.StringVar(&cephOptions.Pool, "ceph-pool", "ceph", "Ceph pool which is used to store objects.")
+	fmt.Println("pool in function: ", cephOptions.Pool)
 }
