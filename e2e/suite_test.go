@@ -56,15 +56,6 @@ const (
 )
 
 /*
-type Options struct {
-	Address string
-
-	PathSupportedVolumeClasses string
-
-	Ceph CephOptions
-}
-*/
-
 type CephOptions struct {
 	Monitors    string
 	User        string
@@ -72,15 +63,15 @@ type CephOptions struct {
 	KeyringFile string
 	Pool        string
 	Client      string
+}
+*/
 
-	/*
-		BurstFactor            int64
-		BurstDurationInSeconds int64
+var cephpool, cephuser string
 
-		PopulatorBufferSize int64
-
-		KeyEncryptionKeyPath string
-	*/
+// Register your flags in an init function.  This ensures they are registered _before_ `go test` calls flag.Parse().
+func init() {
+  flag.StringVar(&cephpool,"ceph-pool","","ceph pool")
+  flag.StringVar(&cephuser,"ceph-user","","ceph user")
 }
 
 func TestControllers(t *testing.T) {
@@ -111,7 +102,8 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 	SetClient(k8sClient)
-
+	
+	
 	cephCluster = &rookv1.CephCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
@@ -131,22 +123,16 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Eventually(Object(cephPool)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
-
+        
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cephlet-pool",
+			Name:      "volume-rook-ceph--ceph",
 			Namespace: "rook-ceph",
 		},
 	}
 	Eventually(Object(cephClient)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
-
-	//goFlags := goflag.NewFlagSet("", 0)
-
-	//opts.Defaults()
-	//opts.AddFlags(cmd.Flags())
-	//opts.MarkFlagsRequired()
 
 	/*
 			conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
@@ -163,27 +149,3 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 })
 
-/*
-func (o *Options) AddFlags(fs *pflag.FlagSet) {
-
-		fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
-		fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
-		fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence). ceph-key-file contains contains only the ceph key.")
-		fs.StringVar(&o.Ceph.KeyringFile, "ceph-keyring-file", o.Ceph.KeyringFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence)s. ceph-keyring-file contains the ceph key and client information.")
-		fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
-		fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
-		fs.StringVar(&o.Ceph.KeyEncryptionKeyPath, "ceph-kek-path", o.Ceph.KeyEncryptionKeyPath, "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
-	}
-
-	func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
-		_ = cmd.MarkFlagRequired("available-volume-classes")
-		_ = cmd.MarkFlagRequired("ceph-monitors")
-		_ = cmd.MarkFlagRequired("ceph-pool")
-		_ = cmd.MarkFlagRequired("ceph-kek-path")
-	}
-*/
-
-func InitFlags() {
-	flag.StringVar(&cephOptions.Pool, "ceph-pool", "ceph", "Ceph pool which is used to store objects.")
-	fmt.Println("pool in function: ", cephOptions.Pool)
-}

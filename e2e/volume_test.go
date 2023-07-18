@@ -29,7 +29,6 @@ import (
 )
 
 var _ = Describe("cephlet-volume", func() {
-	InitFlags()
 	fmt.Println("Pool in volume_test file: ", cephOptions.Pool)
 
 	/*var (
@@ -49,6 +48,8 @@ var _ = Describe("cephlet-volume", func() {
 
 	It("should create volume", func(ctx SpecContext) {
 		By("checking that a Volume has been created")
+
+		///////////////////////fmt.Println("inslide volume_testsssssssssssss and ceph-pool is:",cephpool)
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "tsi",
