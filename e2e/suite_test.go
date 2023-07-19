@@ -47,7 +47,7 @@ var (
 	cephCluster *rookv1.CephCluster
 	cephPool    *rookv1.CephBlockPool
 	cephClient  *rookv1.CephClient
-	conn        *rados.Conn
+	CephConn        *rados.Conn
 	cephOptions CephOptions
 )
 
@@ -57,6 +57,7 @@ const (
 	consistentlyDuration = 1 * time.Second
 )
 
+/*
 type Options struct {
 	Address string
 
@@ -64,15 +65,16 @@ type Options struct {
 
 	Ceph CephOptions
 }
+*/
 
 type CephOptions struct {
 	Monitors    string
 	User        string
-	KeyringFile string
+	//KeyringFile string
 	KeyFile     string
 	Pool        string
 	Client      string
-	KeyEncryptionKeyPath string
+	//KeyEncryptionKeyPath string
 }
 
 // Register your flags in an init function.  This ensures they are registered _before_ `go test` calls flag.Parse().
@@ -80,10 +82,10 @@ func init() {
 	flag.StringVar(&cephOptions.Pool, "ceph-pool", "", "ceph pool")
 	flag.StringVar(&cephOptions.User, "ceph-user", "", "ceph user")
 	flag.StringVar(&cephOptions.Client, "ceph-client", "", "ceph client")
-	flag.StringVar(&cephOptions.KeyringFile, "ceph-keyringfile", "", "ceph-keyring file")
+	//flag.StringVar(&cephOptions.KeyringFile, "ceph-keyringfile", "", "ceph-keyring file")
 	flag.StringVar(&cephOptions.KeyFile, "ceph-keyfile", "", "ceph keyfile")
 	flag.StringVar(&cephOptions.Monitors, "ceph-mornitors", "", "ceph monitors")
-	flag.StringVar(&cephOptions.KeyEncryptionKeyPath, "ceph-kek-path", "", "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
+	//flag.StringVar(&cephOptions.KeyEncryptionKeyPath, "ceph-kek-path", "", "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
 }
 
 func TestControllers(t *testing.T) {
@@ -147,7 +149,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
 
-	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
+	CephConn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
 		Monitors: cephOptions.Monitors,
 		User:     cephOptions.User,
 		Keyfile:  cephOptions.KeyFile,
@@ -155,13 +157,10 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	if err != nil {
-		return
-		//return fmt.Errorf("failed to establish rados connection: %w", err)
-	}
-
+        /*
 	if err := ceph.CheckIfPoolExists(conn, opts.Ceph.Pool); err != nil {
 		return
 	}
+        */
 
 })
