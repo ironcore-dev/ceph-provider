@@ -16,8 +16,7 @@ package e2e
 
 import (
 	"fmt"
-
-	//"github.com/docker/docker/image"
+	"time"
 	librbd "github.com/ceph/go-ceph/rbd"
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -30,14 +29,14 @@ import (
 )
 
 var _ = Describe("cephlet-volume", func() {
-	fmt.Println("Pool in volume_test file: ", cephOptions.Pool)
-
+	
 	/*var (
 	 	volumeClass *storagev1alpha1.VolumeClass
 	 	//volumePool  *storagev1alpha1.VolumePool
 		//rookConfig                 *rook.Config
 		//volumePoolSecretAnnotation = "ceph-client-secret-name"
 	 )*/
+
 
 	const (
 		volumeSize = "10Gi"
@@ -46,6 +45,7 @@ var _ = Describe("cephlet-volume", func() {
 	//	cephPoolName  = "ceph"
 	//	cephImageName = "image-1"
 	)
+	
 
 	It("should create volume", func(ctx SpecContext) {
 		By("checking that a Volume has been created")
@@ -67,12 +67,21 @@ var _ = Describe("cephlet-volume", func() {
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
 
+		time.Sleep(6 * time.Second)
 		volume := &storagev1alpha1.Volume{}
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
+		if (volume.Status.State == "Available"){
+			img := librbd.GetImage(ioCtx, volume.Status.Access.VolumeAttributes["image"])
+			fmt.Println("RBD Image details", img)
+			fmt.Println("Volume Image for TSI::::::::::::",volume.Status.Access.VolumeAttributes["image"])
+		}
 
-		img := librbd.GetImage(ioCtx, volume.Spec.Image)
-		fmt.Println("image issssssssssssssss", img)
+		// Eventually(Object(volume)).Should(SatisfyAll(
+		// 	HaveField(volume.Status.State, "Available"),
+		// ))
+		
+
 		fmt.Println("Here the Volume is getting created############", vol.Name)
 	})
 
@@ -81,7 +90,8 @@ var _ = Describe("cephlet-volume", func() {
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
 		fmt.Println("Here the Volume is getting listed##############", volume.Name)
-
+		
+		
 		// Todo use matcher
 		//Expect(volume.Name).To(Succeed())
 
