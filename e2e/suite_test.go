@@ -16,9 +16,9 @@ package e2e
 
 import (
 	"flag"
+	"fmt"
 	"testing"
 	"time"
-	"fmt"
 
 	"github.com/ceph/go-ceph/rados"
 	"github.com/onmetal/controller-utils/configutils"
@@ -40,14 +40,15 @@ import (
 var (
 	cfg       *rest.Config
 	k8sClient client.Client
-	opts      Options
+	//opts      Options
+	ioCtx *rados.IOContext
 )
 
 var (
 	cephCluster *rookv1.CephCluster
 	cephPool    *rookv1.CephBlockPool
 	cephClient  *rookv1.CephClient
-	CephConn        *rados.Conn
+	CephConn    *rados.Conn
 	cephOptions CephOptions
 )
 
@@ -68,12 +69,12 @@ type Options struct {
 */
 
 type CephOptions struct {
-	Monitors    string
-	User        string
+	Monitors string
+	User     string
 	//KeyringFile string
-	KeyFile     string
-	Pool        string
-	Client      string
+	KeyFile string
+	Pool    string
+	Client  string
 	//KeyEncryptionKeyPath string
 }
 
@@ -139,12 +140,12 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cephOptions.Client,
+			Name: cephOptions.Client,
 			//Name: "volume-rook-ceph--ceph",
 			Namespace: "rook-ceph",
 		},
 	}
-	fmt.Println("cephclient",cephOptions.Client)
+	fmt.Println("cephclient", cephOptions.Client)
 	Eventually(Object(cephClient)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
@@ -157,10 +158,14 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-        /*
-	if err := ceph.CheckIfPoolExists(conn, opts.Ceph.Pool); err != nil {
-		return
-	}
-        */
+	ioCtx, err = CephConn.OpenIOContext(cephOptions.Pool)
+	Expect(err).NotTo(HaveOccurred())
+	//defer ioCtx.Destroy()
+
+	/*
+		if err := ceph.CheckIfPoolExists(conn, opts.Ceph.Pool); err != nil {
+			return
+		}
+	*/
 
 })
