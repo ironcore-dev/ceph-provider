@@ -137,6 +137,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
 
+
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cephOptions.Client,

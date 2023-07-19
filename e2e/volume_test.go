@@ -75,7 +75,10 @@ var _ = Describe("cephlet-volume", func() {
 			img := librbd.GetImage(ioCtx, volume.Status.Access.VolumeAttributes["image"])
 			fmt.Println("RBD Image details", img)
 			fmt.Println("Volume Image for TSI::::::::::::",volume.Status.Access.VolumeAttributes["image"])
+		}else {
+			fmt.Println("Though the volume created, image is not created because Cephlet and Volumepoollet is not running.")
 		}
+		
 
 		// Eventually(Object(volume)).Should(SatisfyAll(
 		// 	HaveField(volume.Status.State, "Available"),
