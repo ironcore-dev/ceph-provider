@@ -17,10 +17,11 @@ package e2e
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo/v2"
-
+	//"github.com/docker/docker/image"
+	librbd "github.com/ceph/go-ceph/rbd"
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -65,6 +66,13 @@ var _ = Describe("cephlet-volume", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, vol)).To(Succeed())
+
+		volume := &storagev1alpha1.Volume{}
+		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
+		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
+
+		img := librbd.GetImage(ioCtx, volume.Spec.Image)
+		fmt.Println("image issssssssssssssss", img)
 		fmt.Println("Here the Volume is getting created############", vol.Name)
 	})
 
