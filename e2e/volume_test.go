@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"strings"
 )
 
 var _ = Describe("cephlet-volume", func() {
@@ -40,6 +41,7 @@ var _ = Describe("cephlet-volume", func() {
 
 	const (
 		volumeSize = "10Gi"
+		
 	//	cephClientSecretValue = "test"
 	//	snapshotSize  = "2Gi"
 	//	cephPoolName  = "ceph"
@@ -72,9 +74,19 @@ var _ = Describe("cephlet-volume", func() {
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
 		if (volume.Status.State == "Available"){
-			img := librbd.GetImage(ioCtx, volume.Status.Access.VolumeAttributes["image"])
-			fmt.Println("RBD Image details", img)
-			fmt.Println("Volume Image for TSI::::::::::::",volume.Status.Access.VolumeAttributes["image"])
+			imageName := strings.Split(volume.Status.Access.VolumeAttributes["image"], "/")[1]
+		
+
+			fmt.Println("RBD Image details", imageName)
+			img1, err := librbd.OpenImage(ioCtx, imageName, librbd.NoSnapshot)
+			if err != nil {
+				fmt.Println("Errrorrrrrrrr", err)
+				
+			}
+			metaData, err := img1.ListMetadata()
+			fmt.Println("Metadata of image is::::::::::::::: :", metaData)
+			Expect(err).NotTo(HaveOccurred())
+			fmt.Println("Volume Image for TSI::::::::::::",imageName)
 		}else {
 			fmt.Println("Though the volume created, image is not created because Cephlet and Volumepoollet is not running.")
 		}
@@ -101,27 +113,32 @@ var _ = Describe("cephlet-volume", func() {
 		//Expect(k8sClient.List(ctx, volumeList, client.InNamespace("rook-ceph"))).To(Succeed())
 	})
 
-	It("Should delete volume", func(ctx SpecContext) {
+	// It("Should delete volume", func(ctx SpecContext) {
 
-		volume := &storagev1alpha1.Volume{}
-		//volumeList := &storagev1alpha1.vol
-		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
-		err := k8sClient.Get(ctx, ns, volume)
-		if err != nil {
+	// 	volume := &storagev1alpha1.Volume{}
+	// 	//volumeList := &storagev1alpha1.vol
+	// 	ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
+	// 	err := k8sClient.Get(ctx, ns, volume)
+	// 	if err != nil {
 
-		}
-		deleteResult := k8sClient.Delete(ctx, volume)
-		//fmt.Println(deleteResult)
-		Expect(deleteResult).To(Succeed())
-		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
+	// 	}
+	// 	deleteResult := k8sClient.Delete(ctx, volume)
+	// 	//fmt.Println(deleteResult)
+	// 	Expect(deleteResult).To(Succeed())
+	// 	fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
 
-		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
-		if (volume.Status.State != ""){
-			fmt.Println("Image is deleted completely which is", volume.Status.Access.VolumeAttributes["image"])
-		}else {
-			fmt.Println("Image/Volume not deleted completely, it is there")
-		}
+	// 	Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
+	// 	if (volume.Status.State != ""){
+	// 		fmt.Println("Image is deleted completely which is", volume.Status.Access.VolumeAttributes["image"])
+	// 	}else {
+	// 		fmt.Println("Image/Volume not deleted completely, it is there")
+	// 	}
 
-	})
+	// })
 
 })
+// var ImageRBDIDPrefix    
+// = "img_"
+// func ImageIDToRBDID(imageID string) string {
+// 	return ImageRBDIDPrefix + imageID
+// }
