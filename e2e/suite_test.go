@@ -16,7 +16,6 @@ package e2e
 
 import (
 	"flag"
-	"fmt"
 	"testing"
 	"time"
 
@@ -138,6 +137,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
 
+
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cephOptions.Client,
@@ -145,7 +145,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 			Namespace: "rook-ceph",
 		},
 	}
-	fmt.Println("cephclient", cephOptions.Client)
+	//fmt.Println("cephclient", cephOptions.Client)
 	Eventually(Object(cephClient)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
