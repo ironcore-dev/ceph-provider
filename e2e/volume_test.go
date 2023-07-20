@@ -41,7 +41,12 @@ var _ = Describe("cephlet-volume", func() {
 
 	const (
 		volumeSize = "10Gi"
-		
+
+		//TODO get from volumeclass
+		fastVolClassTPS = 100
+		fastVolClassIPOS = 100
+		fastVolClassBurstFactor = 3
+		fastVolClassBurstDurationInSec = 10
 	//	cephClientSecretValue = "test"
 	//	snapshotSize  = "2Gi"
 	//	cephPoolName  = "ceph"
@@ -87,6 +92,23 @@ var _ = Describe("cephlet-volume", func() {
 			fmt.Println("Metadata of image is::::::::::::::: :", metaData)
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Println("Volume Image for TSI::::::::::::",imageName)
+
+                       iopsBurstLimit := fastVolClassBurstfactor * fastVolClassIOPS
+                         
+   		       setIOPSBurstLimit, err := strconv.Atoi(metaData["rbd_qos_iops_limit"])
+                       if err != nil {
+                          // ... handle error
+                           panic(err)
+
+                       }
+		       fmt.Println("set isssssssssssssss",setIOPSBurstLimit)
+		       fmt.Println("expected issssssssssssssssss",iopsBurstLimit)
+		       /*
+		       limits[rbd_qos_iops_burst] = iopsBurstLimit
+	limits[rbd_qos_read_iops_burst] = iopsBurstLimit
+	limits[rbd_qos_write_iops_burst] = iopsBurstLimit
+		       */
+                     
 		}else {
 			fmt.Println("Though the volume created, image is not created because Cephlet and Volumepoollet is not running.")
 		}
