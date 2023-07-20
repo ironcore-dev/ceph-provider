@@ -115,6 +115,13 @@ var _ = Describe("cephlet-volume", func() {
 		Expect(deleteResult).To(Succeed())
 		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
 
+		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
+		if (volume.Status.State != ""){
+			fmt.Println("Image is deleted completely which is", volume.Status.Access.VolumeAttributes["image"])
+		}else {
+			fmt.Println("Image/Volume not deleted completely, it is there")
+		}
+
 	})
 
 })
