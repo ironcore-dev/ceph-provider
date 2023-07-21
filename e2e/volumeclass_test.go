@@ -25,7 +25,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-//	"sigs.k8s.io/controller-runtime/pkg/client"
+	//	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 )
@@ -48,8 +48,6 @@ var _ = Describe("VolumeClass controller", func() {
 		Expect(k8sClient.Create(ctx, volumeClass)).Should(Succeed())
 		fmt.Println("Here the VolumeClass is getting created********", volumeClass.Name)
 
-
-
 		By("checking the finalizer is present")
 		By("issuing a delete request for the volume class")
 		Expect(k8sClient.Delete(ctx, volumeClass)).Should(Succeed())
@@ -57,4 +55,3 @@ var _ = Describe("VolumeClass controller", func() {
 
 	})
 })
-

@@ -44,10 +44,10 @@ var _ = Describe("cephlet-volume", func() {
 		volumeSize = "10Gi"
 
 		//TODO get from volumeclass
-		fastVolClassTPS                 = 100
-		fastVolClassIOPS                = 100
-		fastVolClassBurstFactor         = 1
-		fastVolClassBurstDurationInSec  = 10
+		fastVolClassTPS                = 100
+		fastVolClassIOPS               = 100
+		fastVolClassBurstFactor        = 1
+		fastVolClassBurstDurationInSec = 10
 
 	//	cephClientSecretValue = "test"
 	//	snapshotSize  = "2Gi"
@@ -100,11 +100,11 @@ var _ = Describe("cephlet-volume", func() {
 			if err != nil {
 				panic(err)
 			}
-			setTPSBurst,err := strconv.Atoi(metaData["conf_rbd_qos_read_bps_burst"])
+			setTPSBurst, err := strconv.Atoi(metaData["conf_rbd_qos_read_bps_burst"])
 			if err != nil {
 				panic(err)
 			}
-			// IOPS Data			
+			// IOPS Data
 			iopsBurstLimit := fastVolClassBurstFactor * fastVolClassIOPS
 			iopsBurst := iopsBurstLimit * fastVolClassBurstDurationInSec
 
@@ -119,8 +119,8 @@ var _ = Describe("cephlet-volume", func() {
 			}
 
 			fmt.Println("set isssssssssssssss", setTPSBurst)
-			fmt.Println("expected issssssssssssssssss",tpsBurst)
-			
+			fmt.Println("expected issssssssssssssssss", tpsBurst)
+
 			Expect(setIOPSBurstLimit).To(Equal(iopsBurstLimit))
 			Expect(setTPSBurstLimit).To(Equal(tpsBurstLimit))
 			Expect(setTPSBurst).To(Equal(tpsBurst))
@@ -171,9 +171,9 @@ var _ = Describe("cephlet-volume", func() {
 		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
 
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
-		if (volume.Status.State != ""){
+		if volume.Status.State != "" {
 			fmt.Println("Image is deleted completely which is", imageName)
-		}else {
+		} else {
 			fmt.Println("Image/Volume not deleted completely, it is there")
 		}
 

@@ -71,9 +71,9 @@ type CephOptions struct {
 	Monitors string
 	User     string
 	//KeyringFile string
-	KeyFile string
-	Pool    string
-	Client  string
+	KeyFile     string
+	Pool        string
+	Client      string
 	VolumeClass string
 	//KeyEncryptionKeyPath string
 }
@@ -138,7 +138,6 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Eventually(Object(cephPool)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
-
 
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
