@@ -162,13 +162,13 @@ var _ = Describe("cephlet-volume", func() {
 		err := k8sClient.Get(ctx, ns, volume)
 		imageName := strings.Split(volume.Status.Access.VolumeAttributes["image"], "/")[1]
 		if err != nil {
-
+			fmt.Println("Volume is not getting deleted.")
 		}
 		deleteResult := k8sClient.Delete(ctx, volume)
 		//fmt.Println(deleteResult)
 		time.Sleep(6 * time.Second)
 		Expect(deleteResult).To(Succeed())
-		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
+		fmt.Println("Here the Volume is getting deleted which was earlier created.###########", volume.Name)
 
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
 		if volume.Status.State != "" {
