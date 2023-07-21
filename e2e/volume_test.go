@@ -58,14 +58,13 @@ var _ = Describe("cephlet-volume", func() {
 	It("should create volume", func(ctx SpecContext) {
 		By("checking that a Volume has been created")
 
-		///////////////////////fmt.Println("inslide volume_testsssssssssssss and ceph-pool is:",cephpool)
 		vol := &storagev1alpha1.Volume{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "tsi",
 				Namespace: "rook-ceph",
 			},
 			Spec: storagev1alpha1.VolumeSpec{
-				VolumeClassRef: &corev1.LocalObjectReference{Name: "fast"},
+				VolumeClassRef: &corev1.LocalObjectReference{Name: cephOptions.VolumeClass},
 				VolumePoolRef:  &corev1.LocalObjectReference{Name: cephOptions.Pool},
 				Resources: corev1alpha1.ResourceList{
 					corev1alpha1.ResourceStorage: resource.MustParse(volumeSize),
@@ -161,17 +160,19 @@ var _ = Describe("cephlet-volume", func() {
 		//volumeList := &storagev1alpha1.vol
 		ns := types.NamespacedName{Namespace: "rook-ceph", Name: "tsi"}
 		err := k8sClient.Get(ctx, ns, volume)
+		imageName := strings.Split(volume.Status.Access.VolumeAttributes["image"], "/")[1]
 		if err != nil {
 
 		}
 		deleteResult := k8sClient.Delete(ctx, volume)
 		//fmt.Println(deleteResult)
+		time.Sleep(6 * time.Second)
 		Expect(deleteResult).To(Succeed())
 		fmt.Println("Here the Volume is getting deleted which was ealier created.###########", volume.Name)
 
 		Expect(k8sClient.Get(ctx, ns, volume)).To(Succeed())
 		if (volume.Status.State != ""){
-			fmt.Println("Image is deleted completely which is", volume.Status.Access.VolumeAttributes["image"])
+			fmt.Println("Image is deleted completely which is", imageName)
 		}else {
 			fmt.Println("Image/Volume not deleted completely, it is there")
 		}

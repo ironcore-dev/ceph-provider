@@ -74,6 +74,7 @@ type CephOptions struct {
 	KeyFile string
 	Pool    string
 	Client  string
+	VolumeClass string
 	//KeyEncryptionKeyPath string
 }
 
@@ -82,6 +83,7 @@ func init() {
 	flag.StringVar(&cephOptions.Pool, "ceph-pool", "", "ceph pool")
 	flag.StringVar(&cephOptions.User, "ceph-user", "", "ceph user")
 	flag.StringVar(&cephOptions.Client, "ceph-client", "", "ceph client")
+	flag.StringVar(&cephOptions.VolumeClass, "volume-class", "", "volume class")
 	//flag.StringVar(&cephOptions.KeyringFile, "ceph-keyringfile", "", "ceph-keyring file")
 	flag.StringVar(&cephOptions.KeyFile, "ceph-keyfile", "", "ceph keyfile")
 	flag.StringVar(&cephOptions.Monitors, "ceph-mornitors", "", "ceph monitors")

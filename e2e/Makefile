@@ -9,7 +9,7 @@ create-env:  ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObj
 .PHONY: envtest  
 envtest: #test       			
 	export PATH=$PATH:/usr/local/go/bin 
-	ginkgo
+	ginkgo -- --ceph-pool=ceph --ceph-user=volume-rook-ceph--ceph --ceph-client=volume-rook-ceph--ceph --ceph-mornitors=[2a00:da8:ffef:1402::]:6789,[2a00:da8:ffef:1410::]:6789,[2a00:da8:ffef:1412::]:6789 --ceph-keyfile=/home/ppanditrao/cephlet/ori/volume/cmd/volume/keyring-only-ceph --volume-class=fast
 
 .PHONY: delete-env
 delete-env: 
