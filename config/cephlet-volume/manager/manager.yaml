@@ -36,7 +36,7 @@ spec:
             - "--volume-runtime-endpoint=unix:/var/run/cephlet-volume.sock"
             - "--kubeconfig=/k-cfg/my-kubeconfig"
             - "--leader-election-kubeconfig=/k-cfg/my-kubeconfig"
-          image: ghcr.io/onmetal/onmetal-api-volumepoollet:sha-edc1a37
+          image: ppanditrao/volumepoollet:latest
           name: manager
           securityContext:
             allowPrivilegeEscalation: false
@@ -52,13 +52,13 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-            limits:
-              cpu: 100m
-              memory: 30Mi
-            requests:
-              cpu: 100m
-              memory: 20Mi
+          # resources:
+          #   limits:
+          #     cpu: 100m
+          #     memory: 30Mi
+          #   requests:
+          #     cpu: 100m
+          #     memory: 20Mi
           env:
             - name: KUBECONFIG
               value: /k-cfg/my-kubeconfig
@@ -94,13 +94,13 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-            limits:
-              cpu: 100m
-              memory: 30Mi
-            requests:
-              cpu: 100m
-              memory: 20Mi
+          # resources:
+          #   limits:
+          #     cpu: 100m
+          #     memory: 30Mi
+          #   requests:
+          #     cpu: 100m
+          #     memory: 20Mi
           volumeMounts:
             - name: var-run
               mountPath: /var/run
