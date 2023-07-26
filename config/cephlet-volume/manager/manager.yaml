@@ -31,23 +31,27 @@ spec:
         - command:
             - /volumepoollet
           args:
-            - --leader-elect
-          image: volumepoollet:latest
+            - "--provider-id=cephlet"
+            - "--volume-pool-name=ceph"
+            - "--volume-runtime-endpoint=unix:/var/run/cephlet-volume.sock"
+            - "--kubeconfig=/k-cfg/my-kubeconfig"
+            - "--leader-election-kubeconfig=/k-cfg/my-kubeconfig"
+          image: ghcr.io/onmetal/onmetal-api-volumepoollet:sha-edc1a37
           name: manager
           securityContext:
             allowPrivilegeEscalation: false
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 8081
-            initialDelaySeconds: 15
-            periodSeconds: 20
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: 8081
-            initialDelaySeconds: 5
-            periodSeconds: 10
+          # livenessProbe:
+          #   httpGet:
+          #     path: /healthz
+          #     port: 8081
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 20
+          # readinessProbe:
+          #   httpGet:
+          #     path: /readyz
+          #     port: 8081
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 10
           resources:
             limits:
               cpu: 100m
@@ -55,27 +59,40 @@ spec:
             requests:
               cpu: 100m
               memory: 20Mi
+          env:
+            - name: KUBECONFIG
+              value: /k-cfg/my-kubeconfig
           volumeMounts:
             - name: var-run
               mountPath: /var/run
+            - name: k-config
+              mountPath: ./k-cfg
         - command:
             - /cephlet-volume
-          image: cephlet-volume:latest
+          image: ghcr.io/onmetal/cephlet-volume:sha-c879e84
+          args:
+            - "--ceph-user=volume-rook-ceph--ceph"
+            - "--ceph-monitors=[2a00:da8:ffef:1402::]:6789,[2a00:da8:ffef:1410::]:6789,[2a00:da8:ffef:1412::]:6789"
+            - "--ceph-key-file=/opt/.keyring"
+            - "--ceph-pool=ceph"
+            - "--supported-volume-classes=/tmp/fast.json"
+            - "--ceph-client=client.volume-rook-ceph--ceph"
+            - "--ceph-kek-path=/data/kek"
           name: cephlet-volume
           securityContext:
             allowPrivilegeEscalation: false
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 8081
-            initialDelaySeconds: 15
-            periodSeconds: 20
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: 8081
-            initialDelaySeconds: 5
-            periodSeconds: 10
+          # livenessProbe:
+          #   httpGet:
+          #     path: /healthz
+          #     port: 8081
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 20
+          # readinessProbe:
+          #   httpGet:
+          #     path: /readyz
+          #     port: 8081
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 10
           resources:
             limits:
               cpu: 100m
@@ -86,8 +103,36 @@ spec:
           volumeMounts:
             - name: var-run
               mountPath: /var/run
+            - name: data-kek
+              mountPath: ./data/kek
+              subPath: ./kek
+              readOnly: true
+            - name: etc-keyring
+              mountPath: ./opt/.keyring
+              subPath: ./.keyring  
+              readOnly: true
+            - name: tmp-fast
+              mountPath: ./tmp/fast.json   
+              subPath: ./fast.json
+              readOnly: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
         - name: var-run
-          emptyDir: { }
+          emptyDir: {}
+        - name: data-kek
+          secret:
+            secretName: allkey
+        - name: etc-keyring
+          secret: 
+            secretName: allkey
+        - name: tmp-fast
+          secret:
+            secretName: allkey
+            items:
+            - key: fast
+              path: fast.json
+        - name: k-config
+          secret:
+            secretName: allkey
+
