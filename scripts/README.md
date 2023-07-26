@@ -1,8 +1,7 @@
-# ------------------------------------------------------------------
-# Volume-migration-script
-# ------------------------------------------------------------------
 
-#Pre-requisites
+# Volume-migration-script
+
+Pre-requisites
 
 Following packages need to be installed on env.
 - kubectl
