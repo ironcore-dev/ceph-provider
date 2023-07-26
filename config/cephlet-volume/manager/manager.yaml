@@ -40,18 +40,18 @@ spec:
           name: manager
           securityContext:
             allowPrivilegeEscalation: false
-          # livenessProbe:
-          #   httpGet:
-          #     path: /healthz
-          #     port: 8081
-          #   initialDelaySeconds: 15
-          #   periodSeconds: 20
-          # readinessProbe:
-          #   httpGet:
-          #     path: /readyz
-          #     port: 8081
-          #   initialDelaySeconds: 5
-          #   periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             limits:
               cpu: 100m
@@ -67,6 +67,7 @@ spec:
               mountPath: /var/run
             - name: k-config
               mountPath: ./k-cfg
+              readOnly: true
         - command:
             - /cephlet-volume
           image: ghcr.io/onmetal/cephlet-volume:sha-c879e84
@@ -81,18 +82,18 @@ spec:
           name: cephlet-volume
           securityContext:
             allowPrivilegeEscalation: false
-          # livenessProbe:
-          #   httpGet:
-          #     path: /healthz
-          #     port: 8081
-          #   initialDelaySeconds: 15
-          #   periodSeconds: 20
-          # readinessProbe:
-          #   httpGet:
-          #     path: /readyz
-          #     port: 8081
-          #   initialDelaySeconds: 5
-          #   periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             limits:
               cpu: 100m
