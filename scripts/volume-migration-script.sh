@@ -9,6 +9,9 @@
 # https://github.com/onmetal/onmetal-image
 # ----------------------------------------------------------------
 
+#Default dry run parameter set to false
+dry_run=false
+
 # Choose the Namespace
 namespace_name=rook-ceph
 
@@ -135,8 +138,21 @@ for val in ${list[@]}; do
      			}
    		}
  	}'
-	> volume.json
+
+	> vol-$VOLUME_ID.json
 	echo $JSON_STR >> volume.json
-	rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file  volume.json
-	echo "Updated the OMAP data for volume $VOLUME_NAME Successfully" 
+
+	if ! "$dry_run"; then
+		rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file  volume.json
+		echo "Updated the OMAP data for volume $VOLUME_NAME Successfully" 
+	fi
+	
+done
+
+while getopts 'n' opt; do
+    case "$opt" in
+        n) dry_run=true ;;
+        *) echo 'error in command line parsing' >&2
+           exit 1
+    esac
 done
