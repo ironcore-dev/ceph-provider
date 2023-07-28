@@ -21,6 +21,8 @@ spec:
               name: https
         - name: manager
           args:
-            - "--health-probe-bind-address=:8081"
-            - "--metrics-bind-address=127.0.0.1:8080"
-            - "--leader-elect"
+            - "--provider-id=cephlet"
+            - "--volume-pool-name=ceph"
+            - "--volume-runtime-endpoint=unix:/var/run/cephlet-volume.sock"
+            - "--kubeconfig=/k-cfg/my-kubeconfig"
+            - "--leader-election-kubeconfig=/k-cfg/my-kubeconfig"

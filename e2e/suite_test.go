@@ -71,9 +71,10 @@ type CephOptions struct {
 	Monitors string
 	User     string
 	//KeyringFile string
-	KeyFile string
-	Pool    string
-	Client  string
+	KeyFile     string
+	Pool        string
+	Client      string
+	VolumeClass string
 	//KeyEncryptionKeyPath string
 }
 
@@ -82,6 +83,7 @@ func init() {
 	flag.StringVar(&cephOptions.Pool, "ceph-pool", "", "ceph pool")
 	flag.StringVar(&cephOptions.User, "ceph-user", "", "ceph user")
 	flag.StringVar(&cephOptions.Client, "ceph-client", "", "ceph client")
+	flag.StringVar(&cephOptions.VolumeClass, "volume-class", "", "volume class")
 	//flag.StringVar(&cephOptions.KeyringFile, "ceph-keyringfile", "", "ceph-keyring file")
 	flag.StringVar(&cephOptions.KeyFile, "ceph-keyfile", "", "ceph keyfile")
 	flag.StringVar(&cephOptions.Monitors, "ceph-mornitors", "", "ceph monitors")
@@ -136,7 +138,6 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Eventually(Object(cephPool)).Should(SatisfyAll(
 		HaveField("Status.Phase", rookv1.ConditionReady),
 	))
-
 
 	cephClient = &rookv1.CephClient{
 		ObjectMeta: metav1.ObjectMeta{
