@@ -12,6 +12,14 @@
 #Default dry run parameter set to false
 dry_run=false
 
+while getopts 'n' opt; do
+    case "$opt" in
+        n) dry_run=true ;;
+        *) echo 'error in command line parsing' >&2
+           exit 1
+    esac
+done
+
 # Choose the Namespace
 namespace_name=rook-ceph
 
@@ -43,7 +51,8 @@ echo "${list[@]}"
 
 for val in ${list[@]}; do
 	VOLUME_ID=`kubectl get volume $val -n $namespace -o json | jq '.status | .access |.volumeAttributes["image"] | .[5:]'`
-        VOLUME_NAME=`kubectl get volume  $val -n $namespace -o json | jq '.status | .access | .secretRef["name"]'`
+	VOLUME_ID_FORMATTED=`echo “$VOLUME_ID” | tr -d ‘“’`
+    VOLUME_NAME=`kubectl get volume  $val -n $namespace -o json | jq '.status | .access | .secretRef["name"]'`
 	VOLUME_NAME=$(echo "$VOLUME_NAME" | sed 's/^"//' | sed 's/"$//')
 	VOLUME_NAME1="${VOLUME_NAME}\\"
 	VOLUME_UUID=`kubectl get volume  $val -n $namespace -o json | jq '.metadata | .uid '`
@@ -139,20 +148,12 @@ for val in ${list[@]}; do
    		}
  	}'
 
-	> vol-$VOLUME_ID.json
-	echo $JSON_STR >> volume.json
+	> vol-$VOLUME_ID_FORMATTED.json
+	echo $JSON_STR >> vol-$VOLUME_ID_FORMATTED.json
 
-	if ! "$dry_run"; then
-		rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file  volume.json
+	if $dry_run; then
+		rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file vol-$VOLUME_ID_FORMATTED.json
 		echo "Updated the OMAP data for volume $VOLUME_NAME Successfully" 
 	fi
 	
-done
-
-while getopts 'n' opt; do
-    case "$opt" in
-        n) dry_run=true ;;
-        *) echo 'error in command line parsing' >&2
-           exit 1
-    esac
 done
