@@ -58,6 +58,9 @@ EOF
 # write the initial config file
 write_endpoints
 
+# Run volume migration script
+./volume-migration-script.sh -n dry_run > volume-migration.log
+
 # continuously update the mon endpoints if they fail over
 if [ "$1" != "--skip-watch" ]; then
   watch_endpoints
