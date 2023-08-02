@@ -61,8 +61,11 @@ for val in ${list[@]}; do
 	VOLUME_TIMESTAMP=`kubectl get volume $val -n $namespace -o json | jq '.metadata.creationTimestamp'`
 	IMAGE=`kubectl get volume $val -n rook-ceph -o json | jq '.metadata' | jq '.annotations' | jq -rc '."kubectl.kubernetes.io/last-applied-configuration"' | jq '.spec' | jq '.image'`
 	IMAGE1=`echo "$IMAGE" | tr -d '"'`
+
+	#Pull the image first
+	onmetal-image pull $IMAGE1
+
         SNAPSHOT_REF=`onmetal-image inspect $IMAGE1 | jq .descriptor | jq .digest`
-	#SNAPSHOT_REF="csi-snap-5a6db4a4-1022-11ee-92fc-46353caa6f6e"
 	USERKEY=`ceph auth get-or-create-key client.volume-rook-ceph--ceph`
 	HANDLE=`kubectl get volume  $val -n $namespace -o json | jq '.status | .access |.volumeAttributes["image"]'`
 	WWN=`kubectl get volume $val  -n $namespace -o json | jq .status |jq .access |jq .handle`
@@ -155,5 +158,7 @@ for val in ${list[@]}; do
 		rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file vol-$VOLUME_ID_FORMATTED.json
 		echo "Updated the OMAP data for volume $VOLUME_NAME Successfully" 
 	fi
-	
+        
+	#Delete the OCI image
+        onmetal-image delete $IMAGE1	
 done
