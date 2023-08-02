@@ -2,6 +2,7 @@ FROM ubuntu:latest
 
 RUN apt-get update && apt-get install -y \
   bc \
+  jq \
   ceph-common \
   curl  \
   unzip \
@@ -16,7 +17,8 @@ RUN apt-get update && apt-get install -y \
 # RUN chmod +x bin/onmetal-image 
 # RUN mv bin/onmetal-image /usr/bin/onmetal-image 
 
-COPY onmetal-image /
+## Make sure onmetal-image is avalible in current directly while building docker image
+COPY onmetal-image /usr/bin/
 
 RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.23.5/bin/linux/amd64/kubectl
 
