@@ -153,7 +153,7 @@ for val in ${list[@]}; do
 
 	> vol-$VOLUME_ID_FORMATTED.json
 	echo $JSON_STR >> vol-$VOLUME_ID_FORMATTED.json
-
+        echo "Written volume file: vol-$VOLUME_ID_FORMATTED.json"
 	if ! $dry_run; then
 		rados setomapval onmetal.csi.volumes $VOLUME_ID  --pool=ceph --input-file vol-$VOLUME_ID_FORMATTED.json
 		echo "Updated the OMAP data for volume $VOLUME_NAME Successfully" 
