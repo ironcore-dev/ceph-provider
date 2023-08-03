@@ -20,7 +20,7 @@ spec:
         - name: rook-direct-mount
           image: ppanditrao/cephlet-migration2
           command: ["/bin/bash"]
-          args: ["-m", "-c", "/prepare-ceph-config.sh"]
+          args: ["-m", "-c", "/prepare-ceph-config.sh","-d","dry_run"]
           imagePullPolicy: IfNotPresent
           tty: true
           env:

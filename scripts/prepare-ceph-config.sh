@@ -4,6 +4,17 @@ CEPH_CONFIG="/etc/ceph/ceph.conf"
 MON_CONFIG="/etc/rook/mon-endpoints"
 KEYRING_FILE="/etc/ceph/keyring"
 
+dry_run=false
+skip_watch=false
+while getopts d:s: flag
+do
+    case "${flag}" in
+        d) dry_run=true ;;
+        s) skip_watch=true ;;
+    esac
+done
+
+
 # create a ceph config file in its default location so ceph/rados tools can be used
 # without specifying any arguments
 write_endpoints() {
@@ -59,9 +70,16 @@ EOF
 write_endpoints
 
 # Run volume migration script
-./volume-migration-script.sh -n dry_run > volume-migration.log
+if [ $dry_run ]; then
+        echo "inside iffffffffffffffffffffdry_run condition: $dry_run" >> volume-migration.log
+        ./volume-migration-script.sh -n dry_run >> volume-migration.log
+else
+        echo "inside elseeeeeeeeeeeeeeeeeee dry_run condition: $dry_run" >> volume-migration.log
+        ./volume-migration-script.sh >> volume-migration.log
+fi
 
 # continuously update the mon endpoints if they fail over
-if [ "$1" != "--skip-watch" ]; then
-  watch_endpoints
+if [ ! $skip_watch ]; then
+        echo "inside iffffffffffffffffffff skip watch condition: $skip_watch" >> volume-migration.log
+        watch_endpoints
 fi
