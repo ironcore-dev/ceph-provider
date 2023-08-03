@@ -14,8 +14,8 @@ do
     esac
 done
 
-echo "param dry_run is: $dry_run" >> volume-migration.log
-echo "param skip_watch: $skip_watch" >> volume-migration.log
+#echo "param dry_run is: $dry_run" >> volume-migration.log
+#echo "param skip_watch: $skip_watch" >> volume-migration.log
 
 # create a ceph config file in its default location so ceph/rados tools can be used
 # without specifying any arguments
@@ -73,15 +73,13 @@ write_endpoints
 
 # Run volume migration script
 if [ "$dry_run" = true ]; then
-        echo "inside iffffffffffffffffffffdry_run condition: $dry_run" >> volume-migration.log
+        echo "In dry run mode" >> volume-migration.log
         ./volume-migration-script.sh -n dry_run >> volume-migration.log
 else
-        echo "inside elseeeeeeeeeeeeeeeeeee dry_run condition: $dry_run" >> volume-migration.log
         ./volume-migration-script.sh >> volume-migration.log
 fi
 
 # continuously update the mon endpoints if they fail over
 if [ "$skip_watch" != true ]; then
-        echo "inside iffffffffffffffffffff skip watch condition: $skip_watch" >> volume-migration.log
         watch_endpoints
 fi
