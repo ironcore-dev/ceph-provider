@@ -6,17 +6,20 @@ KEYRING_FILE="/etc/ceph/keyring"
 
 dry_run=false
 skip_watch=false
-while getopts d:s: flag
+while getopts d:s:n: flag
 do
     case "${flag}" in
         d) dry_run=true ;;
         s) skip_watch=true ;;
+        n) namespace=${OPTARG} ;;
+        *) echo 'error in command line parsing' >&2
+           exit 1
     esac
 done
 
 #echo "param dry_run is: $dry_run" >> volume-migration.log
 #echo "param skip_watch: $skip_watch" >> volume-migration.log
-
+echo "namespace is: $namespace" >> volume-migration.log
 # create a ceph config file in its default location so ceph/rados tools can be used
 # without specifying any arguments
 write_endpoints() {
@@ -74,9 +77,9 @@ write_endpoints
 # Run volume migration script
 if [ "$dry_run" = true ]; then
         echo "In dry run mode" >> volume-migration.log
-        ./volume-migration-script.sh -n dry_run >> volume-migration.log
+        ./volume-migration-script.sh -d dry_run -n $namespace >> volume-migration.log
 else
-        ./volume-migration-script.sh >> volume-migration.log
+        ./volume-migration-script.sh -n $namespace >> volume-migration.log
 fi
 
 # continuously update the mon endpoints if they fail over
