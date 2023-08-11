@@ -315,7 +315,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	classRegistry, err := vcr.NewVolumeClassRegistry(supportedClasses)
 	if err != nil {
-		return fmt.Errorf("failed to initialize volume class registry : %w", err)
+		return fmt.Errorf("failed to initialize volume class registry: %w", err)
+	}
+
+	cephCommandClient, err := ceph.NewCommandClient(conn, opts.Ceph.Pool)
+	if err != nil {
+		return fmt.Errorf("failed to initialize ceph command client: %w", err)
 	}
 
 	srv, err := server.New(
@@ -323,6 +328,7 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotStore,
 		classRegistry,
 		encryptor,
+		cephCommandClient,
 		server.Options{
 			BurstFactor:            opts.Ceph.BurstFactor,
 			BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
