@@ -3,7 +3,7 @@ module github.com/onmetal/cephlet
 go 1.20
 
 require (
-	github.com/ceph/go-ceph v0.22.0
+	github.com/ceph/go-ceph v0.23.0
 	github.com/containerd/containerd v1.7.3
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
@@ -30,7 +30,6 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
-	github.com/aws/aws-sdk-go v1.44.289 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.0.2 // indirect
@@ -90,7 +89,6 @@ require (
 	github.com/hashicorp/vault/sdk v0.9.1 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
