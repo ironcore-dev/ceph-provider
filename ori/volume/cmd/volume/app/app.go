@@ -21,6 +21,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/onmetal/cephlet/ori/volume/server"
 	"github.com/onmetal/cephlet/pkg/api"
@@ -57,6 +58,8 @@ type CephOptions struct {
 	Pool        string
 	Client      string
 
+	ConnectTimeout time.Duration
+
 	BurstFactor            int64
 	BurstDurationInSeconds int64
 
@@ -66,6 +69,7 @@ type CephOptions struct {
 }
 
 func (o *Options) Defaults() {
+	o.Ceph.ConnectTimeout = 10 * time.Second
 	o.Ceph.BurstFactor = 10
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
@@ -82,6 +86,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.Int64Var(&o.Ceph.PopulatorBufferSize, "populator-buffer-size", o.Ceph.PopulatorBufferSize, "Defines the buffer size (in bytes) which is used for downloading a image.")
 
 	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
+	fs.DurationVar(&o.Ceph.ConnectTimeout, "ceph-connect-timeout", o.Ceph.ConnectTimeout, "Connect timeout for establishing a connection to ceph.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence). ceph-key-file contains contains only the ceph key.")
 	fs.StringVar(&o.Ceph.KeyringFile, "ceph-keyring-file", o.Ceph.KeyringFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence)s. ceph-keyring-file contains the ceph key and client information.")
@@ -181,8 +186,10 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to init encryptor: %w", err)
 	}
 
-	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User)
-	conn, err := ceph.ConnectToRados(ctx, ceph.Credentials{
+	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User, "Timeout", opts.Ceph.ConnectTimeout)
+	connectCtx, cancelConnect := context.WithTimeout(ctx, opts.Ceph.ConnectTimeout)
+	defer cancelConnect()
+	conn, err := ceph.ConnectToRados(connectCtx, ceph.Credentials{
 		Monitors: opts.Ceph.Monitors,
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,
