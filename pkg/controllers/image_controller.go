@@ -461,7 +461,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	if err := r.setWWN(ctx, log, ioCtx, img); err != nil {
-		return fmt.Errorf("failed to set limits: %w", err)
+		return fmt.Errorf("failed to set wwn: %w", err)
 	}
 
 	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {

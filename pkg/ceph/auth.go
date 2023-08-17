@@ -42,9 +42,18 @@ func ConnectToRados(ctx context.Context, c Credentials) (*rados.Conn, error) {
 		return nil, fmt.Errorf("parsing cmdline args (%v) failed: %w", args, err)
 	}
 
-	err = conn.Connect()
-	if err != nil {
-		return nil, fmt.Errorf("connecting failed: %w", err)
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Connect()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("ceph connect timeout. monitors: %s, user: %s: %w", c.Monitors, c.User, ctx.Err())
+	case err := <-done:
+		if err != nil {
+			return nil, fmt.Errorf("connecting failed: %w", err)
+		}
 	}
 
 	return conn, nil
