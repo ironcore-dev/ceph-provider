@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 	cephapi "github.com/onmetal/cephlet/pkg/api"
+	"github.com/onmetal/cephlet/pkg/ceph"
 	"github.com/onmetal/cephlet/pkg/encryption"
 	"github.com/onmetal/cephlet/pkg/store"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
@@ -37,7 +38,8 @@ type Server struct {
 	imageStore    store.Store[*cephapi.Image]
 	snapshotStore store.Store[*cephapi.Snapshot]
 
-	volumeClasses VolumeClassRegistry
+	volumeClasses     VolumeClassRegistry
+	cephCommandClient ceph.Command
 
 	burstFactor            int64
 	burstDurationInSeconds int64
@@ -71,6 +73,7 @@ func New(imageStore store.Store[*cephapi.Image],
 	snapshotStore store.Store[*cephapi.Snapshot],
 	volumeClassRegistry VolumeClassRegistry,
 	keyEncryption encryption.Encryptor,
+	cephCommandClient ceph.Command,
 	opts Options,
 ) (*Server, error) {
 
@@ -82,7 +85,8 @@ func New(imageStore store.Store[*cephapi.Image],
 		snapshotStore: snapshotStore,
 		volumeClasses: volumeClassRegistry,
 
-		keyEncryption: keyEncryption,
+		keyEncryption:     keyEncryption,
+		cephCommandClient: cephCommandClient,
 
 		burstFactor:            opts.BurstFactor,
 		burstDurationInSeconds: opts.BurstDurationInSeconds,
