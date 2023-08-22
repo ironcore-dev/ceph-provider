@@ -64,6 +64,10 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest checklicense ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: intefration-tests
+integration-tests:
+	CGO=1 go test -tags=integration ./...
+
 .PHONY: addlicense
 addlicense: ## Add license headers to all go files.
 	find . -name '*.go' -exec go run github.com/google/addlicense -c 'OnMetal authors' {} +
