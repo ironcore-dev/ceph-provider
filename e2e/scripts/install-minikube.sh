@@ -31,8 +31,20 @@ go version
 rm -rf go1.20.2.linux-amd64.tar.gz
 
 echo "@@@@@@@@@@@@@@@@@@"
+# Docker installation
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg 
+sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
+sudo apt-get install apt-transport-https ca-certificates curl gnupg lsb-release -y
+sudo apt-get update
+sudo apt-get install docker-ce docker-ce-cli containerd.io -y
+sudo usermod -aG docker $USER
+
+echo "*****************************"
 
 go install github.com/onsi/ginkgo/v2/ginkgo@latest
 sudo apt install golang-ginkgo-dev -y
 echo "Starting Minikube"
-minikube start --disk-size=2g --extra-disks=1 --driver qemu2
+#minikube start --disk-size=2g --extra-disks=1 --driver qemu2 --force
+minikube start driver=docker --force
