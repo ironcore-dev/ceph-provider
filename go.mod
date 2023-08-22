@@ -9,7 +9,7 @@ require (
 	github.com/google/addlicense v1.1.1
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onmetal/controller-utils v0.8.0
-	github.com/onmetal/onmetal-api v0.1.2-0.20230809123215-702b9aa69f8d
+	github.com/onmetal/onmetal-api v0.1.2-0.20230816135533-6e1562703753
 	github.com/onmetal/onmetal-image v0.1.1
 	github.com/onsi/ginkgo/v2 v2.11.0
 	github.com/onsi/gomega v1.27.10

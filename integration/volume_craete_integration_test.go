@@ -31,14 +31,18 @@ import (
 
 var _ = Describe("Create Volume", func() {
 	It("should get the supported volume classes", func(ctx SpecContext) {
-		resp, err := volumeClient.ListVolumeClasses(ctx, &onmetalv1alpha1.ListVolumeClassesRequest{})
+		resp, err := volumeClient.Status(ctx, &onmetalv1alpha1.StatusRequest{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.VolumeClasses).To(Equal([]*onmetalv1alpha1.VolumeClass{{
-			Name: "foo",
-			Capabilities: &onmetalv1alpha1.VolumeClassCapabilities{
-				Tps:  100,
-				Iops: 100,
+		Expect(resp.VolumeClassStatus).To(Equal([]*onmetalv1alpha1.VolumeClassStatus{{
+			VolumeClass: &onmetalv1alpha1.VolumeClass{
+				Name: "foo",
+				Capabilities: &onmetalv1alpha1.VolumeClassCapabilities{
+					Tps:  100,
+					Iops: 100,
+				},
 			},
+			// TODO: fix VolumeClass stats gathering
+			Quantity: 10177744896,
 		}}))
 	})
 
