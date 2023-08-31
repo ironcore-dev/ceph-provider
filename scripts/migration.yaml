@@ -17,11 +17,11 @@ spec:
     spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-        - name: rook-direct-mounts
+        - name: rook-direct-mount
           #image: ppanditrao/cephlet-volume-migration-03-08
           image: ppanditrao/cephlet-migration-22
           command: ["/bin/bash"]
-          args: ["-m", "-c", "/prepare-ceph-config.sh -d dry_run"]
+          args: ["-m", "-c", "/prepare-ceph-config.sh -d dry_run -n rook-ceph"]
           imagePullPolicy: IfNotPresent
           tty: true
           env:
