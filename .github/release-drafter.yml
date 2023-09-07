@@ -35,6 +35,9 @@ autolabeler:
   - label: 'controllers'
     files:
       - '/controllers/*'
+  - label: 'integration-tests'
+    files:
+      - 'integration/*'
   - label: 'documentation'
     files:
       - '*.md'
