@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build integration
-// +build integration
-
 package integration
 
 import (
@@ -47,7 +44,7 @@ var (
 
 func TestIntegration_GRPCServer(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "GRPC Server Suite")
+	RunSpecs(t, "GRPC Server Suite", Label("integration"))
 }
 
 var _ = BeforeSuite(func() {

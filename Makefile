@@ -66,7 +66,7 @@ test: manifests generate fmt vet envtest checklicense ## Run tests.
 
 .PHONY: intefration-tests
 integration-tests:
-	CGO=1 go test -tags=integration ./...
+	CGO=1 go test ./... -- -ginkgo.label-filter="integration"
 
 .PHONY: addlicense
 addlicense: ## Add license headers to all go files.
