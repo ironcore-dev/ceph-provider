@@ -1585,8 +1585,8 @@ github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5/go.mod h1:v
 github.com/olekukonko/tablewriter v0.0.0-20180130162743-b8a9be070da4/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/onmetal/controller-utils v0.8.0 h1:8rMDhtsoFGq1x26sha8W+Y7mGK5E4ALpudfoIL/w6hI=
 github.com/onmetal/controller-utils v0.8.0/go.mod h1:w57S36LruaLsRZ7DXC9E7TCa+H2iiXZW3JhvT8Hdilc=
-github.com/onmetal/onmetal-api v0.1.2-0.20230809123215-702b9aa69f8d h1:6hG30bqPBzMyjkm9CEmwrPnXbbDYELtzjiVVGhRx3no=
-github.com/onmetal/onmetal-api v0.1.2-0.20230809123215-702b9aa69f8d/go.mod h1:P/aSwZBU5RH7UP8eKrrnY0AjZsHhLFmY5wrx14OtGX8=
+github.com/onmetal/onmetal-api v0.1.2-0.20230816135533-6e1562703753 h1:jBvs1LfyXhJtGqs1SuVQPDUrzgOOphNWTks/aj36/zI=
+github.com/onmetal/onmetal-api v0.1.2-0.20230816135533-6e1562703753/go.mod h1:P/aSwZBU5RH7UP8eKrrnY0AjZsHhLFmY5wrx14OtGX8=
 github.com/onmetal/onmetal-image v0.1.1 h1:sGnK2a1OH2iHZSbOrFJEdP7UvFLXb+o9OhJM4/hMy/M=
 github.com/onmetal/onmetal-image v0.1.1/go.mod h1:+9CdnZneHl3seFnhJN+nGlJ1Npmd7Qs4VV3CHO86f1U=
 github.com/onsi/ginkgo v0.0.0-20151202141238-7f8ab55aaf3b/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
