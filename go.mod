@@ -2,6 +2,8 @@ module github.com/onmetal/cephlet
 
 go 1.21
 
+toolchain go1.21.0
+
 require (
 	github.com/ceph/go-ceph v0.23.0
 	github.com/containerd/containerd v1.7.3
