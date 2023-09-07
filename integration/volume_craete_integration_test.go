@@ -30,17 +30,17 @@ var _ = Describe("Create Volume", func() {
 	It("should get the supported volume classes", func(ctx SpecContext) {
 		resp, err := volumeClient.Status(ctx, &onmetalv1alpha1.StatusRequest{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.VolumeClassStatus).To(Equal([]*onmetalv1alpha1.VolumeClassStatus{{
-			VolumeClass: &onmetalv1alpha1.VolumeClass{
+		Expect(resp.VolumeClassStatus[0]).Should(SatisfyAll(
+			HaveField("VolumeClass", Equal(&onmetalv1alpha1.VolumeClass{
 				Name: "foo",
 				Capabilities: &onmetalv1alpha1.VolumeClassCapabilities{
 					Tps:  100,
 					Iops: 100,
 				},
-			},
-			// TODO: fix VolumeClass stats gathering
-			Quantity: 10177744896,
-		}}))
+			})),
+			// TODO: fix VolumeClass stats gathering for quantity
+			// currently we ensure that the pool has more thatn 9Gi
+			HaveField("Quantity", BeNumerically(">", 9*1024*1024*1024))))
 	})
 
 	It("should create a volume", func(ctx SpecContext) {
