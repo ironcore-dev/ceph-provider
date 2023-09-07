@@ -74,6 +74,7 @@ var _ = Describe("Create Volume", func() {
 				Id: createResp.Volume.Metadata.Id,
 			},
 		})
+		Expect(err).NotTo(HaveOccurred())
 		Expect(resp.Volumes).NotTo(BeEmpty())
 
 		// Ensure the correct image has been created inside the ceph cluster
