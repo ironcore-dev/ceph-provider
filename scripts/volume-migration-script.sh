@@ -84,8 +84,8 @@ for val in ${list[@]}; do
 	SIZE=`kubectl get volume $val  -n $namespace -o json | jq '.spec.resources.storage'`
 	SIZE=$( echo "$SIZE" | sed 's/Gi/1073741824/g' | bc )
 
-        VOLUMECLASS=`kubectl get volume  $val -n $namespace  -o json | jq .spec.volumeClassRef.name`
-        VOLUMECLASS=`echo $VOLUMECLASS | sed 's/"//g'`
+    VOLUMECLASS=`kubectl get volume  $val -n $namespace  -o json | jq .spec.volumeClassRef.name`
+    VOLUMECLASS=`echo $VOLUMECLASS | sed 's/"//g'`
 	IOPS=`kubectl get volumeclass $VOLUMECLASS -o json | jq .capabilities.iops`
 	IOPS=`echo $IOPS | sed 's/"//g'`
 	TPS=`kubectl get volumeclass $VOLUMECLASS -o json | jq .capabilities.tps`
@@ -106,7 +106,7 @@ for val in ${list[@]}; do
 			"cephlet.api.onmetal.de/labels": "{\"volumepoollet.api.onmetal.de/volume-name\":\"'$VOLUME_NAME1'",\"volumepoollet.api.onmetal.de/volume-namespace\":\"'$NAMESPACE'",\"volumepoollet.api.onmetal.de/volume-uid\":\"'$VOLUME_UUID'"}"
      		},
      		"labels": {
-        		"cephlet.api.onmetal.de/class": "fast",
+        		"cephlet.api.onmetal.de/class": "'$VOLUMECLASS'",
         		"cephlet.api.onmetal.de/manager": "cephlet-volume"
      		},
      		"createdAt": '$VOLUME_TIMESTAMP',
