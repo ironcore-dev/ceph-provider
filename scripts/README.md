@@ -9,15 +9,15 @@ Following packages need to be installed on env.
 - ceph(Monitor IPs details) client
 - bc (Arithmatic operation)
 
-# Run the script with deployment. (Default deployment is with Dry Run flag and `rook-ceph` namespace and need to set env mon end point, env kube config, admin ceph secret)
+## Run the script with deployment. (Default deployment is with Dry Run flag and `rook-ceph` namespace and need to set env mon end point, env kube config, admin ceph secret)
 `kubectl apply -f ./scripts/migration.yaml`
 
-# If need to run simple script without deployment then do following things.
+## If need to run simple script without deployment then do following things.
 
-## Location: 
+### Location: 
 `cd ./scripts`
 
-## Dry run:
+### Dry run:
 ```
 ./volume-migration-script.sh -d dry_run -n <Namespace> >> volume-migration.log
 e.g.
@@ -26,7 +26,7 @@ e.g.
 
 
 
-## Update script:
+### Update script:
 ```
 ./volume-migration-script.sh -n <Namespace> >> volume-migration.log
 e.g.
