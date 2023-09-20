@@ -16,6 +16,9 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -54,9 +57,17 @@ var _ = Describe("Create Volume", func() {
 			return image
 		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+			HaveField("Status.Access", SatisfyAll(
+				HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
+				HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+createResp.Volume.Metadata.Id)),
+				HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
+				HaveField("UserKey", Not(BeEmpty())),
+			)),
+			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
-		By("listing volume with volume Id ")
+		By("listing volume with volume Id")
 		Eventually(func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
