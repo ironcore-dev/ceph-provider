@@ -134,10 +134,10 @@ var _ = Describe("Expand Volume", func() {
 		Expect(expandResp.XXX_sizecache).Should(Equal(1024))
 
 		// Ensure the image size has been updated inside the ceph cluster
-		oMap, err = ioctx.GetOmapValues(oMap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+		oMap, err = ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
-		image := &api.Image{}
+		image = &api.Image{}
 		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
 		Expect(image).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
