@@ -61,11 +61,11 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		// Ensure the correct image has been created inside the ceph cluster
-		omap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+		oMap, err := ioctx.GetOmapValues(oMap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(omap).To(HaveKey(createResp.Volume.Metadata.Id))
+		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 		image := &api.Image{}
-		Expect(json.Unmarshal(omap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
+		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
 		Expect(image).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
@@ -76,7 +76,7 @@ var _ = Describe("Expand Volume", func() {
 
 		// Wait for image to become Available
 		time.Sleep(2 * time.Second)
-		oMap, err = ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+		oMap, err = ioctx.GetOmapValues(oMap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
@@ -133,11 +133,11 @@ var _ = Describe("Expand Volume", func() {
 		Expect(expandResp.XXX_sizecache).Should(Equal(1024))
 
 		// Ensure the image size has been updated inside the ceph cluster
-		omap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+		oMap, err := ioctx.GetOmapValues(oMap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(omap).To(HaveKey(createResp.Volume.Metadata.Id))
+		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 		image := &api.Image{}
-		Expect(json.Unmarshal(omap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
+		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
 		Expect(image).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
