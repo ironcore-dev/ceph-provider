@@ -44,6 +44,7 @@ var (
 )
 
 func TestIntegration_GRPCServer(t *testing.T) {
+	SetDefaultEventuallyTimeout(5 * time.Second)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "GRPC Server Suite", Label("integration"))
 }
