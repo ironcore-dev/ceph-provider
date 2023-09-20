@@ -127,10 +127,10 @@ var _ = Describe("Expand Volume", func() {
 			Resources: &onmetalv1alpha1.VolumeResources{
 				StorageBytes: 2048 * 2048 * 2048,
 			},
+			XXX_sizecache: 1024,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		// Ensure the correct  response
-		Expect(err).NotTo(HaveOccurred())
 		Expect(expandResp.XXX_sizecache).Should(Equal(1024))
 
 		// Ensure the image size has been updated inside the ceph cluster
