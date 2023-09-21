@@ -122,16 +122,13 @@ var _ = Describe("Expand Volume", func() {
 		}
 
 		By("expanding a volume")
-		expandResp, err := volumeClient.ExpandVolume(ctx, &onmetalv1alpha1.ExpandVolumeRequest{
+		_, err = volumeClient.ExpandVolume(ctx, &onmetalv1alpha1.ExpandVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 			Resources: &onmetalv1alpha1.VolumeResources{
-				StorageBytes:  2048 * 2048 * 2048,
-				XXX_sizecache: 1024,
+				StorageBytes: 2048 * 2048 * 2048,
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
-		// Ensure the correct  response
-		Expect(expandResp.XXX_sizecache).Should(Equal(1024))
 
 		// Ensure the image size has been updated inside the ceph cluster
 		oMap, err = ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
