@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -59,12 +58,14 @@ var _ = Describe("Create Volume", func() {
 		))
 
 		// Ensure the correct image has been created inside the ceph cluster
-		oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 		image := &api.Image{}
-		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
-		Expect(image).Should(SatisfyAll(
+		Eventually(ctx, func() *api.Image {
+			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
+			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
+			return image
+		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
@@ -82,57 +83,44 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.SnapshotRef", BeNil()),
 			HaveField("Spec.Encryption.Type", api.EncryptionTypeUnencrypted),
 			HaveField("Spec.Encryption.EncryptedPassphrase", BeEmpty()),
-			HaveField("Status.State", Equal(api.ImageStatePending)),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+			HaveField("Status.Access", SatisfyAll(
+				HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
+				HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+createResp.Volume.Metadata.Id)),
+				HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
+				HaveField("UserKey", Not(BeEmpty())),
+			)),
+			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
-		// Ensure image is available
-		time.Sleep(2 * time.Second)
-		oMap, err = ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
-		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
-		if image.Status.State == api.ImageStateAvailable {
-			Expect(image.Status).Should(SatisfyAll(
-				HaveField("State", Equal(api.ImageStateAvailable)),
-				HaveField("Access", SatisfyAll(
-					HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
-					HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+image.ID)),
-					HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
-					HaveField("UserKey", image.Status.Access.UserKey),
+		// Ensure Volume become available
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
+				Filter: &onmetalv1alpha1.VolumeFilter{
+					Id: createResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(SatisfyAll(
+			HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("Access", SatisfyAll(
+				HaveField("Driver", "ceph"),
+				HaveField("Handle", image.Spec.WWN),
+				HaveField("Attributes", SatisfyAll(
+					HaveKeyWithValue("monitors", image.Status.Access.Monitors),
+					HaveKeyWithValue("image", image.Status.Access.Handle),
 				)),
-				HaveField("Encryption", api.EncryptionState("")),
-			))
-		}
-
-		// Ensure Volume is available
-		// time.Sleep(2 * time.Second)
-		resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
-			Filter: &onmetalv1alpha1.VolumeFilter{
-				Id: createResp.Volume.Metadata.Id,
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.Volumes).NotTo(BeEmpty())
-		if resp.Volumes[0].Status.State == onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE {
-			Expect(resp.Volumes[0].Status).Should(SatisfyAll(
-				HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE)),
-				HaveField("Access", SatisfyAll(
-					HaveField("Driver", "ceph"),
-					HaveField("Handle", image.Spec.WWN),
-					HaveField("Attributes", SatisfyAll(
-						HaveKeyWithValue("monitors", image.Status.Access.Monitors),
-						HaveKeyWithValue("image", image.Status.Access.Handle),
-					)),
-					HaveField("SecretData", SatisfyAll(
-						HaveKeyWithValue("userID", []byte(image.Status.Access.User)),
-						HaveKeyWithValue("userKey", []byte(image.Status.Access.UserKey)),
-					)),
+				HaveField("SecretData", SatisfyAll(
+					HaveKeyWithValue("userID", []byte(image.Status.Access.User)),
+					HaveKeyWithValue("userKey", []byte(image.Status.Access.UserKey)),
 				)),
-			))
-		}
+			)),
+		))
 	})
 
-	It("should create encrypted a volume", func(ctx SpecContext) {
+	It("should create an encrypted volume", func(ctx SpecContext) {
 		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
 			Volume: &onmetalv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
@@ -164,12 +152,14 @@ var _ = Describe("Create Volume", func() {
 		))
 
 		// Ensure the correct image has been created inside the ceph cluster
-		oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 		image := &api.Image{}
-		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
-		Expect(image).Should(SatisfyAll(
+		Eventually(ctx, func() *api.Image {
+			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
+			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
+			return image
+		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
@@ -187,53 +177,40 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.SnapshotRef", BeNil()),
 			HaveField("Spec.Encryption.Type", api.EncryptionTypeEncrypted),
 			HaveField("Spec.Encryption.EncryptedPassphrase", Not(BeEmpty())),
-			HaveField("Status.State", Equal(api.ImageStatePending)),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+			HaveField("Status.Access", SatisfyAll(
+				HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
+				HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+createResp.Volume.Metadata.Id)),
+				HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
+				HaveField("UserKey", Not(BeEmpty())),
+			)),
+			HaveField("Status.Encryption", api.EncryptionStateHeaderSet),
 		))
 
-		// Ensure image is available
-		time.Sleep(2 * time.Second)
-		oMap, err = ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
-		Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
-		if image.Status.State == api.ImageStateAvailable {
-			Expect(image.Status).Should(SatisfyAll(
-				HaveField("State", Equal(api.ImageStateAvailable)),
-				HaveField("Access", SatisfyAll(
-					HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
-					HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+image.ID)),
-					HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
-					HaveField("UserKey", image.Status.Access.UserKey),
-				)),
-				HaveField("Encryption", api.EncryptionStateHeaderSet),
-			))
-		}
-
 		// Ensure Volume is available
-		// time.Sleep(2 * time.Second)
-		resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
-			Filter: &onmetalv1alpha1.VolumeFilter{
-				Id: createResp.Volume.Metadata.Id,
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.Volumes).NotTo(BeEmpty())
-		if resp.Volumes[0].Status.State == onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE {
-			Expect(resp.Volumes[0].Status).Should(SatisfyAll(
-				HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE)),
-				HaveField("Access", SatisfyAll(
-					HaveField("Driver", "ceph"),
-					HaveField("Handle", image.Spec.WWN),
-					HaveField("Attributes", SatisfyAll(
-						HaveKeyWithValue("monitors", image.Status.Access.Monitors),
-						HaveKeyWithValue("image", image.Status.Access.Handle),
-					)),
-					HaveField("SecretData", SatisfyAll(
-						HaveKeyWithValue("userID", []byte(image.Status.Access.User)),
-						HaveKeyWithValue("userKey", []byte(image.Status.Access.UserKey)),
-					)),
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
+				Filter: &onmetalv1alpha1.VolumeFilter{
+					Id: createResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(SatisfyAll(
+			HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("Access", SatisfyAll(
+				HaveField("Driver", "ceph"),
+				HaveField("Handle", image.Spec.WWN),
+				HaveField("Attributes", SatisfyAll(
+					HaveKeyWithValue("monitors", image.Status.Access.Monitors),
+					HaveKeyWithValue("image", image.Status.Access.Handle),
 				)),
-			))
-		}
+				HaveField("SecretData", SatisfyAll(
+					HaveKeyWithValue("userID", []byte(image.Status.Access.User)),
+					HaveKeyWithValue("userKey", []byte(image.Status.Access.UserKey)),
+				)),
+			)),
+		))
 	})
 })
