@@ -125,9 +125,9 @@ var _ = Describe("Expand Volume", func() {
 		expandResp, err := volumeClient.ExpandVolume(ctx, &onmetalv1alpha1.ExpandVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 			Resources: &onmetalv1alpha1.VolumeResources{
-				StorageBytes: 2048 * 2048 * 2048,
+				StorageBytes:  2048 * 2048 * 2048,
+				XXX_sizecache: 1024,
 			},
-			XXX_sizecache: 1024,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		// Ensure the correct  response
