@@ -17,7 +17,6 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -85,9 +84,9 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.Encryption.EncryptedPassphrase", BeEmpty()),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
-				HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
-				HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+createResp.Volume.Metadata.Id)),
-				HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
+				HaveField("Monitors", cephMonitors),
+				HaveField("Handle", fmt.Sprintf("%s/%s", cephPoolname, "img_"+createResp.Volume.Metadata.Id)),
+				HaveField("User", strings.TrimPrefix(cephClientname, "client.")),
 				HaveField("UserKey", Not(BeEmpty())),
 			)),
 			HaveField("Status.Encryption", api.EncryptionState("")),
@@ -179,9 +178,9 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.Encryption.EncryptedPassphrase", Not(BeEmpty())),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
-				HaveField("Monitors", os.Getenv("CEPH_MONITORS")),
-				HaveField("Handle", fmt.Sprintf("%s/%s", os.Getenv("CEPH_POOLNAME"), "img_"+createResp.Volume.Metadata.Id)),
-				HaveField("User", strings.TrimPrefix(os.Getenv("CEPH_CLIENTNAME"), "client.")),
+				HaveField("Monitors", cephMonitors),
+				HaveField("Handle", fmt.Sprintf("%s/%s", cephPoolname, "img_"+createResp.Volume.Metadata.Id)),
+				HaveField("User", strings.TrimPrefix(cephClientname, "client.")),
 				HaveField("UserKey", Not(BeEmpty())),
 			)),
 			HaveField("Status.Encryption", api.EncryptionStateHeaderSet),
