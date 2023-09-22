@@ -60,7 +60,7 @@ var _ = Describe("Expand Volume", func() {
 
 		// Ensure the correct image has been created inside the ceph cluster
 		image := &api.Image{}
-		Eventually(func() *api.Image {
+		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
@@ -96,7 +96,7 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		// Wait for Volume to become available
-		Eventually(func() *onmetalv1alpha1.VolumeStatus {
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
@@ -131,7 +131,7 @@ var _ = Describe("Expand Volume", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Ensure the image size has been updated inside the ceph cluster
-		Eventually(func() *api.Image {
+		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
@@ -167,7 +167,7 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		// Wait for Volume to become available
-		Eventually(func() *onmetalv1alpha1.VolumeStatus {
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
