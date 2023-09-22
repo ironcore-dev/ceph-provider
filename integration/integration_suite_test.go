@@ -23,15 +23,16 @@ import (
 	"time"
 
 	"github.com/ceph/go-ceph/rados"
-	"github.com/onmetal/cephlet/ori/volume/cmd/volume/app"
-	"github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/remote/volume"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/onmetal/cephlet/ori/volume/cmd/volume/app"
+	"github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/onmetal/onmetal-api/ori/remote/volume"
 )
 
 var (
@@ -40,6 +41,13 @@ var (
 
 	volumeClient v1alpha1.VolumeRuntimeClient
 	ioctx        *rados.IOContext
+
+	cephMonitors        = os.Getenv("CEPH_MONITORS")
+	cephUsername        = os.Getenv("CEPH_USERNAME")
+	cephKeyringFilename = os.Getenv("CEPH_KEYRING_FILENAME")
+	cephPoolname        = os.Getenv("CEPH_POOLNAME")
+	cephClientname      = os.Getenv("CEPH_CLIENTNAME")
+	cephConfigFile      = os.Getenv("CEPH_CONFIG_FILE")
 )
 
 func TestIntegration_GRPCServer(t *testing.T) {
@@ -78,13 +86,14 @@ var _ = BeforeSuite(func() {
 		Address:                    fmt.Sprintf("%s/cephlet-volume.sock", os.Getenv("PWD")),
 		PathSupportedVolumeClasses: volumeClassesFile.Name(),
 		Ceph: app.CephOptions{
-			ConnectTimeout:       10 * time.Second,
-			Monitors:             os.Getenv("CEPH_MONITORS"),
-			User:                 os.Getenv("CEPH_USERNAME"),
-			KeyringFile:          os.Getenv("CEPH_KEYRING_FILENAME"),
-			Pool:                 os.Getenv("CEPH_POOLNAME"),
-			Client:               os.Getenv("CEPH_CLIENTNAME"),
-			KeyEncryptionKeyPath: keyEncryptionKeyFile.Name(),
+			ConnectTimeout:         10 * time.Second,
+			Monitors:               cephMonitors,
+			User:                   cephUsername,
+			KeyringFile:            cephKeyringFilename,
+			Pool:                   cephPoolname,
+			Client:                 cephClientname,
+			KeyEncryptionKeyPath:   keyEncryptionKeyFile.Name(),
+			BurstDurationInSeconds: 15,
 		},
 	}
 
@@ -112,7 +121,7 @@ var _ = BeforeSuite(func() {
 	conn, err := rados.NewConn()
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(conn.ReadConfigFile(os.Getenv("CEPH_CONFIG_FILE"))).ToNot(HaveOccurred())
+	Expect(conn.ReadConfigFile(cephConfigFile)).ToNot(HaveOccurred())
 
 	Expect(conn.Connect()).ToNot(HaveOccurred())
 	DeferCleanup(conn.Shutdown)
