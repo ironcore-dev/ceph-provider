@@ -28,7 +28,7 @@ import (
 	onmetalv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
-var _ = Describe("Create Volume", func() {
+var _ = Describe("List Volume", func() {
 	It("should create a volume", func(ctx SpecContext) {
 		By("creating a volume")
 		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
@@ -49,7 +49,7 @@ var _ = Describe("Create Volume", func() {
 
 		By("ensuring the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
-		Eventually(func() *api.Image {
+		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
@@ -68,7 +68,7 @@ var _ = Describe("Create Volume", func() {
 		))
 
 		By("listing volume with volume id")
-		Eventually(func() *onmetalv1alpha1.VolumeStatus {
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
@@ -93,8 +93,8 @@ var _ = Describe("Create Volume", func() {
 			)),
 		))
 
-		By("listing volume with Label selectors")
-		Eventually(func() *onmetalv1alpha1.VolumeStatus {
+		By("listing volume with correct Label selectors")
+		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					LabelSelector: map[string]string{"foo": "bar"},
@@ -118,5 +118,16 @@ var _ = Describe("Create Volume", func() {
 				)),
 			)),
 		))
+
+		By("listing volume with incorrect Labels ")
+		Eventually(ctx, func() {
+			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
+				Filter: &onmetalv1alpha1.VolumeFilter{
+					LabelSelector: map[string]string{"foo": "wrong"},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).To(BeEmpty())
+		})
 	})
 })
