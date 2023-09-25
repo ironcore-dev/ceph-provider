@@ -29,8 +29,8 @@ import (
 	onmetalv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
-var _ = Describe("Create Volume", func() {
-	It("should create a volume", func(ctx SpecContext) {
+var _ = Describe("Expand Volume", func() {
+	It("should expand a volume", func(ctx SpecContext) {
 		By("creating a volume")
 		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
 			Volume: &onmetalv1alpha1.Volume{
@@ -46,7 +46,6 @@ var _ = Describe("Create Volume", func() {
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
-
 		By("ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
@@ -82,8 +81,9 @@ var _ = Describe("Create Volume", func() {
 				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
-			HaveField("Spec.Encryption.Type", api.EncryptionTypeUnencrypted),
-			HaveField("Spec.Encryption.EncryptedPassphrase", BeEmpty()),
+			HaveField("Spec.Encryption", SatisfyAll(
+				HaveField("Type", api.EncryptionTypeUnencrypted),
+			)),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
 				HaveField("Monitors", cephMonitors),
@@ -119,42 +119,17 @@ var _ = Describe("Create Volume", func() {
 				)),
 			)),
 		))
-	})
 
-	It("should create an encrypted volume", func(ctx SpecContext) {
-		By("creating a volume with encryption key")
-		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
-			Volume: &onmetalv1alpha1.Volume{
-				Metadata: &metav1alpha1.ObjectMetadata{
-					Id: "foo-enc",
-				},
-				Spec: &onmetalv1alpha1.VolumeSpec{
-					Class: "foo",
-					Resources: &onmetalv1alpha1.VolumeResources{
-						StorageBytes: 1024 * 1024 * 1024,
-					},
-					Encryption: &onmetalv1alpha1.EncryptionSpec{
-						SecretData: map[string][]byte{
-							"encryptionKey": []byte("abcjdkekakakakakakakkadfkkasfdks"),
-						},
-					},
-				},
+		By("expanding a volume")
+		_, err = volumeClient.ExpandVolume(ctx, &onmetalv1alpha1.ExpandVolumeRequest{
+			VolumeId: createResp.Volume.Metadata.Id,
+			Resources: &onmetalv1alpha1.VolumeResources{
+				StorageBytes: 2048 * 2048 * 2048,
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
-		By("ensuring the correct creation response")
-		Expect(createResp).Should(SatisfyAll(
-			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
-			HaveField("Volume.Spec.Image", Equal("")),
-			HaveField("Volume.Spec.Class", Equal("foo")),
-			HaveField("Volume.Spec.Resources.StorageBytes", Equal(uint64(1024*1024*1024))),
-			HaveField("Volume.Spec.Encryption", BeNil()),
-			HaveField("Volume.Status.State", Equal(onmetalv1alpha1.VolumeState_VOLUME_PENDING)),
-			HaveField("Volume.Status.Access", BeNil()),
-		))
 
-		By("ensuring the correct image has been created inside the ceph cluster with encryption header")
-		image := &api.Image{}
+		By("ensuring image size has been updated inside the ceph cluster after expand")
 		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
@@ -165,7 +140,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
+			HaveField("Spec.Size", Equal(uint64(2048*2048*2048))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
@@ -177,8 +152,9 @@ var _ = Describe("Create Volume", func() {
 				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
-			HaveField("Spec.Encryption.Type", api.EncryptionTypeEncrypted),
-			HaveField("Spec.Encryption.EncryptedPassphrase", Not(BeEmpty())),
+			HaveField("Spec.Encryption", SatisfyAll(
+				HaveField("Type", api.EncryptionTypeUnencrypted),
+			)),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
 				HaveField("Monitors", cephMonitors),
@@ -186,7 +162,7 @@ var _ = Describe("Create Volume", func() {
 				HaveField("User", strings.TrimPrefix(cephClientname, "client.")),
 				HaveField("UserKey", Not(BeEmpty())),
 			)),
-			HaveField("Status.Encryption", api.EncryptionStateHeaderSet),
+			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
 		By("ensuring volume is in available state and other state fields have been updated")
