@@ -44,10 +44,9 @@ var _ = Describe("Expand Volume", func() {
 					},
 				},
 			},
-			XXX_sizecache: 1024,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		// Ensure the correct creation response
+		By("ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
 			HaveField("Volume.Spec.Image", Equal("")),
@@ -58,7 +57,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Volume.Status.Access", BeNil()),
 		))
 
-		// Ensure the correct image has been created inside the ceph cluster
+		By("ensuring the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
 		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
@@ -95,7 +94,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
-		// Wait for Volume to become available
+		By("ensuring volume is in available state and other state fields have been updated")
 		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
@@ -130,7 +129,7 @@ var _ = Describe("Expand Volume", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Ensure the image size has been updated inside the ceph cluster
+		By("ensuring image size has been updated inside the ceph cluster after expand")
 		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
@@ -166,7 +165,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
-		// Wait for Volume to become available
+		By("ensuring volume is in available state and other state fields have been updated")
 		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
