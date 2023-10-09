@@ -15,7 +15,6 @@
 package server_test
 
 import (
-	"context"
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -67,7 +66,7 @@ var _ = Describe("BucketReconciler", func() {
 			return resp.Buckets[0].Status
 		}).Should(HaveField("State", Equal(ori.BucketState_BUCKET_PENDING)))
 
-		By("ensuring the object bucket claim is created")
+		By("ensuring the bucketClaim is created")
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "ObjectBucketClaim",
@@ -80,16 +79,16 @@ var _ = Describe("BucketReconciler", func() {
 		}
 		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
 
-		By("patching bucket claim spec BucketName with GenerateBucketName")
+		By("patching bucketClaim spec BucketName with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
-		Expect(k8sClient.Patch(context.Background(), bucketClaim, client.MergeFrom(bucketClaimBase))).To(Succeed())
+		Expect(k8sClient.Patch(ctx, bucketClaim, client.MergeFrom(bucketClaimBase))).To(Succeed())
 
-		By("patching the object bucket claim status phase to be bound")
+		By("patching the bucketClaim status phase to be bound")
 		updatedBucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Status.Phase = objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
-		Expect(k8sClient.Status().Patch(context.Background(), bucketClaim, client.MergeFrom(updatedBucketClaimBase))).To(Succeed())
+		Expect(k8sClient.Status().Patch(ctx, bucketClaim, client.MergeFrom(updatedBucketClaimBase))).To(Succeed())
 
 		By("creating a bucket access secret")
 		secretData := map[string][]byte{
@@ -104,7 +103,7 @@ var _ = Describe("BucketReconciler", func() {
 			Type: corev1.SecretTypeOpaque,
 			Data: secretData,
 		}
-		Expect(k8sClient.Create(context.Background(), secret)).To(Succeed())
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 		By("ensuring the bucket access secret is created")
 		accessSecret := &corev1.Secret{
@@ -115,7 +114,7 @@ var _ = Describe("BucketReconciler", func() {
 		}
 		Eventually(ctx, Get(accessSecret)).Should(Succeed())
 
-		By("ensuring bucket is in available state and other fields have been updated")
+		By("ensuring bucket is in available state and Access fields have been updated")
 		Eventually(ctx, func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
