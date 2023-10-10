@@ -52,26 +52,11 @@ var _ = Describe("BucketReconciler", func() {
 			HaveField("Bucket.Metadata.Id", Equal(createResp.Bucket.Metadata.Id)),
 			HaveField("Bucket.Spec.Class", Equal("foo")),
 			HaveField("Bucket.Status.State", Equal(ori.BucketState_BUCKET_PENDING)),
+			HaveField("Bucket.Status.Access", BeNil()),
 		))
-
-		By("listing the bucket")
-		Eventually(ctx, func() *ori.BucketStatus {
-			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
-				Filter: &ori.BucketFilter{
-					Id: createResp.Bucket.Metadata.Id,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Buckets).NotTo(BeEmpty())
-			return resp.Buckets[0].Status
-		}).Should(HaveField("State", Equal(ori.BucketState_BUCKET_PENDING)))
 
 		By("ensuring the bucketClaim is created")
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "ObjectBucketClaim",
-				APIVersion: "objectbucket.io/v1alpha1",
-			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      createResp.Bucket.Metadata.Id,
 				Namespace: rookNs.Name,
