@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: migration-script-runner
-  namespace: rook-ceph # namespace:cluster
+  namespace: rook-ceph
   labels:
     app: rook-direct-mount
 spec:
@@ -18,10 +18,11 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: rook-direct-mount
-          #image: ppanditrao/cephlet-volume-migration-03-08
-          image: ppanditrao/cephlet-migration-22
-          command: ["/bin/bash"]
-          args: ["-m", "-c", "/prepare-ceph-config.sh -d dry_run -n rook-ceph"]
+          image: mtr.devops.telekom.de/osc/onmetal/cephlet:migration
+          command:
+            - tail
+            - -f
+            - /dev/null
           imagePullPolicy: IfNotPresent
           tty: true
           env:
@@ -31,7 +32,7 @@ spec:
                   name: rook-ceph-mon
                   key: ceph-username
             - name: KUBECONFIG
-              value: /k-cfg/my-kubeconfig
+              value: /migration/kubeconfig
           securityContext:
             privileged: true
             runAsUser: 0
@@ -46,8 +47,8 @@ spec:
               mountPath: /etc/rook
             - name: ceph-admin-secret
               mountPath: /var/lib/rook-ceph-mon
-            - name: k-config
-              mountPath: ./k-cfg
+            - name: migration-config
+              mountPath: /migration
               readOnly: true
       # if hostNetwork: false, the "rbd map" command hangs, see https://github.com/rook/rook/issues/2021
       hostNetwork: true
@@ -74,6 +75,6 @@ spec:
             items:
               - key: data
                 path: mon-endpoints
-        - name: k-config
+        - name: migration-config
           secret:
-            secretName: allkey
+            secretName: migration-config

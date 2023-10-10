@@ -24,3 +24,4 @@ dev/
 *.swp
 *.swo
 *~
+migration-config.yaml

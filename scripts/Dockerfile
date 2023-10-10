@@ -1,4 +1,18 @@
+FROM golang:1.20-bullseye AS onmetal-image-builder
+
+WORKDIR /tmp/
+RUN git clone https://github.com/onmetal/onmetal-image.git
+WORKDIR /tmp/onmetal-image
+RUN pwd
+RUN ls -lah
+RUN mkdir -p /bin
+RUN make install
+RUN make build
+RUN chmod +x bin/onmetal-image
+RUN mv bin/onmetal-image /usr/bin/onmetal-image
+
 FROM ubuntu:latest
+COPY --from=onmetal-image-builder /usr/bin/onmetal-image /usr/bin/
 
 RUN apt-get update && apt-get install -y \
   bc \
@@ -10,18 +24,7 @@ RUN apt-get update && apt-get install -y \
   vim   \
   make
 
-# RUN git clone git@github.com:onmetal/onmetal-image.git
-# WORKDIR /onmetal-image
-# RUN mkdir -p /bin
-# RUN make install
-# RUN make build 
-# RUN chmod +x bin/onmetal-image 
-# RUN mv bin/onmetal-image /usr/bin/onmetal-image 
-
-## Make sure onmetal-image is avalible in current directly while building docker image
-COPY onmetal-image /usr/bin/
-
-RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.23.5/bin/linux/amd64/kubectl
+RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.25.0/bin/linux/amd64/kubectl
 
 RUN chmod +x kubectl
 
