@@ -30,8 +30,7 @@ import (
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
-var _ = Describe("BucketReconciler", func() {
-	_, rookNs := SetupTest()
+var _ = Describe("Create bucket test", func() {
 
 	It("should create a bucket", func(ctx SpecContext) {
 		By("creating a bucket")
@@ -59,7 +58,7 @@ var _ = Describe("BucketReconciler", func() {
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      createResp.Bucket.Metadata.Id,
-				Namespace: rookNs.Name,
+				Namespace: rookNamespace.Name,
 			},
 		}
 		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
@@ -83,7 +82,7 @@ var _ = Describe("BucketReconciler", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      bucketClaim.Name,
-				Namespace: rookNs.Name,
+				Namespace: rookNamespace.Name,
 			},
 			Type: corev1.SecretTypeOpaque,
 			Data: secretData,
@@ -94,7 +93,7 @@ var _ = Describe("BucketReconciler", func() {
 		accessSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      bucketClaim.Name,
-				Namespace: rookNs.Name,
+				Namespace: rookNamespace.Name,
 			},
 		}
 		Eventually(ctx, Get(accessSecret)).Should(Succeed())

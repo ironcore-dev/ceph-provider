@@ -24,10 +24,11 @@ import (
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
-	"github.com/onmetal/cephlet/pkg/rook"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
@@ -38,8 +39,6 @@ import (
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,11 +67,11 @@ var (
 
 	bucketClient v1alpha1.BucketRuntimeClient
 
-	testEnv    *envtest.Environment
-	testEnvExt *envtestutils.EnvironmentExtensions
-	cfg        *rest.Config
-	k8sClient  client.Client
-	rookConfig *rook.Config
+	testEnv       *envtest.Environment
+	testEnvExt    *envtestutils.EnvironmentExtensions
+	cfg           *rest.Config
+	k8sClient     client.Client
+	rookNamespace *corev1.Namespace
 )
 
 func TestAPIs(t *testing.T) {
@@ -85,7 +84,7 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Bucket GRPC Server Suite")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(zapcore.InfoLevel)))
 
 	var err error
@@ -136,6 +135,29 @@ var _ = BeforeSuite(func() {
 
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 
+	By("creating the rook namespace")
+	rookNamespace = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "test-ns-",
+		},
+	}
+	Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create rook namespace")
+	DeferCleanup(k8sClient.Delete, rookNamespace)
+
+	By("creating a bucket class")
+	bucketClass := &storagev1alpha1.BucketClass{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "foo",
+		},
+		Capabilities: corev1alpha1.ResourceList{
+			corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+			corev1alpha1.ResourceTPS:  resource.MustParse("1"),
+		},
+	}
+	Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
+	DeferCleanup(k8sClient.Delete, bucketClass)
+
 	By("starting the app")
 	user, err := testEnv.AddUser(envtest.User{
 		Name:   "dummy",
@@ -153,13 +175,10 @@ var _ = BeforeSuite(func() {
 	Expect(os.WriteFile(kubeConfigFile.Name(), kubeconfig, 0600)).To(Succeed())
 
 	opts := app.Options{
-		Address:                    fmt.Sprintf("%s/cephlet-bucket.sock", os.Getenv("PWD")),
-		Kubeconfig:                 kubeConfigFile.Name(),
-		Namespace:                  "rook-namespace",
-		BucketPoolStorageClassName: "test-bucket-pool-storage-class",
-		PathSupportedBucketClasses: "",
-		BucketClassSelector:        map[string]string{"test-bucket": "test-bucket-class"},
-		BucketEndpoint:             bucketBaseURL,
+		Address:        fmt.Sprintf("%s/cephlet-bucket.sock", os.Getenv("PWD")),
+		Kubeconfig:     kubeConfigFile.Name(),
+		Namespace:      rookNamespace.Name,
+		BucketEndpoint: bucketBaseURL,
 	}
 	srvCtx, cancel = context.WithCancel(context.Background())
 	DeferCleanup(cancel)
@@ -182,64 +201,6 @@ var _ = BeforeSuite(func() {
 	bucketClient = v1alpha1.NewBucketRuntimeClient(gconn)
 	DeferCleanup(gconn.Close)
 })
-
-func SetupTest() (*corev1.Namespace, *corev1.Namespace) {
-	var (
-		bucketClass *storagev1alpha1.BucketClass
-	)
-
-	testNamespace := &corev1.Namespace{}
-	rookNamespace := &corev1.Namespace{}
-
-	BeforeEach(func(ctx SpecContext) {
-		*testNamespace = corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-namespace",
-			},
-		}
-		Expect(k8sClient.Create(ctx, testNamespace)).To(Succeed(), "failed to create test namespace")
-
-		*rookNamespace = corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "rook-namespace",
-			},
-		}
-		Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create rook namespace")
-
-		rookConfigMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      rook.MonitorConfigMapNameDefaultValue,
-				Namespace: rookNamespace.Name,
-			},
-			Data: map[string]string{
-				rook.MonitorConfigMapDataKeyDefaultValue: fmt.Sprintf("[{\"clusterID\":\"%s\",\"monitors\":[\"10.0.0.1:6789\"],\"namespace\":\"\"}]", rook.ClusterIdDefaultValue),
-			},
-		}
-		Expect(k8sClient.Create(ctx, rookConfigMap)).To(Succeed(), "failed to create rook configmap")
-
-		rookConfig = rook.NewConfigWithDefaults()
-		rookConfig.Namespace = rookNamespace.Name
-
-		bucketClass = &storagev1alpha1.BucketClass{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "sc-",
-			},
-			Capabilities: corev1alpha1.ResourceList{
-				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
-				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
-			},
-		}
-		Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
-	})
-
-	AfterEach(func(ctx SpecContext) {
-		Expect(k8sClient.Delete(ctx, testNamespace)).To(Succeed(), "failed to delete test namespace")
-		Expect(k8sClient.Delete(ctx, rookNamespace)).To(Succeed(), "failed to delete rook namespace")
-	})
-
-	return testNamespace, rookNamespace
-}
 
 func isSocketAvailable(socketPath string) (bool, error) {
 	fileInfo, err := os.Stat(socketPath)
