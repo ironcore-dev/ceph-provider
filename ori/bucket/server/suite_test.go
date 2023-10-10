@@ -23,7 +23,7 @@ import (
 	"time"
 
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
@@ -34,7 +34,6 @@ import (
 	"github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/remote/bucket"
 	envtestutils "github.com/onmetal/onmetal-api/utils/envtest"
-	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -46,7 +45,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
@@ -61,8 +59,7 @@ const (
 	pollingInterval      = 250 * time.Millisecond
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute
-
-	bucketBaseURL = "example.com"
+	bucketBaseURL        = "example.com"
 )
 
 var (
@@ -140,10 +137,24 @@ var _ = BeforeSuite(func() {
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 
 	By("starting the app")
-	kubeconfig := createKubeconfigFileFromrRestConfig(*cfg)
+	user, err := testEnv.AddUser(envtest.User{
+		Name:   "dummy",
+		Groups: []string{"system:authenticated", "system:masters"},
+	}, cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	kubeconfig, err := user.KubeConfig()
+	Expect(err).NotTo(HaveOccurred())
+
+	kubeConfigFile, err := os.CreateTemp(GinkgoT().TempDir(), "kubeconfig")
+	Expect(err).NotTo(HaveOccurred())
+	defer os.Remove(kubeConfigFile.Name())
+
+	Expect(os.WriteFile(kubeConfigFile.Name(), kubeconfig, 0600)).To(Succeed())
+
 	opts := app.Options{
 		Address:                    fmt.Sprintf("%s/cephlet-bucket.sock", os.Getenv("PWD")),
-		Kubeconfig:                 kubeconfig,
+		Kubeconfig:                 kubeConfigFile.Name(),
 		Namespace:                  "rook-namespace",
 		BucketPoolStorageClassName: "test-bucket-pool-storage-class",
 		PathSupportedBucketClasses: "",
@@ -239,33 +250,4 @@ func isSocketAvailable(socketPath string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
-}
-
-func createKubeconfigFileFromrRestConfig(restConfig rest.Config) string {
-	clusters := make(map[string]*clientcmdapi.Cluster)
-	clusters["default-cluster"] = &clientcmdapi.Cluster{
-		Server:                   restConfig.Host,
-		CertificateAuthorityData: restConfig.CAData,
-	}
-	contexts := make(map[string]*clientcmdapi.Context)
-	contexts["default-context"] = &clientcmdapi.Context{
-		Cluster:  "default-cluster",
-		AuthInfo: "default-user",
-	}
-	authinfos := make(map[string]*clientcmdapi.AuthInfo)
-	authinfos["default-user"] = &clientcmdapi.AuthInfo{
-		ClientCertificateData: restConfig.CertData,
-		ClientKeyData:         restConfig.KeyData,
-	}
-	clientConfig := clientcmdapi.Config{
-		Kind:           "Config",
-		APIVersion:     "v1",
-		Clusters:       clusters,
-		Contexts:       contexts,
-		CurrentContext: "default-context",
-		AuthInfos:      authinfos,
-	}
-	kubeConfigFile, _ := os.CreateTemp("", "kubeconfig")
-	_ = clientcmd.WriteToFile(clientConfig, kubeConfigFile.Name())
-	return kubeConfigFile.Name()
 }
