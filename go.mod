@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.0
 
 require (
-	github.com/ceph/go-ceph v0.23.0
+	github.com/ceph/go-ceph v0.24.0
 	github.com/containerd/containerd v1.7.7
 	github.com/go-logr/logr v1.2.4
 	github.com/google/addlicense v1.1.1
