@@ -36,7 +36,7 @@ import (
 	"github.com/onmetal/onmetal-image/oci/image"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -312,7 +312,8 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 		}
 	}
 
-	img.Spec.SnapshotRef = pointer.String(snap.ID)
+	img.Spec.SnapshotRef = ptr.To(snap.ID)
+
 	if _, err := r.images.Update(ctx, img); err != nil {
 		return fmt.Errorf("failed to update image snapshot ref: %w", err)
 	}
