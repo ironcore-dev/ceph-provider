@@ -1812,8 +1812,8 @@ github.com/rogpeppe/go-internal v1.6.2/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTE
 github.com/rogpeppe/go-internal v1.8.1/go.mod h1:JeRgkft04UBgHMgCIwADu4Pn6Mtm5d4nPKWu0nJ5d+o=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
 github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncjaFoBhdsK/akog=
-github.com/rook/rook v1.12.4 h1:lGpA0yt9ta//VKtuhpHB4Gk4DKNuZ7EjrvwErngIL5o=
-github.com/rook/rook v1.12.4/go.mod h1:TDb5IQraumr6tWBpjUFUpBvGxL99SWQ9Wj9iyWv5EUg=
+github.com/rook/rook v1.12.5 h1:4i73XdOrK7xRs/G8/8IR7UyOaJn+ZCU3Tjee21b5GmE=
+github.com/rook/rook v1.12.5/go.mod h1:TDb5IQraumr6tWBpjUFUpBvGxL99SWQ9Wj9iyWv5EUg=
 github.com/rs/xid v1.2.1/go.mod h1:+uKXf+4Djp6Md1KODXJxgGQPKngRmWyn10oCKFzNHOQ=
 github.com/rs/zerolog v1.4.0/go.mod h1:YbFCdg8HfsridGWAh22vktObvhZbQsZXe4/zB0OKkWU=
 github.com/rs/zerolog v1.13.0/go.mod h1:YbFCdg8HfsridGWAh22vktObvhZbQsZXe4/zB0OKkWU=
