@@ -33,7 +33,7 @@ import (
 )
 
 var _ = Describe("List Bucket", func() {
-	It("should create a bucket", func(ctx SpecContext) {
+	It("should list buckets", func(ctx SpecContext) {
 		By("creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &ori.CreateBucketRequest{
 			Bucket: &ori.Bucket{
