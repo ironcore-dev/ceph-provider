@@ -26,7 +26,6 @@ import (
 	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
-	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/remote/bucket"
@@ -38,7 +37,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -139,20 +137,6 @@ var _ = BeforeSuite(func() {
 	}
 	Expect(k8sClient.Create(ctx, rookNamespace)).To(Succeed(), "failed to create rook namespace")
 	DeferCleanup(k8sClient.Delete, rookNamespace)
-
-	By("creating a bucket class")
-	bucketClass := &storagev1alpha1.BucketClass{
-		TypeMeta: metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "foo",
-		},
-		Capabilities: corev1alpha1.ResourceList{
-			corev1alpha1.ResourceIOPS: resource.MustParse("100"),
-			corev1alpha1.ResourceTPS:  resource.MustParse("1"),
-		},
-	}
-	Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
-	DeferCleanup(k8sClient.Delete, bucketClass)
 
 	By("starting the app")
 	user, err := testEnv.AddUser(envtest.User{

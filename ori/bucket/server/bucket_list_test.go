@@ -18,17 +18,35 @@ import (
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	orimetav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 var _ = Describe("ListBucket test", func() {
+	BeforeEach(func(ctx SpecContext) {
+		bucketClass := &storagev1alpha1.BucketClass{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "foo",
+			},
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
+		DeferCleanup(k8sClient.Delete, bucketClass)
+	})
+
 	It("Should list buckets", func(ctx SpecContext) {
 		By("Creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &oriv1alpha1.CreateBucketRequest{
