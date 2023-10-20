@@ -62,7 +62,7 @@ var _ = Describe("List Bucket", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
+		Eventually(Get(bucketClaim)).Should(Succeed())
 
 		By("patching bucketClaim spec BucketName with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
@@ -97,10 +97,10 @@ var _ = Describe("List Bucket", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(accessSecret)).Should(Succeed())
+		Eventually(Get(accessSecret)).Should(Succeed())
 
 		By("listing Bucket with Bucket id")
-		Eventually(ctx, func() *ori.BucketStatus {
+		Eventually(func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
@@ -121,7 +121,7 @@ var _ = Describe("List Bucket", func() {
 		))
 
 		By("listing bucket with correct label selector")
-		Eventually(ctx, func() *oriv1alpha1.BucketStatus {
+		Eventually(func() *oriv1alpha1.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &oriv1alpha1.ListBucketsRequest{
 				Filter: &oriv1alpha1.BucketFilter{
 					LabelSelector: map[string]string{"foo": "bar"},
@@ -142,7 +142,7 @@ var _ = Describe("List Bucket", func() {
 		))
 
 		By("listing bucket with incorrect label selector ")
-		Eventually(ctx, func() {
+		Eventually(func() {
 			resp, err := bucketClient.ListBuckets(ctx, &oriv1alpha1.ListBucketsRequest{
 				Filter: &oriv1alpha1.BucketFilter{
 					LabelSelector: map[string]string{"foo": "wrong"},

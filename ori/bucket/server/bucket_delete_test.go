@@ -58,7 +58,7 @@ var _ = Describe("BucketReconciler", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
+		Eventually(Get(bucketClaim)).Should(Succeed())
 
 		By("patching bucketClaim spec BucketName with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
@@ -93,10 +93,10 @@ var _ = Describe("BucketReconciler", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(accessSecret)).Should(Succeed())
+		Eventually(Get(accessSecret)).Should(Succeed())
 
 		By("ensuring bucket is in available state and Access fields have been updated")
-		Eventually(ctx, func() *ori.BucketStatus {
+		Eventually(func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
@@ -123,7 +123,7 @@ var _ = Describe("BucketReconciler", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("ensuring bucket is deleted")
-		Eventually(ctx, func() {
+		Eventually(func() {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,

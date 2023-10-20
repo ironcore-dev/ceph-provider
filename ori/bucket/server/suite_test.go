@@ -53,8 +53,7 @@ import (
 )
 
 const (
-	slowSpecThreshold    = 20 * time.Second
-	eventuallyTimeout    = 20 * time.Second
+	eventuallyTimeout    = 5 * time.Second
 	pollingInterval      = 250 * time.Millisecond
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute

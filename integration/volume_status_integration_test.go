@@ -70,7 +70,7 @@ var _ = Describe("Volume Status", func() {
 
 		By("ensuring correct iops and tps/bps in Ceph cluster image specs")
 		image := &api.Image{}
-		Eventually(ctx, func() *api.Image {
+		Eventually(func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))

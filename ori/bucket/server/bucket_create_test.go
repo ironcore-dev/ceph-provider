@@ -31,7 +31,6 @@ import (
 )
 
 var _ = Describe("Create bucket test", func() {
-
 	It("should create a bucket", func(ctx SpecContext) {
 		By("creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &ori.CreateBucketRequest{
@@ -61,7 +60,7 @@ var _ = Describe("Create bucket test", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
+		Eventually(Get(bucketClaim)).Should(Succeed())
 
 		By("patching bucketClaim spec BucketName with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
@@ -96,10 +95,10 @@ var _ = Describe("Create bucket test", func() {
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(accessSecret)).Should(Succeed())
+		Eventually(Get(accessSecret)).Should(Succeed())
 
 		By("ensuring bucket is in available state and Access fields have been updated")
-		Eventually(ctx, func() *ori.BucketStatus {
+		Eventually(func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
