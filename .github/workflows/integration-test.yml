@@ -52,36 +52,15 @@ jobs:
 
       - name: Waiting for Ceph cluster and pools to be healthy
         run: |
-          # Check Ceph Health
-          for i in {1..30}; do
-            health_status=$(ceph health | awk '{print $1}')
-            if [[ "$health_status" == "HEALTH_OK" || "$health_status" == "HEALTH_WARN" ]]; then
-              echo "Ceph is in an acceptable state: health_status."
+          # Wait until there are no more "unkowns" pgs
+          for _ in $(seq 60); do
+            if sudo microceph.ceph pg stat | grep -wF unknown; then
+              sleep 1
+            else
               break
             fi
-              echo "Waiting for Ceph to reach a stable state..."
-              sleep 10
           done
 
-          # Check Pools
-          pool_to_check="devpool"
-          pool_ready=false
-          for i in {1..30}; do  
-            pools=$(ceph osd lspools)
-            if [[ "$pools" == *"$pool_to_check"* ]]; then
-              pool_ready=true
-              break
-            fi
-            echo "Waiting for $pool_to_check pool to be ready..."
-            sleep 10
-          done
-          if $pool_ready; then
-            echo "$pool_to_check pool is ready."
-          else
-            echo "$pool_to_check pool is not ready. Exiting."
-            exit 1
-          fi
-          
           sudo microceph.ceph status
           sudo rm -f /snap/bin/rbd
 
