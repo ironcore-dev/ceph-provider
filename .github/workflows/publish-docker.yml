@@ -19,6 +19,7 @@ on:
 
 jobs:
   buildAndPush:
+    if: contains(github.event.pull_request.labels.*.name, 'ok-to-image')
     strategy:
       matrix:
         image:
