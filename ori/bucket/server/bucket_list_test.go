@@ -32,9 +32,9 @@ import (
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
-var _ = Describe("List Bucket", func() {
-	It("should list buckets", func(ctx SpecContext) {
-		By("creating a bucket")
+var _ = Describe("ListBucket test", func() {
+	It("Should list buckets", func(ctx SpecContext) {
+		By("Creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &ori.CreateBucketRequest{
 			Bucket: &ori.Bucket{
 				Metadata: &v1alpha1.ObjectMetadata{
@@ -47,7 +47,7 @@ var _ = Describe("List Bucket", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		By("ensuring the correct creation response")
+		By("Ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Bucket.Metadata.Id", Equal(createResp.Bucket.Metadata.Id)),
 			HaveField("Bucket.Spec.Class", Equal("foo")),
@@ -55,27 +55,30 @@ var _ = Describe("List Bucket", func() {
 			HaveField("Bucket.Status.Access", BeNil()),
 		))
 
-		By("ensuring the bucketClaim is created")
+		By("Ensuring the bucketClaim is created")
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      createResp.Bucket.Metadata.Id,
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(Get(bucketClaim)).Should(Succeed())
+		Eventually(Object(bucketClaim)).Should(SatisfyAll(
+			HaveField("Spec.StorageClassName", "foo"),
+			HaveField("Spec.GenerateBucketName", createResp.Bucket.Metadata.Id),
+		))
 
-		By("patching bucketClaim spec BucketName with GenerateBucketName")
+		By("Patching BucketName in BucketClaim Spec with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
 		Expect(k8sClient.Patch(ctx, bucketClaim, client.MergeFrom(bucketClaimBase))).To(Succeed())
 
-		By("patching the bucketClaim status phase to be bound")
+		By("Patching the bucketClaim status phase to be bound")
 		updatedBucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Status.Phase = objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
 		Expect(k8sClient.Status().Patch(ctx, bucketClaim, client.MergeFrom(updatedBucketClaimBase))).To(Succeed())
 
-		By("creating a bucket access secret")
+		By("Creating a bucket access secret")
 		secretData := map[string][]byte{
 			"AccessKeyID":     []byte("foo"),
 			"SecretAccessKey": []byte("bar"),
@@ -90,7 +93,7 @@ var _ = Describe("List Bucket", func() {
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-		By("ensuring the bucket access secret is created")
+		By("Ensuring the bucket access secret is created")
 		accessSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      bucketClaim.Name,
@@ -99,7 +102,7 @@ var _ = Describe("List Bucket", func() {
 		}
 		Eventually(Get(accessSecret)).Should(Succeed())
 
-		By("listing Bucket with Bucket id")
+		By("Listing Bucket with Bucket id")
 		Eventually(func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
@@ -120,7 +123,7 @@ var _ = Describe("List Bucket", func() {
 			)),
 		))
 
-		By("listing bucket with correct label selector")
+		By("Listing bucket with correct label selector")
 		Eventually(func() *oriv1alpha1.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &oriv1alpha1.ListBucketsRequest{
 				Filter: &oriv1alpha1.BucketFilter{
@@ -141,7 +144,7 @@ var _ = Describe("List Bucket", func() {
 			)),
 		))
 
-		By("listing bucket with incorrect label selector ")
+		By("Listing bucket with incorrect label selector ")
 		Eventually(func() {
 			resp, err := bucketClient.ListBuckets(ctx, &oriv1alpha1.ListBucketsRequest{
 				Filter: &oriv1alpha1.BucketFilter{

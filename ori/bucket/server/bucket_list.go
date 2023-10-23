@@ -131,7 +131,7 @@ func (s *Server) listBuckets(ctx context.Context) ([]*ori.Bucket, error) {
 
 	var res []*ori.Bucket
 	for _, bucket := range buckets {
-		aggregateBucket, err := s.convertAggregateBucket(&bucket)
+		aggregateBucket, err := s.convertAggregateBucketToBucket(&bucket)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +166,7 @@ func (s *Server) getBucket(ctx context.Context, id string) (*ori.Bucket, error) 
 		return nil, err
 	}
 
-	return s.convertAggregateBucket(bucket)
+	return s.convertAggregateBucketToBucket(bucket)
 }
 
 func (s *Server) ListBuckets(ctx context.Context, req *ori.ListBucketsRequest) (*ori.ListBucketsResponse, error) {

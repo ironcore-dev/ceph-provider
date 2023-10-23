@@ -174,10 +174,11 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(os.WriteFile(kubeConfigFile.Name(), kubeconfig, 0600)).To(Succeed())
 
 	opts := app.Options{
-		Address:        fmt.Sprintf("%s/cephlet-bucket.sock", os.Getenv("PWD")),
-		Kubeconfig:     kubeConfigFile.Name(),
-		Namespace:      rookNamespace.Name,
-		BucketEndpoint: bucketBaseURL,
+		Address:                    fmt.Sprintf("%s/cephlet-bucket.sock", os.Getenv("PWD")),
+		Kubeconfig:                 kubeConfigFile.Name(),
+		Namespace:                  rookNamespace.Name,
+		BucketEndpoint:             bucketBaseURL,
+		BucketPoolStorageClassName: "foo",
 	}
 	srvCtx, cancel = context.WithCancel(context.Background())
 	DeferCleanup(cancel)

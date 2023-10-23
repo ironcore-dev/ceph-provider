@@ -36,19 +36,20 @@ type BucketConfig struct {
 	BucketClaim *objectbucketv1alpha1.ObjectBucketClaim
 }
 
-func (s *Server) getBucketConfig(_ context.Context, bucket *ori.Bucket) (*BucketConfig, error) {
+func (s *Server) generateBucketConfig(_ context.Context, bucket *ori.Bucket) (*BucketConfig, error) {
+	generateBucketName := s.idGen.Generate()
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ObjectBucketClaim",
 			APIVersion: "objectbucket.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.idGen.Generate(),
+			Name:      generateBucketName,
 			Namespace: s.namespace,
 		},
 		Spec: objectbucketv1alpha1.ObjectBucketClaimSpec{
 			StorageClassName:   s.bucketPoolStorageClassName,
-			GenerateBucketName: s.idGen.Generate(),
+			GenerateBucketName: generateBucketName,
 		},
 	}
 
@@ -83,18 +84,20 @@ func (s *Server) createBucket(ctx context.Context, log logr.Logger, cfg *BucketC
 func (s *Server) CreateBucket(ctx context.Context, req *ori.CreateBucketRequest) (res *ori.CreateBucketResponse, retErr error) {
 	log := s.loggerFrom(ctx)
 
-	log.V(1).Info("Getting bucket configuration")
-	cfg, err := s.getBucketConfig(ctx, req.Bucket)
+	log.V(1).Info("Generate bucket configuration")
+	cfg, err := s.generateBucketConfig(ctx, req.Bucket)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket config: %w", err)
 	}
 
+	log.V(1).Info("Create bucket")
 	aggregateBucket, err := s.createBucket(ctx, log, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bucket: %w", err)
 	}
 
-	v, err := s.convertAggregateBucket(aggregateBucket)
+	log.V(1).Info("Convert Bucket aggregate to ORI bucket")
+	v, err := s.convertAggregateBucketToBucket(aggregateBucket)
 	if err != nil {
 		return nil, err
 	}

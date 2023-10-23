@@ -22,7 +22,7 @@ import (
 	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
 
-func (s *Server) convertAggregateBucket(bucket *AggregateBucket) (*ori.Bucket, error) {
+func (s *Server) convertAggregateBucketToBucket(bucket *AggregateBucket) (*ori.Bucket, error) {
 	metadata, err := apiutils.GetObjectMetadata(bucket.BucketClaim)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (s *Server) convertAggregateBucket(bucket *AggregateBucket) (*ori.Bucket, e
 		return nil, fmt.Errorf("failed to get bucket class")
 	}
 
-	access, err := s.convertBucketAccess(bucket)
+	access, err := s.convertAggregateBucketToBucketAccess(bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *Server) convertBucketClaimState(state objectbucketv1alpha1.ObjectBucket
 	return 0, fmt.Errorf("unknown bucket state %q", state)
 }
 
-func (s *Server) convertBucketAccess(bucket *AggregateBucket) (*ori.BucketAccess, error) {
+func (s *Server) convertAggregateBucketToBucketAccess(bucket *AggregateBucket) (*ori.BucketAccess, error) {
 	if bucket.BucketClaim.Status.Phase != objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound {
 		return nil, nil
 	}
