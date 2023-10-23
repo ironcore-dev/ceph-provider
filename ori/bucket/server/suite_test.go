@@ -22,23 +22,21 @@ import (
 	"testing"
 	"time"
 
-	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
-	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
 	"github.com/onmetal/controller-utils/buildutils"
 	"github.com/onmetal/controller-utils/modutils"
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/remote/bucket"
 	envtestutils "github.com/onmetal/onmetal-api/utils/envtest"
+	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
-	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,15 +44,14 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
+	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	//+kubebuilder:scaffold:imports
 )
 
 const (
-	eventuallyTimeout    = 5 * time.Second
-	pollingInterval      = 250 * time.Millisecond
+	pollingInterval      = 50 * time.Millisecond
+	eventuallyTimeout    = 3 * time.Second
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute
 	bucketBaseURL        = "example.com"
@@ -83,8 +80,8 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Bucket GRPC Server Suite")
 }
 
-var _ = BeforeSuite(func(ctx SpecContext) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(zapcore.InfoLevel)))
+var _ = BeforeSuite(func() {
+	logf.SetLogger(GinkgoLogr)
 
 	var err error
 
@@ -116,7 +113,8 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
-	SetClient(k8sClient)
+
+	komega.SetClient(k8sClient)
 
 	apiSrv, err := apiserver.New(cfg, apiserver.Options{
 		MainPath:     "github.com/onmetal/onmetal-api/cmd/onmetal-apiserver",
@@ -133,6 +131,9 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	DeferCleanup(apiSrv.Stop)
 
 	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	DeferCleanup(cancel)
 
 	By("creating the rook namespace")
 	rookNamespace = &corev1.Namespace{
@@ -180,12 +181,10 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		BucketEndpoint:             bucketBaseURL,
 		BucketPoolStorageClassName: "foo",
 	}
-	srvCtx, cancel = context.WithCancel(context.Background())
-	DeferCleanup(cancel)
 
 	go func() {
 		defer GinkgoRecover()
-		Expect(app.Run(srvCtx, opts)).To(Succeed())
+		Expect(app.Run(ctx, opts)).To(Succeed())
 	}()
 
 	Eventually(func() (bool, error) {
