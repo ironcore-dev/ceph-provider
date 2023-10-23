@@ -58,11 +58,7 @@ const (
 )
 
 var (
-	srvCtx context.Context
-	cancel context.CancelFunc
-
-	bucketClient v1alpha1.BucketRuntimeClient
-
+	bucketClient  v1alpha1.BucketRuntimeClient
 	testEnv       *envtest.Environment
 	testEnvExt    *envtestutils.EnvironmentExtensions
 	cfg           *rest.Config
