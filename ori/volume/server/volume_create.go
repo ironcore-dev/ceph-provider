@@ -30,15 +30,7 @@ const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
-type CephVolumeConfig struct {
-	image *api.Image
-}
-
-type AggregatedImage struct {
-	image *api.Image
-}
-
-func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volume *ori.Volume) (*CephVolumeConfig, error) {
+func (s *Server) createImage(ctx context.Context, log logr.Logger, volume *ori.Volume) (*api.Image, error) {
 	log.V(2).Info("Getting ceph volume config")
 
 	if volume == nil {
@@ -91,36 +83,24 @@ func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volum
 	apiutils.SetClassLabel(image, volume.Spec.Class)
 	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
 
-	return &CephVolumeConfig{
-		image: image,
-	}, nil
-
-}
-
-func (s *Server) createImage(ctx context.Context, log logr.Logger, cfg *CephVolumeConfig) (*AggregatedImage, error) {
-	image, err := s.imageStore.Create(ctx, cfg.image)
+	image, err := s.imageStore.Create(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create image: %w", err)
 	}
 
-	return &AggregatedImage{image: image}, nil
+	return image, nil
 }
 
 func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest) (res *ori.CreateVolumeResponse, retErr error) {
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Validating volume request")
 
-	cfg, err := s.getCephVolumeConfig(ctx, log, req.Volume)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get ceph volume config: %w", err)
-	}
-
-	volume, err := s.createImage(ctx, log, cfg)
+	image, err := s.createImage(ctx, log, req.Volume)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
-	oriVolume, err := s.convertImageToOriVolume(ctx, log, volume.image)
+	oriVolume, err := s.convertImageToOriVolume(ctx, log, image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
