@@ -342,13 +342,19 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 	if err != nil {
 		return fmt.Errorf("failed to open image: %w", err)
 	}
-
-	currentSize, err := img.GetSize()
-	if err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+	defer func() {
+		if err := img.Close(); err != nil {
+			log.Error(err, "failed to close image source")
 		}
+	}()
+
+	imageSize, err := img.GetSize()
+	if err != nil {
 		return fmt.Errorf("failed to get image size: %w", err)
+	}
+	currentSize, err := utils.Uint64ToInt64(imageSize)
+	if err != nil {
+		return fmt.Errorf("failed to convert the current image sise: %w", err)
 	}
 
 	requestedSize := round.OffBytes(image.Spec.Size)
@@ -368,15 +374,11 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 		return err
 	}
 
-	if err := img.Resize(requestedSize); err != nil {
+	if err := img.Resize(uint64(requestedSize)); err != nil {
 		if closeErr := img.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
 		}
 		return fmt.Errorf("failed to resize image: %w", err)
-	}
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close image: %w", err)
 	}
 
 	log.V(1).Info("Expanded image", "requestedSize", requestedSize, "currentSize", currentSize)
@@ -583,7 +585,7 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 }
 
 func (r *ImageReconciler) createEmptyImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image, options *librbd.ImageOptions) error {
-	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), round.OffBytes(image.Spec.Size), options); err != nil {
+	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), uint64(round.OffBytes(image.Spec.Size)), options); err != nil {
 		return fmt.Errorf("failed to create rbd image: %w", err)
 	}
 	log.V(2).Info("Created image", "bytes", image.Spec.Size)
@@ -623,7 +625,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, fmt.Errorf("failed to open rbd image: %w", err)
 	}
 
-	if err := img.Resize(round.OffBytes(image.Spec.Size)); err != nil {
+	if err := img.Resize(uint64(round.OffBytes(image.Spec.Size))); err != nil {
 		if closeErr := img.Close(); closeErr != nil {
 			return false, errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
 		}

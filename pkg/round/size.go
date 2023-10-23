@@ -36,14 +36,14 @@ const (
 // OffBytes converts roundoff the size
 // 1.1Mib will be round off to 2Mib same for GiB
 // size less than 1MiB will be round off to 1MiB.
-func OffBytes(bytes uint64) uint64 {
-	var num uint64
+func OffBytes(bytes int64) int64 {
+	var num int64
 	// round off the value if its in decimal
 	if floatBytes := float64(bytes); floatBytes < GiB {
-		num = uint64(math.Ceil(floatBytes / MiB))
+		num = int64(math.Ceil(floatBytes / MiB))
 		num *= MiB
 	} else {
-		num = uint64(math.Ceil(floatBytes / GiB))
+		num = int64(math.Ceil(floatBytes / GiB))
 		num *= GiB
 	}
 

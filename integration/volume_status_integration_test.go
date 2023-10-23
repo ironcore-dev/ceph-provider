@@ -79,7 +79,7 @@ var _ = Describe("Volume Status", func() {
 		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
-			HaveField("Spec.Size", Equal(uint64(1*1024))),
+			HaveField("Spec.Size", Equal(int64(1*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
 				HaveKeyWithValue(api.WriteBPSLimit, int64(100)),

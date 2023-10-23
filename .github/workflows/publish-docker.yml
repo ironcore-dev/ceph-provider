@@ -19,7 +19,6 @@ on:
 
 jobs:
   buildAndPush:
-    if: contains(github.event.pull_request.labels.*.name, 'ok-to-image')
     strategy:
       matrix:
         image:
@@ -28,6 +27,7 @@ jobs:
           - name: cephlet-volume
             target: cephlet-volume
     runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'ok-to-image')
     steps:
       - uses: actions/checkout@v4
       - uses: docker/metadata-action@v5

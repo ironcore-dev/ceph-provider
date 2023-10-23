@@ -22,7 +22,7 @@ import (
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
-func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId string, storageBytes uint64) error {
+func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId string, storageBytes int64) error {
 	log.V(2).Info("Fetching ceph image")
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {

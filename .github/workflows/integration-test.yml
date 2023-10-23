@@ -60,6 +60,12 @@ jobs:
               break
             fi
           done
+          
+          # Check if "unknown" pgs are still present
+          if sudo microceph.ceph pg stat | grep -wF unknown; then
+            echo "Error: Ceph cluster and pools are not healthy after waiting for 60 seconds"
+            exit 1
+          fi
 
           sudo microceph.ceph status
           sudo rm -f /snap/bin/rbd

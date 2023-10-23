@@ -51,7 +51,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
 			HaveField("Volume.Spec.Image", Equal("")),
 			HaveField("Volume.Spec.Class", Equal("foo")),
-			HaveField("Volume.Spec.Resources.StorageBytes", Equal(uint64(1024*1024*1024))),
+			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
 			HaveField("Volume.Status.State", Equal(onmetalv1alpha1.VolumeState_VOLUME_PENDING)),
 			HaveField("Volume.Status.Access", BeNil()),
@@ -69,7 +69,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
+			HaveField("Spec.Size", Equal(int64(1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
@@ -140,7 +140,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(uint64(2048*2048*2048))),
+			HaveField("Spec.Size", Equal(int64(2048*2048*2048))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
