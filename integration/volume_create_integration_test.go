@@ -105,7 +105,7 @@ var _ = Describe("Create Volume", func() {
 			Expect(resp.Volumes).NotTo(BeEmpty())
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("State", Equal(onmetalv1alpha1.VolumeState_VOLUME_PENDING)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),

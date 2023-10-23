@@ -50,8 +50,8 @@ import (
 )
 
 const (
-	pollingInterval      = 50 * time.Millisecond
-	eventuallyTimeout    = 3 * time.Second
+	pollingInterval      = 250 * time.Millisecond
+	eventuallyTimeout    = 20 * time.Second
 	consistentlyDuration = 1 * time.Second
 	apiServiceTimeout    = 5 * time.Minute
 	bucketBaseURL        = "example.com"

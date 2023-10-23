@@ -36,9 +36,6 @@ import (
 )
 
 var (
-	srvCtx context.Context
-	cancel context.CancelFunc
-
 	volumeClient v1alpha1.VolumeRuntimeClient
 	ioctx        *rados.IOContext
 
@@ -97,7 +94,7 @@ var _ = BeforeSuite(func() {
 		},
 	}
 
-	srvCtx, cancel = context.WithCancel(context.Background())
+	srvCtx, cancel := context.WithCancel(context.Background())
 	DeferCleanup(cancel)
 
 	go func() {
