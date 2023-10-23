@@ -32,11 +32,7 @@ type AggregateBucket struct {
 	AccessSecret *corev1.Secret
 }
 
-type BucketConfig struct {
-	BucketClaim *objectbucketv1alpha1.ObjectBucketClaim
-}
-
-func (s *Server) generateBucketConfig(_ context.Context, bucket *ori.Bucket) (*BucketConfig, error) {
+func (s *Server) generateBucketClaim(_ context.Context, bucket *ori.Bucket) (*objectbucketv1alpha1.ObjectBucketClaim, error) {
 	generateBucketName := s.idGen.Generate()
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 		TypeMeta: metav1.TypeMeta{
@@ -59,24 +55,22 @@ func (s *Server) generateBucketConfig(_ context.Context, bucket *ori.Bucket) (*B
 	apiutils.SetClassLabel(bucketClaim, bucket.Spec.Class)
 	apiutils.SetBucketManagerLabel(bucketClaim, bucketv1alpha1.BucketManager)
 
-	return &BucketConfig{
-		BucketClaim: bucketClaim,
-	}, nil
+	return bucketClaim, nil
 }
 
-func (s *Server) createBucket(ctx context.Context, log logr.Logger, cfg *BucketConfig) (res *AggregateBucket, retErr error) {
+func (s *Server) createBucket(ctx context.Context, log logr.Logger, bucketClaim *objectbucketv1alpha1.ObjectBucketClaim) (res *AggregateBucket, retErr error) {
 	log.V(1).Info("Creating bucket claim")
-	if err := s.client.Create(ctx, cfg.BucketClaim); err != nil {
+	if err := s.client.Create(ctx, bucketClaim); err != nil {
 		return nil, fmt.Errorf("error creating bucket: %w", err)
 	}
 
-	accessSecret, err := s.getBucketAccessSecretIfRequired(cfg.BucketClaim, s.clientGetSecretFunc(ctx))
+	accessSecret, err := s.getBucketAccessSecretIfRequired(bucketClaim, s.clientGetSecretFunc(ctx))
 	if err != nil {
 		return nil, err
 	}
 
 	return &AggregateBucket{
-		BucketClaim:  cfg.BucketClaim,
+		BucketClaim:  bucketClaim,
 		AccessSecret: accessSecret,
 	}, nil
 }
@@ -85,7 +79,7 @@ func (s *Server) CreateBucket(ctx context.Context, req *ori.CreateBucketRequest)
 	log := s.loggerFrom(ctx)
 
 	log.V(1).Info("Generate bucket configuration")
-	cfg, err := s.generateBucketConfig(ctx, req.Bucket)
+	cfg, err := s.generateBucketClaim(ctx, req.Bucket)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket config: %w", err)
 	}
