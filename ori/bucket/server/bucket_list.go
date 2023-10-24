@@ -19,9 +19,9 @@ import (
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	bucketv1alpha1 "github.com/onmetal/cephlet/ori/bucket/api/v1alpha1"
+	"github.com/onmetal/cephlet/ori/bucket/apiutils"
 	"github.com/onmetal/onmetal-api/broker/common"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +34,7 @@ func (s *Server) listManagedAndCreated(ctx context.Context, list client.ObjectLi
 	return s.client.List(ctx, list,
 		client.InNamespace(s.namespace),
 		client.MatchingLabels{
-			bucketv1alpha1.ManagerLabel: bucketv1alpha1.BucketManager,
+			apiutils.ManagerLabel: apiutils.BucketManager,
 		},
 	)
 }
@@ -71,7 +71,7 @@ func (s *Server) getAccessSecretForBucketClaim(
 	return accessSecret, nil
 }
 
-func (s *Server) getAllManagedBuckets(ctx context.Context) ([]*ori.Bucket, error) {
+func (s *Server) getAllManagedBuckets(ctx context.Context) ([]*oriv1alpha1.Bucket, error) {
 	bucketClaimList := &objectbucketv1alpha1.ObjectBucketClaimList{}
 	if err := s.listManagedAndCreated(ctx, bucketClaimList); err != nil {
 		return nil, fmt.Errorf("error listing buckets: %w", err)
@@ -93,7 +93,7 @@ func (s *Server) getAllManagedBuckets(ctx context.Context) ([]*ori.Bucket, error
 		return nil, fmt.Errorf("error constructing secret getter: %w", err)
 	}
 
-	var res []*ori.Bucket
+	var res []*oriv1alpha1.Bucket
 	for i := range bucketClaimList.Items {
 		bucketClaim := &bucketClaimList.Items[i]
 		accessSecret, err := s.getAccessSecretForBucketClaim(bucketClaim, secretByNameGetter.Get)
@@ -112,13 +112,13 @@ func (s *Server) getAllManagedBuckets(ctx context.Context) ([]*ori.Bucket, error
 	return res, nil
 }
 
-func (s *Server) filterBuckets(buckets []*ori.Bucket, filter *ori.BucketFilter) []*ori.Bucket {
+func (s *Server) filterBuckets(buckets []*oriv1alpha1.Bucket, filter *oriv1alpha1.BucketFilter) []*oriv1alpha1.Bucket {
 	if filter == nil {
 		return buckets
 	}
 
 	var (
-		res []*ori.Bucket
+		res []*oriv1alpha1.Bucket
 		sel = labels.SelectorFromSet(filter.LabelSelector)
 	)
 	for _, oriBucket := range buckets {
@@ -131,7 +131,7 @@ func (s *Server) filterBuckets(buckets []*ori.Bucket, filter *ori.BucketFilter) 
 	return res
 }
 
-func (s *Server) getBucketForID(ctx context.Context, id string) (*ori.Bucket, error) {
+func (s *Server) getBucketForID(ctx context.Context, id string) (*oriv1alpha1.Bucket, error) {
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{}
 	if err := s.getManagedAndCreated(ctx, id, bucketClaim); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -148,20 +148,20 @@ func (s *Server) getBucketForID(ctx context.Context, id string) (*ori.Bucket, er
 	return s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 }
 
-func (s *Server) ListBuckets(ctx context.Context, req *ori.ListBucketsRequest) (*ori.ListBucketsResponse, error) {
+func (s *Server) ListBuckets(ctx context.Context, req *oriv1alpha1.ListBucketsRequest) (*oriv1alpha1.ListBucketsResponse, error) {
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		bucket, err := s.getBucketForID(ctx, filter.Id)
 		if err != nil {
 			if status.Code(err) != codes.NotFound {
 				return nil, err
 			}
-			return &ori.ListBucketsResponse{
-				Buckets: []*ori.Bucket{},
+			return &oriv1alpha1.ListBucketsResponse{
+				Buckets: []*oriv1alpha1.Bucket{},
 			}, nil
 		}
 
-		return &ori.ListBucketsResponse{
-			Buckets: []*ori.Bucket{bucket},
+		return &oriv1alpha1.ListBucketsResponse{
+			Buckets: []*oriv1alpha1.Bucket{bucket},
 		}, nil
 	}
 
@@ -172,7 +172,7 @@ func (s *Server) ListBuckets(ctx context.Context, req *ori.ListBucketsRequest) (
 
 	buckets = s.filterBuckets(buckets, req.Filter)
 
-	return &ori.ListBucketsResponse{
+	return &oriv1alpha1.ListBucketsResponse{
 		Buckets: buckets,
 	}, nil
 }

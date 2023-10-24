@@ -18,13 +18,13 @@ import (
 	"context"
 	"fmt"
 
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (s *Server) DeleteBucket(ctx context.Context, req *ori.DeleteBucketRequest) (*ori.DeleteBucketResponse, error) {
+func (s *Server) DeleteBucket(ctx context.Context, req *oriv1alpha1.DeleteBucketRequest) (*oriv1alpha1.DeleteBucketResponse, error) {
 	log := s.loggerFrom(ctx, "BucketID", req.BucketId)
 
 	bucketClaim, err := s.getBucketClaimForID(ctx, req.BucketId)
@@ -40,5 +40,5 @@ func (s *Server) DeleteBucket(ctx context.Context, req *ori.DeleteBucketRequest)
 		return nil, status.Errorf(codes.NotFound, "bucket claim %s not found", req.BucketId)
 	}
 
-	return &ori.DeleteBucketResponse{}, nil
+	return &oriv1alpha1.DeleteBucketResponse{}, nil
 }

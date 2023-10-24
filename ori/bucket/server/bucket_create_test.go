@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	orimetav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -31,12 +31,12 @@ import (
 var _ = Describe("CreateBucket test", func() {
 	It("Should create a bucket", func(ctx SpecContext) {
 		By("Creating a bucket")
-		createResp, err := bucketClient.CreateBucket(ctx, &ori.CreateBucketRequest{
-			Bucket: &ori.Bucket{
-				Metadata: &v1alpha1.ObjectMetadata{
+		createResp, err := bucketClient.CreateBucket(ctx, &oriv1alpha1.CreateBucketRequest{
+			Bucket: &oriv1alpha1.Bucket{
+				Metadata: &orimetav1alpha1.ObjectMetadata{
 					Labels: map[string]string{"foo": "bar"},
 				},
-				Spec: &ori.BucketSpec{
+				Spec: &oriv1alpha1.BucketSpec{
 					Class: "foo",
 				},
 			},
@@ -47,9 +47,13 @@ var _ = Describe("CreateBucket test", func() {
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Bucket.Metadata.Id", Equal(createResp.Bucket.Metadata.Id)),
 			HaveField("Bucket.Spec.Class", Equal("foo")),
-			HaveField("Bucket.Status.State", Equal(ori.BucketState_BUCKET_PENDING)),
+			HaveField("Bucket.Status.State", Equal(oriv1alpha1.BucketState_BUCKET_PENDING)),
 			HaveField("Bucket.Status.Access", BeNil()),
 		))
+
+		DeferCleanup(bucketClient.DeleteBucket, &oriv1alpha1.DeleteBucketRequest{
+			BucketId: createResp.Bucket.Metadata.Id,
+		})
 
 		By("Ensuring the bucketClaim is created")
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
@@ -99,9 +103,9 @@ var _ = Describe("CreateBucket test", func() {
 		Eventually(Get(accessSecret)).Should(Succeed())
 
 		By("Ensuring bucket is in available state and Access fields have been updated")
-		Eventually(func() *ori.BucketStatus {
-			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
-				Filter: &ori.BucketFilter{
+		Eventually(func() *oriv1alpha1.BucketStatus {
+			resp, err := bucketClient.ListBuckets(ctx, &oriv1alpha1.ListBucketsRequest{
+				Filter: &oriv1alpha1.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
 				},
 			})
@@ -109,7 +113,7 @@ var _ = Describe("CreateBucket test", func() {
 			Expect(resp.Buckets).NotTo(BeEmpty())
 			return resp.Buckets[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(ori.BucketState_BUCKET_AVAILABLE)),
+			HaveField("State", Equal(oriv1alpha1.BucketState_BUCKET_AVAILABLE)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Endpoint", Equal(fmt.Sprintf("%s.%s", bucketClaim.Name, bucketBaseURL))),
 				HaveField("SecretData", SatisfyAll(

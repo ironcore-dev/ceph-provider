@@ -20,24 +20,24 @@ import (
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/apiutils"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-var bucketClaimStateToORIState = map[objectbucketv1alpha1.ObjectBucketClaimStatusPhase]ori.BucketState{
-	objectbucketv1alpha1.ObjectBucketClaimStatusPhasePending:  ori.BucketState_BUCKET_PENDING,
-	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound:    ori.BucketState_BUCKET_AVAILABLE,
-	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseFailed:   ori.BucketState_BUCKET_ERROR,
-	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseReleased: ori.BucketState_BUCKET_PENDING,
+var bucketClaimStateToORIState = map[objectbucketv1alpha1.ObjectBucketClaimStatusPhase]oriv1alpha1.BucketState{
+	objectbucketv1alpha1.ObjectBucketClaimStatusPhasePending:  oriv1alpha1.BucketState_BUCKET_PENDING,
+	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound:    oriv1alpha1.BucketState_BUCKET_AVAILABLE,
+	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseFailed:   oriv1alpha1.BucketState_BUCKET_ERROR,
+	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseReleased: oriv1alpha1.BucketState_BUCKET_PENDING,
 }
 
 func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
 	accessSecret *corev1.Secret,
-) (*ori.Bucket, error) {
+) (*oriv1alpha1.Bucket, error) {
 	metadata, err := apiutils.GetObjectMetadata(bucketClaim)
 	if err != nil {
 		return nil, err
@@ -58,21 +58,21 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 		return nil, err
 	}
 
-	return &ori.Bucket{
+	return &oriv1alpha1.Bucket{
 		Metadata: metadata,
-		Spec: &ori.BucketSpec{
+		Spec: &oriv1alpha1.BucketSpec{
 			Class: class,
 		},
-		Status: &ori.BucketStatus{
+		Status: &oriv1alpha1.BucketStatus{
 			State:  state,
 			Access: access,
 		},
 	}, nil
 }
 
-func (s *Server) convertBucketClaimStateToBucketState(state objectbucketv1alpha1.ObjectBucketClaimStatusPhase) (ori.BucketState, error) {
+func (s *Server) convertBucketClaimStateToBucketState(state objectbucketv1alpha1.ObjectBucketClaimStatusPhase) (oriv1alpha1.BucketState, error) {
 	if state == "" {
-		return ori.BucketState_BUCKET_PENDING, nil
+		return oriv1alpha1.BucketState_BUCKET_PENDING, nil
 	}
 
 	if state, ok := bucketClaimStateToORIState[state]; ok {
@@ -84,7 +84,7 @@ func (s *Server) convertBucketClaimStateToBucketState(state objectbucketv1alpha1
 func (s *Server) convertAccessSecretToBucketAccess(
 	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
 	accessSecret *corev1.Secret,
-) (*ori.BucketAccess, error) {
+) (*oriv1alpha1.BucketAccess, error) {
 	if bucketClaim.Status.Phase != objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound {
 		return nil, nil
 	}
@@ -93,7 +93,7 @@ func (s *Server) convertAccessSecretToBucketAccess(
 		return nil, fmt.Errorf("access secret not contained in aggregate bucket")
 	}
 
-	return &ori.BucketAccess{
+	return &oriv1alpha1.BucketAccess{
 		Endpoint:   fmt.Sprintf("%s.%s", bucketClaim.Spec.BucketName, s.bucketEndpoint),
 		SecretData: accessSecret.Data,
 	}, nil

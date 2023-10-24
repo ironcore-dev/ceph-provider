@@ -12,19 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1alpha1
+package apiutils
 
 const (
-	LabelsAnnotation = "cephlet.api.onmetal.de/labels"
-
+	LabelsAnnotation      = "cephlet.api.onmetal.de/labels"
 	AnnotationsAnnotation = "cephlet.api.onmetal.de/annotations"
-)
-
-const (
-	ManagerLabel = "cephlet.api.onmetal.de/manager"
-	ClassLabel   = "cephlet.api.onmetal.de/class"
-)
-
-const (
-	VolumeManager = "cephlet-volume"
+	ClassLabel            = "cephlet.api.onmetal.de/class"
+	ManagerLabel          = "cephlet.api.onmetal.de/manager"
+	BucketManager         = "cephlet-bucket"
 )

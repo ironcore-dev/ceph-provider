@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	bucketv1alpha1 "github.com/onmetal/cephlet/ori/bucket/api/v1alpha1"
 	"github.com/onmetal/controller-utils/metautils"
 	orimeta "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,11 +61,11 @@ func SetObjectMetadata(o metav1.Object, metadata *orimeta.ObjectMetadata) error 
 }
 
 func SetClassLabel(o metav1.Object, class string) {
-	metautils.SetLabel(o, bucketv1alpha1.ClassLabel, class)
+	metautils.SetLabel(o, ClassLabel, class)
 }
 
 func GetClassLabel(o metav1.Object) (string, bool) {
-	class, found := o.GetLabels()[bucketv1alpha1.ClassLabel]
+	class, found := o.GetLabels()[ClassLabel]
 	return class, found
 }
 
@@ -75,14 +74,14 @@ func SetLabelsAnnotation(o metav1.Object, labels map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("error marshalling labels: %w", err)
 	}
-	metautils.SetAnnotation(o, bucketv1alpha1.LabelsAnnotation, string(data))
+	metautils.SetAnnotation(o, LabelsAnnotation, string(data))
 	return nil
 }
 
 func GetLabelsAnnotation(o metav1.Object) (map[string]string, error) {
-	data, ok := o.GetAnnotations()[bucketv1alpha1.LabelsAnnotation]
+	data, ok := o.GetAnnotations()[LabelsAnnotation]
 	if !ok {
-		return nil, fmt.Errorf("object has no labels at %s", bucketv1alpha1.LabelsAnnotation)
+		return nil, fmt.Errorf("object has no labels at %s", LabelsAnnotation)
 	}
 
 	var labels map[string]string
@@ -98,14 +97,14 @@ func SetAnnotationsAnnotation(o metav1.Object, annotations map[string]string) er
 	if err != nil {
 		return fmt.Errorf("error marshalling annotations: %w", err)
 	}
-	metautils.SetAnnotation(o, bucketv1alpha1.AnnotationsAnnotation, string(data))
+	metautils.SetAnnotation(o, AnnotationsAnnotation, string(data))
 	return nil
 }
 
 func GetAnnotationsAnnotation(o metav1.Object) (map[string]string, error) {
-	data, ok := o.GetAnnotations()[bucketv1alpha1.AnnotationsAnnotation]
+	data, ok := o.GetAnnotations()[AnnotationsAnnotation]
 	if !ok {
-		return nil, fmt.Errorf("object has no annotations at %s", bucketv1alpha1.AnnotationsAnnotation)
+		return nil, fmt.Errorf("object has no annotations at %s", AnnotationsAnnotation)
 	}
 
 	var annotations map[string]string
@@ -117,10 +116,10 @@ func GetAnnotationsAnnotation(o metav1.Object) (map[string]string, error) {
 }
 
 func SetBucketManagerLabel(bucket *objectbucketv1alpha1.ObjectBucketClaim, manager string) {
-	metautils.SetLabel(bucket, bucketv1alpha1.ManagerLabel, manager)
+	metautils.SetLabel(bucket, ManagerLabel, manager)
 }
 
 func IsManagedBy(o metav1.Object, manager string) bool {
-	actual, ok := o.GetLabels()[bucketv1alpha1.ManagerLabel]
+	actual, ok := o.GetLabels()[ManagerLabel]
 	return ok && actual == manager
 }

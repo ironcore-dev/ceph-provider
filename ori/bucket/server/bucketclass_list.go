@@ -19,23 +19,23 @@ import (
 	"fmt"
 
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
 
-func (s *Server) convertBucketClass(bucketClass *storagev1alpha1.BucketClass) (*ori.BucketClass, error) {
+func (s *Server) convertBucketClass(bucketClass *storagev1alpha1.BucketClass) (*oriv1alpha1.BucketClass, error) {
 	tps := bucketClass.Capabilities.TPS()
 	iops := bucketClass.Capabilities.IOPS()
 
-	return &ori.BucketClass{
+	return &oriv1alpha1.BucketClass{
 		Name: bucketClass.Name,
-		Capabilities: &ori.BucketClassCapabilities{
+		Capabilities: &oriv1alpha1.BucketClassCapabilities{
 			Tps:  tps.Value(),
 			Iops: iops.Value(),
 		},
 	}, nil
 }
 
-func (s *Server) ListBucketClasses(ctx context.Context, req *ori.ListBucketClassesRequest) (*ori.ListBucketClassesResponse, error) {
+func (s *Server) ListBucketClasses(ctx context.Context, req *oriv1alpha1.ListBucketClassesRequest) (*oriv1alpha1.ListBucketClassesResponse, error) {
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Listing bucket classes")
 
@@ -44,7 +44,7 @@ func (s *Server) ListBucketClasses(ctx context.Context, req *ori.ListBucketClass
 		return nil, fmt.Errorf("error listing bucket classes: %w", err)
 	}
 
-	var classes []*ori.BucketClass
+	var classes []*oriv1alpha1.BucketClass
 	for _, class := range list.Items {
 		bucketClass, err := s.convertBucketClass(&class)
 		if err != nil {
@@ -54,7 +54,7 @@ func (s *Server) ListBucketClasses(ctx context.Context, req *ori.ListBucketClass
 	}
 
 	log.V(1).Info("Returning bucket classes")
-	return &ori.ListBucketClassesResponse{
+	return &oriv1alpha1.ListBucketClassesResponse{
 		BucketClasses: classes,
 	}, nil
 }

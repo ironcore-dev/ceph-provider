@@ -22,29 +22,27 @@ import (
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/omap"
 	metav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	onmetalv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Delete Volume", func() {
-
 	It("should delete a volume", func(ctx SpecContext) {
 		By("creating a volume")
-		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
-			Volume: &onmetalv1alpha1.Volume{
+		createResp, err := volumeClient.CreateVolume(ctx, &oriv1alpha1.CreateVolumeRequest{
+			Volume: &oriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
 					Id: "foo",
 				},
-				Spec: &onmetalv1alpha1.VolumeSpec{
+				Spec: &oriv1alpha1.VolumeSpec{
 					Class: "foo",
-					Resources: &onmetalv1alpha1.VolumeResources{
+					Resources: &oriv1alpha1.VolumeResources{
 						StorageBytes: 1024 * 1024 * 1024,
 					},
 				},
 			},
 		})
-
 		Expect(err).NotTo(HaveOccurred())
 
 		By("ensure the correct image has been created inside the ceph cluster")
@@ -69,7 +67,7 @@ var _ = Describe("Delete Volume", func() {
 
 		By("deleting a volume")
 		Eventually(func() {
-			_, err = volumeClient.DeleteVolume(ctx, &onmetalv1alpha1.DeleteVolumeRequest{
+			_, err = volumeClient.DeleteVolume(ctx, &oriv1alpha1.DeleteVolumeRequest{
 				VolumeId: createResp.Volume.Metadata.Id,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -77,8 +75,8 @@ var _ = Describe("Delete Volume", func() {
 
 		By("listing volume with volume ID to check volume deleted")
 		Eventually(func() {
-			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
-				Filter: &onmetalv1alpha1.VolumeFilter{
+			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
+				Filter: &oriv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
 				},
 			})
