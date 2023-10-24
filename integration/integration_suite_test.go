@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/onmetal/cephlet/ori/volume/cmd/volume/app"
-	"github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/remote/volume"
 )
 
@@ -42,7 +42,7 @@ const (
 )
 
 var (
-	volumeClient v1alpha1.VolumeRuntimeClient
+	volumeClient oriv1alpha1.VolumeRuntimeClient
 	ioctx        *rados.IOContext
 
 	cephMonitors        = os.Getenv("CEPH_MONITORS")
@@ -73,9 +73,9 @@ var _ = BeforeSuite(func() {
 	}()
 	Expect(os.WriteFile(keyEncryptionKeyFile.Name(), []byte("abcjdkekakakakakakakkadfkkasfdks"), 0666)).To(Succeed())
 
-	volumeClasses := []v1alpha1.VolumeClass{{
+	volumeClasses := []oriv1alpha1.VolumeClass{{
 		Name: "foo",
-		Capabilities: &v1alpha1.VolumeClassCapabilities{
+		Capabilities: &oriv1alpha1.VolumeClassCapabilities{
 			Tps:  100,
 			Iops: 100,
 		},
@@ -123,7 +123,7 @@ var _ = BeforeSuite(func() {
 	gconn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	Expect(err).NotTo(HaveOccurred())
 
-	volumeClient = v1alpha1.NewVolumeRuntimeClient(gconn)
+	volumeClient = oriv1alpha1.NewVolumeRuntimeClient(gconn)
 	DeferCleanup(gconn.Close)
 
 	conn, err := rados.NewConn()

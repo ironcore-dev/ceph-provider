@@ -20,11 +20,10 @@ import (
 
 	"github.com/go-logr/logr"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	bucketv1alpha1 "github.com/onmetal/cephlet/ori/bucket/api/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/apiutils"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	"github.com/onmetal/onmetal-api/broker/common/idgen"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,8 +47,8 @@ func init() {
 }
 
 type BucketClassRegistry interface {
-	Get(volumeClassName string) (*ori.BucketClass, bool)
-	List() []*ori.BucketClass
+	Get(volumeClassName string) (*oriv1alpha1.BucketClass, bool)
+	List() []*oriv1alpha1.BucketClass
 }
 
 type Server struct {
@@ -87,7 +86,7 @@ func setOptionsDefaults(o *Options) {
 	}
 }
 
-var _ ori.BucketRuntimeServer = (*Server)(nil)
+var _ oriv1alpha1.BucketRuntimeServer = (*Server)(nil)
 
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=buckets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storage.api.onmetal.de,resources=buckets/status,verbs=get;update;patch
@@ -124,7 +123,7 @@ func (s *Server) getManagedAndCreated(ctx context.Context, name string, obj clie
 	if err := s.client.Get(ctx, key, obj); err != nil {
 		return err
 	}
-	if !apiutils.IsManagedBy(obj, bucketv1alpha1.BucketManager) {
+	if !apiutils.IsManagedBy(obj, apiutils.BucketManager) {
 		gvk, err := apiutil.GVKForObject(obj, s.client.Scheme())
 		if err != nil {
 			return err

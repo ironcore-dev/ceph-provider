@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/controller-utils/metautils"
 	orimeta "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
@@ -65,14 +64,14 @@ func SetLabelsAnnotation(o api.Object, labels map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("error marshalling labels: %w", err)
 	}
-	metautils.SetAnnotation(o, volumev1alpha1.LabelsAnnotation, string(data))
+	metautils.SetAnnotation(o, LabelsAnnotation, string(data))
 	return nil
 }
 
 func GetLabelsAnnotation(o api.Metadata) (map[string]string, error) {
-	data, ok := o.GetAnnotations()[volumev1alpha1.LabelsAnnotation]
+	data, ok := o.GetAnnotations()[LabelsAnnotation]
 	if !ok {
-		return nil, fmt.Errorf("object has no labels at %s", volumev1alpha1.LabelsAnnotation)
+		return nil, fmt.Errorf("object has no labels at %s", LabelsAnnotation)
 	}
 
 	var labels map[string]string
@@ -88,15 +87,15 @@ func SetAnnotationsAnnotation(o api.Object, annotations map[string]string) error
 	if err != nil {
 		return fmt.Errorf("error marshalling annotations: %w", err)
 	}
-	metautils.SetAnnotation(o, volumev1alpha1.AnnotationsAnnotation, string(data))
+	metautils.SetAnnotation(o, AnnotationsAnnotation, string(data))
 
 	return nil
 }
 
 func GetAnnotationsAnnotation(o api.Metadata) (map[string]string, error) {
-	data, ok := o.GetAnnotations()[volumev1alpha1.AnnotationsAnnotation]
+	data, ok := o.GetAnnotations()[AnnotationsAnnotation]
 	if !ok {
-		return nil, fmt.Errorf("object has no annotations at %s", volumev1alpha1.AnnotationsAnnotation)
+		return nil, fmt.Errorf("object has no annotations at %s", AnnotationsAnnotation)
 	}
 
 	var annotations map[string]string
@@ -108,19 +107,19 @@ func GetAnnotationsAnnotation(o api.Metadata) (map[string]string, error) {
 }
 
 func SetManagerLabel(o api.Object, manager string) {
-	metautils.SetLabel(o, volumev1alpha1.ManagerLabel, manager)
+	metautils.SetLabel(o, ManagerLabel, manager)
 }
 
 func SetClassLabel(o api.Object, class string) {
-	metautils.SetLabel(o, volumev1alpha1.ClassLabel, class)
+	metautils.SetLabel(o, ClassLabel, class)
 }
 
 func GetClassLabel(o api.Object) (string, bool) {
-	class, found := o.GetLabels()[volumev1alpha1.ClassLabel]
+	class, found := o.GetLabels()[ClassLabel]
 	return class, found
 }
 
 func IsManagedBy(o api.Object, manager string) bool {
-	actual, ok := o.GetLabels()[volumev1alpha1.ManagerLabel]
+	actual, ok := o.GetLabels()[ManagerLabel]
 	return ok && actual == manager
 }

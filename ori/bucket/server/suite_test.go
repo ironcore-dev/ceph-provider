@@ -28,7 +28,7 @@ import (
 	"github.com/onmetal/controller-utils/modutils"
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/onmetal/onmetal-api/ori/remote/bucket"
 	envtestutils "github.com/onmetal/onmetal-api/utils/envtest"
 	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
@@ -58,7 +58,7 @@ const (
 )
 
 var (
-	bucketClient  v1alpha1.BucketRuntimeClient
+	bucketClient  oriv1alpha1.BucketRuntimeClient
 	testEnv       *envtest.Environment
 	testEnvExt    *envtestutils.EnvironmentExtensions
 	cfg           *rest.Config
@@ -193,7 +193,7 @@ var _ = BeforeSuite(func() {
 	gconn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	Expect(err).NotTo(HaveOccurred())
 
-	bucketClient = v1alpha1.NewBucketRuntimeClient(gconn)
+	bucketClient = oriv1alpha1.NewBucketRuntimeClient(gconn)
 	DeferCleanup(gconn.Close)
 })
 

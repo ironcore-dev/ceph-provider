@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	volumev1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
 	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/limits"
@@ -85,7 +84,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		return nil, fmt.Errorf("failed to set metadata: %w", err)
 	}
 	apiutils.SetClassLabel(image, volume.Spec.Class)
-	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
+	apiutils.SetManagerLabel(image, apiutils.VolumeManager)
 
 	log.V(2).Info("Create image in store")
 	image, err = s.imageStore.Create(ctx, image)
