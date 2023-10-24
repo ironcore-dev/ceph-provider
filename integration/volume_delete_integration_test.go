@@ -49,7 +49,7 @@ var _ = Describe("Delete Volume", func() {
 
 		By("ensure the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
-		Eventually(ctx, func() *api.Image {
+		Eventually(func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
@@ -68,7 +68,7 @@ var _ = Describe("Delete Volume", func() {
 		))
 
 		By("deleting a volume")
-		Eventually(ctx, func() {
+		Eventually(func() {
 			_, err = volumeClient.DeleteVolume(ctx, &onmetalv1alpha1.DeleteVolumeRequest{
 				VolumeId: createResp.Volume.Metadata.Id,
 			})
@@ -76,7 +76,7 @@ var _ = Describe("Delete Volume", func() {
 		})
 
 		By("listing volume with volume ID to check volume deleted")
-		Eventually(ctx, func() {
+		Eventually(func() {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
@@ -87,7 +87,7 @@ var _ = Describe("Delete Volume", func() {
 		})
 
 		By("ensuring the image has been deleted inside the ceph cluster")
-		Eventually(ctx, func() {
+		Eventually(func() {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).NotTo(HaveKey(createResp.Volume.Metadata.Id))

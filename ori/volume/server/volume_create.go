@@ -23,6 +23,7 @@ import (
 	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/limits"
+	"github.com/onmetal/cephlet/pkg/utils"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
@@ -30,35 +31,30 @@ const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
-type CephVolumeConfig struct {
-	image *api.Image
-}
-
-type AggregatedImage struct {
-	image *api.Image
-}
-
-func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volume *ori.Volume) (*CephVolumeConfig, error) {
-	log.V(2).Info("Getting ceph volume config")
-
+func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, volume *ori.Volume) (*api.Image, error) {
 	if volume == nil {
-		return nil, fmt.Errorf("volume is nil")
+		return nil, fmt.Errorf("got an empty volume")
 	}
 
+	log.V(2).Info("Get volumeclass")
 	class, found := s.volumeClasses.Get(volume.Spec.Class)
 	if !found {
 		return nil, fmt.Errorf("volume class '%s' not supported", volume.Spec.Class)
 	}
-	log.V(2).Info("Validated class")
 
 	calculatedLimits := limits.Calculate(class.Capabilities.Iops, class.Capabilities.Tps, s.burstFactor, s.burstDurationInSeconds)
+
+	imageSize, err := utils.Int64ToUint64(volume.Spec.Resources.StorageBytes)
+	if err != nil {
+		return nil, err
+	}
 
 	image := &api.Image{
 		Metadata: api.Metadata{
 			ID: s.idGen.Generate(),
 		},
 		Spec: api.ImageSpec{
-			Size:   volume.Spec.Resources.StorageBytes,
+			Size:   imageSize,
 			Limits: calculatedLimits,
 			Image:  volume.Spec.Image,
 			Encryption: api.EncryptionSpec{
@@ -91,36 +87,26 @@ func (s *Server) getCephVolumeConfig(ctx context.Context, log logr.Logger, volum
 	apiutils.SetClassLabel(image, volume.Spec.Class)
 	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
 
-	return &CephVolumeConfig{
-		image: image,
-	}, nil
-
-}
-
-func (s *Server) createImage(ctx context.Context, log logr.Logger, cfg *CephVolumeConfig) (*AggregatedImage, error) {
-	image, err := s.imageStore.Create(ctx, cfg.image)
+	log.V(2).Info("Create image in store")
+	image, err = s.imageStore.Create(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create image: %w", err)
 	}
 
-	return &AggregatedImage{image: image}, nil
+	return image, nil
 }
 
 func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest) (res *ori.CreateVolumeResponse, retErr error) {
 	log := s.loggerFrom(ctx)
-	log.V(1).Info("Validating volume request")
 
-	cfg, err := s.getCephVolumeConfig(ctx, log, req.Volume)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get ceph volume config: %w", err)
-	}
-
-	volume, err := s.createImage(ctx, log, cfg)
+	log.V(1).Info("Create Ceph image from volume")
+	image, err := s.createImageFromVolume(ctx, log, req.Volume)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
-	oriVolume, err := s.convertImageToOriVolume(ctx, log, volume.image)
+	log.V(1).Info("Convert image to volume")
+	oriVolume, err := s.convertImageToOriVolume(ctx, log, image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}

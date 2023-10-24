@@ -19,22 +19,28 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/onmetal/cephlet/pkg/utils"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
-func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId string, storageBytes uint64) error {
+func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId string, storageBytes int64) error {
 	log.V(2).Info("Fetching ceph image")
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
 		return fmt.Errorf("unable to get ceph image: %w", err)
 	}
 
-	if storageBytes <= cephImage.Spec.Size {
+	validatedStorageBytes, err := utils.Int64ToUint64(storageBytes)
+	if err != nil {
+		return err
+	}
+
+	if validatedStorageBytes <= cephImage.Spec.Size {
 		return fmt.Errorf("requested size %q must be greater than current size %q", storageBytes, cephImage.Spec.Size)
 	}
 
 	log.V(2).Info("Updating ceph image with new size", "storageBytes", storageBytes)
-	cephImage.Spec.Size = storageBytes
+	cephImage.Spec.Size = validatedStorageBytes
 	if _, err := s.imageStore.Update(ctx, cephImage); err != nil {
 		return fmt.Errorf("failed to update ceph image: %w", err)
 	}

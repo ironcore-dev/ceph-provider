@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
+	"github.com/onmetal/cephlet/pkg/utils"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
@@ -87,10 +88,15 @@ func (s *Server) getOriVolumeAccess(ctx context.Context, log logr.Logger, image 
 }
 
 func (s *Server) getOriVolumeSpec(image *api.Image) (*ori.VolumeSpec, error) {
+	storageBytes, err := utils.Uint64ToInt64(image.Spec.Size)
+	if err != nil {
+		return nil, err
+	}
+
 	spec := &ori.VolumeSpec{
 		Image: image.Spec.Image,
 		Resources: &ori.VolumeResources{
-			StorageBytes: image.Spec.Size,
+			StorageBytes: storageBytes,
 		},
 	}
 

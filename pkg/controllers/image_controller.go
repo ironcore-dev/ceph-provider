@@ -336,50 +336,38 @@ func (r *ImageReconciler) isImageExisting(ctx context.Context, log logr.Logger, 
 	return false, nil
 }
 
-func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) error {
+func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *api.Image) (err error) {
 	log.V(2).Info("Updating image")
 	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open image: %w", err)
 	}
-
-	currentSize, err := img.GetSize()
-	if err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
+	defer func() {
+		if err = img.Close(); err != nil {
+			log.Error(err, "failed to close image source")
 		}
+	}()
+
+	currentImageSize, err := img.GetSize()
+	if err != nil {
 		return fmt.Errorf("failed to get image size: %w", err)
 	}
 
 	requestedSize := round.OffBytes(image.Spec.Size)
 
 	switch {
-	case currentSize == requestedSize:
+	case currentImageSize == requestedSize:
 		log.V(2).Info("No update needed: Old and new image size same")
-		if err := img.Close(); err != nil {
-			return fmt.Errorf("unable to close image: %w", err)
-		}
 		return nil
-	case requestedSize < currentSize:
-		err := fmt.Errorf("failed to shrink image: not supported")
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-		}
-		return err
+	case requestedSize < currentImageSize:
+		return fmt.Errorf("failed to shrink image: not supported")
 	}
 
 	if err := img.Resize(requestedSize); err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-		}
 		return fmt.Errorf("failed to resize image: %w", err)
 	}
 
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close image: %w", err)
-	}
-
-	log.V(1).Info("Expanded image", "requestedSize", requestedSize, "currentSize", currentSize)
+	log.V(1).Info("Updated image", "requestedSize", requestedSize, "currentSize", currentImageSize)
 	return nil
 }
 
@@ -396,7 +384,6 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		if !errors.Is(err, store.ErrNotFound) {
 			return fmt.Errorf("failed to fetch image from store: %w", err)
 		}
-
 		return nil
 	}
 

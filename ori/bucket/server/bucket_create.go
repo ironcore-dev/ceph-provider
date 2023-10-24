@@ -27,74 +27,61 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type AggregateBucket struct {
-	BucketClaim  *objectbucketv1alpha1.ObjectBucketClaim
-	AccessSecret *corev1.Secret
-}
-
-type BucketConfig struct {
-	BucketClaim *objectbucketv1alpha1.ObjectBucketClaim
-}
-
-func (s *Server) getBucketConfig(_ context.Context, bucket *ori.Bucket) (*BucketConfig, error) {
+func (s *Server) createBucketClaimAndAccessSecretFromBucket(
+	ctx context.Context,
+	log logr.Logger,
+	bucket *ori.Bucket,
+) (*objectbucketv1alpha1.ObjectBucketClaim, *corev1.Secret, error) {
+	generateBucketName := s.idGen.Generate()
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ObjectBucketClaim",
 			APIVersion: "objectbucket.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.idGen.Generate(),
+			Name:      generateBucketName,
 			Namespace: s.namespace,
 		},
 		Spec: objectbucketv1alpha1.ObjectBucketClaimSpec{
 			StorageClassName:   s.bucketPoolStorageClassName,
-			GenerateBucketName: s.idGen.Generate(),
+			GenerateBucketName: generateBucketName,
 		},
 	}
 
 	if err := apiutils.SetObjectMetadata(bucketClaim, bucket.Metadata); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	apiutils.SetClassLabel(bucketClaim, bucket.Spec.Class)
 	apiutils.SetBucketManagerLabel(bucketClaim, bucketv1alpha1.BucketManager)
 
-	return &BucketConfig{
-		BucketClaim: bucketClaim,
-	}, nil
-}
-
-func (s *Server) createBucket(ctx context.Context, log logr.Logger, cfg *BucketConfig) (res *AggregateBucket, retErr error) {
 	log.V(1).Info("Creating bucket claim")
-	if err := s.client.Create(ctx, cfg.BucketClaim); err != nil {
-		return nil, fmt.Errorf("error creating bucket: %w", err)
+	if err := s.client.Create(ctx, bucketClaim); err != nil {
+		return nil, nil, fmt.Errorf("error creating bucket: %w", err)
 	}
 
-	accessSecret, err := s.getBucketAccessSecretIfRequired(cfg.BucketClaim, s.clientGetSecretFunc(ctx))
+	log.V(1).Info("Getting bucket access secret")
+	accessSecret, err := s.getBucketAccessSecretIfRequired(bucketClaim, s.clientGetSecretFunc(ctx))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &AggregateBucket{
-		BucketClaim:  cfg.BucketClaim,
-		AccessSecret: accessSecret,
-	}, nil
+	return bucketClaim, accessSecret, nil
 }
 
-func (s *Server) CreateBucket(ctx context.Context, req *ori.CreateBucketRequest) (res *ori.CreateBucketResponse, retErr error) {
+func (s *Server) CreateBucket(
+	ctx context.Context,
+	req *ori.CreateBucketRequest,
+) (res *ori.CreateBucketResponse, retErr error) {
 	log := s.loggerFrom(ctx)
 
-	log.V(1).Info("Getting bucket configuration")
-	cfg, err := s.getBucketConfig(ctx, req.Bucket)
+	log.V(1).Info("Create bucket claim and bucket access secret")
+	bucketClaim, accessSecret, err := s.createBucketClaimAndAccessSecretFromBucket(ctx, log, req.Bucket)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket config: %w", err)
 	}
 
-	aggregateBucket, err := s.createBucket(ctx, log, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("error creating bucket: %w", err)
-	}
-
-	v, err := s.convertAggregateBucket(aggregateBucket)
+	log.V(1).Info("Generate ORI bucket object")
+	v, err := s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 	if err != nil {
 		return nil, err
 	}

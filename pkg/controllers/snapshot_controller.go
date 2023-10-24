@@ -312,7 +312,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		}
 	}
 
-	rc, size, digest, err := r.openSnapshotSource(ctx, snapshot.Source)
+	rc, snapshotSize, digest, err := r.openSnapshotSource(ctx, snapshot.Source)
 	if err != nil {
 		return fmt.Errorf("failed to open snapshot source: %w", err)
 	}
@@ -331,7 +331,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 	log.V(2).Info("Configured pool", "pool", r.pool)
 
-	roundedSize := round.OffBytes(size)
+	roundedSize := round.OffBytes(snapshotSize)
 	if err = librbd.CreateImage(ioCtx, SnapshotIDToRBDID(snapshot.ID), roundedSize, options); err != nil {
 		return fmt.Errorf("failed to create os rbd image: %w", err)
 	}

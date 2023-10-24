@@ -42,9 +42,11 @@ var _ = Describe("Volume Status", func() {
 					Iops: 100,
 				},
 			})),
+			// TODO: The pool size depends on the ceph setup in the integration test workflow.
+			// We need to adjust/make the pool size configurable in the future.
 			HaveField("Quantity", And(
-				BeNumerically(">", 9*1024*1024*1024),
-				BeNumerically("<=", 10*1024*1024*1024),
+				BeNumerically(">", int64(9*1024*1024*1024)),
+				BeNumerically("<=", int64(14*1024*1024*1024)),
 			)),
 		))
 
@@ -70,7 +72,7 @@ var _ = Describe("Volume Status", func() {
 
 		By("ensuring correct iops and tps/bps in Ceph cluster image specs")
 		image := &api.Image{}
-		Eventually(ctx, func() *api.Image {
+		Eventually(func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
