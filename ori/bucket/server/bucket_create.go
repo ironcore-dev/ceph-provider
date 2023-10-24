@@ -20,9 +20,8 @@ import (
 
 	"github.com/go-logr/logr"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	bucketv1alpha1 "github.com/onmetal/cephlet/ori/bucket/api/v1alpha1"
 	"github.com/onmetal/cephlet/ori/bucket/apiutils"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,7 +29,7 @@ import (
 func (s *Server) createBucketClaimAndAccessSecretFromBucket(
 	ctx context.Context,
 	log logr.Logger,
-	bucket *ori.Bucket,
+	bucket *oriv1alpha1.Bucket,
 ) (*objectbucketv1alpha1.ObjectBucketClaim, *corev1.Secret, error) {
 	generateBucketName := s.idGen.Generate()
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
@@ -52,7 +51,7 @@ func (s *Server) createBucketClaimAndAccessSecretFromBucket(
 		return nil, nil, err
 	}
 	apiutils.SetClassLabel(bucketClaim, bucket.Spec.Class)
-	apiutils.SetBucketManagerLabel(bucketClaim, bucketv1alpha1.BucketManager)
+	apiutils.SetBucketManagerLabel(bucketClaim, apiutils.BucketManager)
 
 	log.V(1).Info("Creating bucket claim")
 	if err := s.client.Create(ctx, bucketClaim); err != nil {
@@ -70,8 +69,8 @@ func (s *Server) createBucketClaimAndAccessSecretFromBucket(
 
 func (s *Server) CreateBucket(
 	ctx context.Context,
-	req *ori.CreateBucketRequest,
-) (res *ori.CreateBucketResponse, retErr error) {
+	req *oriv1alpha1.CreateBucketRequest,
+) (res *oriv1alpha1.CreateBucketResponse, retErr error) {
 	log := s.loggerFrom(ctx)
 
 	log.V(1).Info("Create bucket claim and bucket access secret")
@@ -86,7 +85,7 @@ func (s *Server) CreateBucket(
 		return nil, err
 	}
 
-	return &ori.CreateBucketResponse{
+	return &oriv1alpha1.CreateBucketResponse{
 		Bucket: v,
 	}, nil
 }

@@ -17,27 +17,26 @@ package integration
 import (
 	"encoding/json"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
-	oriv1alpha1 "github.com/onmetal/cephlet/ori/volume/api/v1alpha1"
+	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/omap"
 	metav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	onmetalv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Volume Status", func() {
 	It("should get the supported volume class status", func(ctx SpecContext) {
 		By("getting volume status")
-		resp, err := volumeClient.Status(ctx, &onmetalv1alpha1.StatusRequest{})
+		resp, err := volumeClient.Status(ctx, &oriv1alpha1.StatusRequest{})
 		Expect(err).NotTo(HaveOccurred())
 
 		By("validating volume class status")
 		Expect(resp.VolumeClassStatus[0]).Should(SatisfyAll(
-			HaveField("VolumeClass", Equal(&onmetalv1alpha1.VolumeClass{
+			HaveField("VolumeClass", Equal(&oriv1alpha1.VolumeClass{
 				Name: "foo",
-				Capabilities: &onmetalv1alpha1.VolumeClassCapabilities{
+				Capabilities: &oriv1alpha1.VolumeClassCapabilities{
 					Tps:  100,
 					Iops: 100,
 				},
@@ -51,14 +50,14 @@ var _ = Describe("Volume Status", func() {
 		))
 
 		By("creating a volume with the given volume class")
-		createResp, err := volumeClient.CreateVolume(ctx, &onmetalv1alpha1.CreateVolumeRequest{
-			Volume: &onmetalv1alpha1.Volume{
+		createResp, err := volumeClient.CreateVolume(ctx, &oriv1alpha1.CreateVolumeRequest{
+			Volume: &oriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
 					Id: "foo",
 				},
-				Spec: &onmetalv1alpha1.VolumeSpec{
+				Spec: &oriv1alpha1.VolumeSpec{
 					Class: "foo",
-					Resources: &onmetalv1alpha1.VolumeResources{
+					Resources: &oriv1alpha1.VolumeResources{
 						StorageBytes: 1 * 1024,
 					},
 				},
@@ -80,7 +79,7 @@ var _ = Describe("Volume Status", func() {
 			return image
 		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
-			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
+			HaveField("Metadata.Labels", HaveKeyWithValue(apiutils.ClassLabel, "foo")),
 			HaveField("Spec.Size", Equal(uint64(1*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
@@ -91,5 +90,9 @@ var _ = Describe("Volume Status", func() {
 				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
 			)),
 		))
+
+		DeferCleanup(volumeClient.DeleteVolume, &oriv1alpha1.DeleteVolumeRequest{
+			VolumeId: createResp.Volume.Metadata.Id,
+		})
 	})
 })
