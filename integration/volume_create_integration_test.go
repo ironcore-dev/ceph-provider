@@ -60,7 +60,7 @@ var _ = Describe("Create Volume", func() {
 
 		By("ensuring the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
-		Eventually(func() *api.Image {
+		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
@@ -155,7 +155,7 @@ var _ = Describe("Create Volume", func() {
 
 		By("ensuring the correct image has been created inside the ceph cluster with encryption header")
 		image := &api.Image{}
-		Eventually(func() *api.Image {
+		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))

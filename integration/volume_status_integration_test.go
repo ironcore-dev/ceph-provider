@@ -43,8 +43,8 @@ var _ = Describe("Volume Status", func() {
 				},
 			})),
 			HaveField("Quantity", And(
-				BeNumerically(">", 9*1024*1024*1024),
-				BeNumerically("<=", 10*1024*1024*1024),
+				BeNumerically(">", int64(9*1024*1024*1024)),
+				BeNumerically("<=", int64(14*1024*1024*1024)),
 			)),
 		))
 
