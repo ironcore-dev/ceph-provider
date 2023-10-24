@@ -70,7 +70,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(int64(1024*1024*1024))),
+			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
@@ -165,7 +165,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(int64(1024*1024*1024))),
+			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),

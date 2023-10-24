@@ -16,8 +16,7 @@ package utils
 
 import (
 	"errors"
-
-	"golang.org/x/exp/slices"
+	"slices"
 )
 
 func DeleteSliceElement[E comparable](s []E, elem E) []E {
@@ -40,4 +39,12 @@ func Uint64ToInt64(u uint64) (int64, error) {
 		return 0, errors.New("uint64 value is out of int64 range")
 	}
 	return int64(u), nil
+}
+
+// Int64ToUint64 converts an int64 to an uint64 and returns an error if the value is negative.
+func Int64ToUint64(i int64) (uint64, error) {
+	if i < 0 {
+		return 0, errors.New("failed to convert a negative int64 to uint64")
+	}
+	return uint64(i), nil
 }

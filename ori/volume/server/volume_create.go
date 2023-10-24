@@ -23,6 +23,7 @@ import (
 	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/limits"
+	"github.com/onmetal/cephlet/pkg/utils"
 	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
@@ -43,12 +44,17 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 
 	calculatedLimits := limits.Calculate(class.Capabilities.Iops, class.Capabilities.Tps, s.burstFactor, s.burstDurationInSeconds)
 
+	imageSize, err := utils.Int64ToUint64(volume.Spec.Resources.StorageBytes)
+	if err != nil {
+		return nil, err
+	}
+
 	image := &api.Image{
 		Metadata: api.Metadata{
 			ID: s.idGen.Generate(),
 		},
 		Spec: api.ImageSpec{
-			Size:   volume.Spec.Resources.StorageBytes,
+			Size:   imageSize,
 			Limits: calculatedLimits,
 			Image:  volume.Spec.Image,
 			Encryption: api.EncryptionSpec{
@@ -82,7 +88,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
 
 	log.V(2).Info("Create image in store")
-	image, err := s.imageStore.Create(ctx, image)
+	image, err = s.imageStore.Create(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create image: %w", err)
 	}

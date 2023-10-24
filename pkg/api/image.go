@@ -35,7 +35,7 @@ const (
 )
 
 type ImageSpec struct {
-	Size        int64          `json:"size"`
+	Size        uint64         `json:"size"`
 	WWN         string         `json:"wwn"`
 	Limits      Limits         `json:"limits"`
 	Image       string         `json:"image"`

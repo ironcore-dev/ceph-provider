@@ -42,6 +42,8 @@ var _ = Describe("Volume Status", func() {
 					Iops: 100,
 				},
 			})),
+			// TODO: The pool size depends on the ceph setup in the integration test workflow.
+			// We need to adjust/make the pool size configurable in the future.
 			HaveField("Quantity", And(
 				BeNumerically(">", int64(9*1024*1024*1024)),
 				BeNumerically("<=", int64(14*1024*1024*1024)),
@@ -79,7 +81,7 @@ var _ = Describe("Volume Status", func() {
 		}).Should(SatisfyAll(
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(oriv1alpha1.ClassLabel, "foo")),
-			HaveField("Spec.Size", Equal(int64(1*1024))),
+			HaveField("Spec.Size", Equal(uint64(1*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
 				HaveKeyWithValue(api.WriteBPSLimit, int64(100)),
