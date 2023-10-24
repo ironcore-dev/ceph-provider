@@ -35,10 +35,13 @@ import (
 	"github.com/onmetal/onmetal-api/ori/remote/volume"
 )
 
-var (
-	srvCtx context.Context
-	cancel context.CancelFunc
+const (
+	pollingInterval      = 50 * time.Millisecond
+	eventuallyTimeout    = 5 * time.Second
+	consistentlyDuration = 1 * time.Second
+)
 
+var (
 	volumeClient v1alpha1.VolumeRuntimeClient
 	ioctx        *rados.IOContext
 
@@ -51,6 +54,11 @@ var (
 )
 
 func TestIntegration_GRPCServer(t *testing.T) {
+	SetDefaultConsistentlyPollingInterval(pollingInterval)
+	SetDefaultEventuallyPollingInterval(pollingInterval)
+	SetDefaultEventuallyTimeout(eventuallyTimeout)
+	SetDefaultConsistentlyDuration(consistentlyDuration)
+
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "GRPC Server Suite", Label("integration"))
 }
@@ -97,7 +105,7 @@ var _ = BeforeSuite(func() {
 		},
 	}
 
-	srvCtx, cancel = context.WithCancel(context.Background())
+	srvCtx, cancel := context.WithCancel(context.Background())
 	DeferCleanup(cancel)
 
 	go func() {

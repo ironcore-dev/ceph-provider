@@ -39,42 +39,6 @@ func (s *Server) listManagedAndCreated(ctx context.Context, list client.ObjectLi
 	)
 }
 
-func (s *Server) listAggregateBuckets(ctx context.Context) ([]AggregateBucket, error) {
-	bucketClaimList := &objectbucketv1alpha1.ObjectBucketClaimList{}
-	if err := s.listManagedAndCreated(ctx, bucketClaimList); err != nil {
-		return nil, fmt.Errorf("error listing buckets: %w", err)
-	}
-
-	secretList := &corev1.SecretList{}
-	if err := s.client.List(ctx, secretList,
-		client.InNamespace(s.namespace),
-	); err != nil {
-		return nil, fmt.Errorf("error listing secrets: %w", err)
-	}
-
-	secretByNameGetter, err := common.NewObjectGetter[string, *corev1.Secret](
-		corev1.Resource("secrets"),
-		common.ByObjectName[*corev1.Secret](),
-		common.ObjectSlice[string](secretList.Items),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error constructing secret getter: %w", err)
-	}
-
-	var res []AggregateBucket
-	for i := range bucketClaimList.Items {
-		bucketClaim := &bucketClaimList.Items[i]
-		aggregateBucket, err := s.aggregateBucket(bucketClaim, secretByNameGetter.Get)
-		if err != nil {
-			return nil, fmt.Errorf("error aggregating bucket %s: %w", bucketClaim.Name, err)
-		}
-
-		res = append(res, *aggregateBucket)
-	}
-
-	return res, nil
-}
-
 func (s *Server) clientGetSecretFunc(ctx context.Context) func(string) (*corev1.Secret, error) {
 	return func(name string) (*corev1.Secret, error) {
 		secret := &corev1.Secret{}
@@ -96,48 +60,55 @@ func (s *Server) getBucketAccessSecretIfRequired(
 	return getSecret(bucketClaim.Name)
 }
 
-func (s *Server) aggregateBucket(
+func (s *Server) getAccessSecretForBucketClaim(
 	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
 	getSecret func(string) (*corev1.Secret, error),
-) (*AggregateBucket, error) {
+) (*corev1.Secret, error) {
 	accessSecret, err := s.getBucketAccessSecretIfRequired(bucketClaim, getSecret)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket access secret: %w", err)
 	}
-
-	return &AggregateBucket{
-		BucketClaim:  bucketClaim,
-		AccessSecret: accessSecret,
-	}, nil
+	return accessSecret, nil
 }
 
-func (s *Server) getAggregateBucket(ctx context.Context, id string) (*AggregateBucket, error) {
-	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{}
-	if err := s.getManagedAndCreated(ctx, id, bucketClaim); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("error getting bucket %s: %w", id, err)
-		}
-		return nil, status.Errorf(codes.NotFound, "bucket %s not found", id)
-	}
-
-	return s.aggregateBucket(bucketClaim, s.clientGetSecretFunc(ctx))
-}
-
-func (s *Server) listBuckets(ctx context.Context) ([]*ori.Bucket, error) {
-	buckets, err := s.listAggregateBuckets(ctx)
-	if err != nil {
+func (s *Server) getAllManagedBuckets(ctx context.Context) ([]*ori.Bucket, error) {
+	bucketClaimList := &objectbucketv1alpha1.ObjectBucketClaimList{}
+	if err := s.listManagedAndCreated(ctx, bucketClaimList); err != nil {
 		return nil, fmt.Errorf("error listing buckets: %w", err)
 	}
 
+	secretList := &corev1.SecretList{}
+	if err := s.client.List(ctx, secretList,
+		client.InNamespace(s.namespace),
+	); err != nil {
+		return nil, fmt.Errorf("error listing secrets: %w", err)
+	}
+
+	secretByNameGetter, err := common.NewObjectGetter[string, *corev1.Secret](
+		corev1.Resource("secrets"),
+		common.ByObjectName[*corev1.Secret](),
+		common.ObjectSlice[string](secretList.Items),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error constructing secret getter: %w", err)
+	}
+
 	var res []*ori.Bucket
-	for _, bucket := range buckets {
-		aggregateBucket, err := s.convertAggregateBucket(&bucket)
+	for i := range bucketClaimList.Items {
+		bucketClaim := &bucketClaimList.Items[i]
+		accessSecret, err := s.getAccessSecretForBucketClaim(bucketClaim, secretByNameGetter.Get)
+		if err != nil {
+			return nil, fmt.Errorf("error aggregating bucket %s: %w", bucketClaim.Name, err)
+		}
+
+		bucket, err := s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 		if err != nil {
 			return nil, err
 		}
 
-		res = append(res, aggregateBucket)
+		res = append(res, bucket)
 	}
+
 	return res, nil
 }
 
@@ -160,18 +131,26 @@ func (s *Server) filterBuckets(buckets []*ori.Bucket, filter *ori.BucketFilter) 
 	return res
 }
 
-func (s *Server) getBucket(ctx context.Context, id string) (*ori.Bucket, error) {
-	bucket, err := s.getAggregateBucket(ctx, id)
-	if err != nil {
-		return nil, err
+func (s *Server) getBucketForID(ctx context.Context, id string) (*ori.Bucket, error) {
+	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{}
+	if err := s.getManagedAndCreated(ctx, id, bucketClaim); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("error getting bucket %s: %w", id, err)
+		}
+		return nil, status.Errorf(codes.NotFound, "bucket %s not found", id)
 	}
 
-	return s.convertAggregateBucket(bucket)
+	accessSecret, err := s.getAccessSecretForBucketClaim(bucketClaim, s.clientGetSecretFunc(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access secret for bucket: %w", err)
+	}
+
+	return s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 }
 
 func (s *Server) ListBuckets(ctx context.Context, req *ori.ListBucketsRequest) (*ori.ListBucketsResponse, error) {
 	if filter := req.Filter; filter != nil && filter.Id != "" {
-		bucket, err := s.getBucket(ctx, filter.Id)
+		bucket, err := s.getBucketForID(ctx, filter.Id)
 		if err != nil {
 			if status.Code(err) != codes.NotFound {
 				return nil, err
@@ -186,7 +165,7 @@ func (s *Server) ListBuckets(ctx context.Context, req *ori.ListBucketsRequest) (
 		}, nil
 	}
 
-	buckets, err := s.listBuckets(ctx)
+	buckets, err := s.getAllManagedBuckets(ctx)
 	if err != nil {
 		return nil, err
 	}

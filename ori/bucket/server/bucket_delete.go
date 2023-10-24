@@ -25,20 +25,19 @@ import (
 )
 
 func (s *Server) DeleteBucket(ctx context.Context, req *ori.DeleteBucketRequest) (*ori.DeleteBucketResponse, error) {
-	bucketID := req.BucketId
-	log := s.loggerFrom(ctx, "BucketID", bucketID)
+	log := s.loggerFrom(ctx, "BucketID", req.BucketId)
 
-	aggregateBucket, err := s.getAggregateBucket(ctx, req.BucketId)
+	bucketClaim, err := s.getBucketClaimForID(ctx, req.BucketId)
 	if err != nil {
 		return nil, err
 	}
 
-	log.V(1).Info("Deleting bucket")
-	if err := s.client.Delete(ctx, aggregateBucket.BucketClaim); err != nil {
+	log.V(1).Info("Deleting the bucket")
+	if err := s.client.Delete(ctx, bucketClaim); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("error deleting bucket claim: %w", err)
 		}
-		return nil, status.Errorf(codes.NotFound, "bucket claim %s not found", bucketID)
+		return nil, status.Errorf(codes.NotFound, "bucket claim %s not found", req.BucketId)
 	}
 
 	return &ori.DeleteBucketResponse{}, nil

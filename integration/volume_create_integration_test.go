@@ -52,7 +52,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
 			HaveField("Volume.Spec.Image", Equal("")),
 			HaveField("Volume.Spec.Class", Equal("foo")),
-			HaveField("Volume.Spec.Resources.StorageBytes", Equal(uint64(1024*1024*1024))),
+			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
 			HaveField("Volume.Status.State", Equal(onmetalv1alpha1.VolumeState_VOLUME_PENDING)),
 			HaveField("Volume.Status.Access", BeNil()),
@@ -95,7 +95,7 @@ var _ = Describe("Create Volume", func() {
 		))
 
 		By("ensuring volume is in available state and other state fields have been updated")
-		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
+		Eventually(func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
@@ -147,7 +147,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
 			HaveField("Volume.Spec.Image", Equal("")),
 			HaveField("Volume.Spec.Class", Equal("foo")),
-			HaveField("Volume.Spec.Resources.StorageBytes", Equal(uint64(1024*1024*1024))),
+			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
 			HaveField("Volume.Status.State", Equal(onmetalv1alpha1.VolumeState_VOLUME_PENDING)),
 			HaveField("Volume.Status.Access", BeNil()),
@@ -190,7 +190,7 @@ var _ = Describe("Create Volume", func() {
 		))
 
 		By("ensuring volume is in available state and other state fields have been updated")
-		Eventually(ctx, func() *onmetalv1alpha1.VolumeStatus {
+		Eventually(func() *onmetalv1alpha1.VolumeStatus {
 			resp, err := volumeClient.ListVolumes(ctx, &onmetalv1alpha1.ListVolumesRequest{
 				Filter: &onmetalv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,

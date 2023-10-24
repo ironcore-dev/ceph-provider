@@ -18,20 +18,20 @@ import (
 	"fmt"
 
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
+	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	"github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
-
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
 )
 
-var _ = Describe("BucketReconciler", func() {
-	It("should delete a bucket", func(ctx SpecContext) {
-		By("creating a bucket")
+var _ = Describe("DeleteBucket test", func() {
+	It("Should delete a bucket", func(ctx SpecContext) {
+		By("Creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &ori.CreateBucketRequest{
 			Bucket: &ori.Bucket{
 				Metadata: &v1alpha1.ObjectMetadata{
@@ -44,34 +44,37 @@ var _ = Describe("BucketReconciler", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		By("ensuring the correct creation response")
+		By("Ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Bucket.Metadata.Id", Equal(createResp.Bucket.Metadata.Id)),
 			HaveField("Bucket.Spec.Class", Equal("foo")),
 			HaveField("Bucket.Status.State", Equal(ori.BucketState_BUCKET_PENDING)),
 		))
 
-		By("ensuring the bucketClaim is created")
+		By("Ensuring the bucketClaim is created")
 		bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      createResp.Bucket.Metadata.Id,
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(bucketClaim)).Should(Succeed())
+		Eventually(Object(bucketClaim)).Should(SatisfyAll(
+			HaveField("Spec.StorageClassName", "foo"),
+			HaveField("Spec.GenerateBucketName", createResp.Bucket.Metadata.Id),
+		))
 
-		By("patching bucketClaim spec BucketName with GenerateBucketName")
+		By("Patching BucketName in BucketClaim Spec with GenerateBucketName")
 		bucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
 		Expect(k8sClient.Patch(ctx, bucketClaim, client.MergeFrom(bucketClaimBase))).To(Succeed())
 
-		By("patching the bucketClaim status phase to be bound")
+		By("Patching the BucketClaim status phase to be bound")
 		updatedBucketClaimBase := bucketClaim.DeepCopy()
 		bucketClaim.Status.Phase = objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound
 		bucketClaim.Spec.BucketName = createResp.Bucket.Metadata.Id
 		Expect(k8sClient.Status().Patch(ctx, bucketClaim, client.MergeFrom(updatedBucketClaimBase))).To(Succeed())
 
-		By("creating a bucket access secret")
+		By("Creating a bucket access secret")
 		secretData := map[string][]byte{
 			"AccessKeyID":     []byte("foo"),
 			"SecretAccessKey": []byte("bar"),
@@ -86,17 +89,17 @@ var _ = Describe("BucketReconciler", func() {
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-		By("ensuring the bucket access secret is created")
+		By("Ensuring the bucket access secret is created")
 		accessSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      bucketClaim.Name,
 				Namespace: rookNamespace.Name,
 			},
 		}
-		Eventually(ctx, Get(accessSecret)).Should(Succeed())
+		Eventually(Get(accessSecret)).Should(Succeed())
 
-		By("ensuring bucket is in available state and Access fields have been updated")
-		Eventually(ctx, func() *ori.BucketStatus {
+		By("Ensuring bucket is in available state and Access fields have been updated")
+		Eventually(func() *ori.BucketStatus {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
@@ -116,14 +119,14 @@ var _ = Describe("BucketReconciler", func() {
 			)),
 		))
 
-		By("deleting a bucket")
+		By("Deleting the bucket")
 		_, err = bucketClient.DeleteBucket(ctx, &ori.DeleteBucketRequest{
 			BucketId: createResp.Bucket.Metadata.Id,
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		By("ensuring bucket is deleted")
-		Eventually(ctx, func() {
+		By("Ensuring the bucket is deleted")
+		Eventually(func() {
 			resp, err := bucketClient.ListBuckets(ctx, &ori.ListBucketsRequest{
 				Filter: &ori.BucketFilter{
 					Id: createResp.Bucket.Metadata.Id,
@@ -132,5 +135,6 @@ var _ = Describe("BucketReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.Buckets).To(BeEmpty())
 		})
+		Eventually(Get(bucketClaim)).Should(Satisfy(apierrors.IsNotFound))
 	})
 })
