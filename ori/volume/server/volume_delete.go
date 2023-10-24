@@ -35,6 +35,7 @@ func (s *Server) DeleteVolume(ctx context.Context, req *ori.DeleteVolumeRequest)
 		}
 		return nil, status.Errorf(codes.NotFound, "volume %s not found", req.VolumeId)
 	}
+	log.V(1).Info("Volume deleted")
 
 	return &ori.DeleteVolumeResponse{}, nil
 }

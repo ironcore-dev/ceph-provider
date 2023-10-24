@@ -27,7 +27,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Server) createBucketClaimAndAccessSecret(ctx context.Context, log logr.Logger, bucket *ori.Bucket) (*objectbucketv1alpha1.ObjectBucketClaim, *corev1.Secret, error) {
+func (s *Server) createBucketClaimAndAccessSecretFromBucket(
+	ctx context.Context,
+	log logr.Logger,
+	bucket *ori.Bucket,
+) (*objectbucketv1alpha1.ObjectBucketClaim, *corev1.Secret, error) {
 	generateBucketName := s.idGen.Generate()
 	bucketClaim := &objectbucketv1alpha1.ObjectBucketClaim{
 		TypeMeta: metav1.TypeMeta{
@@ -64,11 +68,14 @@ func (s *Server) createBucketClaimAndAccessSecret(ctx context.Context, log logr.
 	return bucketClaim, accessSecret, nil
 }
 
-func (s *Server) CreateBucket(ctx context.Context, req *ori.CreateBucketRequest) (res *ori.CreateBucketResponse, retErr error) {
+func (s *Server) CreateBucket(
+	ctx context.Context,
+	req *ori.CreateBucketRequest,
+) (res *ori.CreateBucketResponse, retErr error) {
 	log := s.loggerFrom(ctx)
 
 	log.V(1).Info("Create bucket claim and bucket access secret")
-	bucketClaim, accessSecret, err := s.createBucketClaimAndAccessSecret(ctx, log, req.Bucket)
+	bucketClaim, accessSecret, err := s.createBucketClaimAndAccessSecretFromBucket(ctx, log, req.Bucket)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket config: %w", err)
 	}

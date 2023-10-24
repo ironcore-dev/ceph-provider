@@ -30,18 +30,16 @@ const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
-func (s *Server) createImage(ctx context.Context, log logr.Logger, volume *ori.Volume) (*api.Image, error) {
-	log.V(2).Info("Getting ceph volume config")
-
+func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, volume *ori.Volume) (*api.Image, error) {
 	if volume == nil {
-		return nil, fmt.Errorf("volume is nil")
+		return nil, fmt.Errorf("got an empty volume")
 	}
 
+	log.V(2).Info("Get volumeclass")
 	class, found := s.volumeClasses.Get(volume.Spec.Class)
 	if !found {
 		return nil, fmt.Errorf("volume class '%s' not supported", volume.Spec.Class)
 	}
-	log.V(2).Info("Validated class")
 
 	calculatedLimits := limits.Calculate(class.Capabilities.Iops, class.Capabilities.Tps, s.burstFactor, s.burstDurationInSeconds)
 
@@ -83,6 +81,7 @@ func (s *Server) createImage(ctx context.Context, log logr.Logger, volume *ori.V
 	apiutils.SetClassLabel(image, volume.Spec.Class)
 	apiutils.SetManagerLabel(image, volumev1alpha1.VolumeManager)
 
+	log.V(2).Info("Create image in store")
 	image, err := s.imageStore.Create(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create image: %w", err)
@@ -93,13 +92,14 @@ func (s *Server) createImage(ctx context.Context, log logr.Logger, volume *ori.V
 
 func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest) (res *ori.CreateVolumeResponse, retErr error) {
 	log := s.loggerFrom(ctx)
-	log.V(1).Info("Validating volume request")
 
-	image, err := s.createImage(ctx, log, req.Volume)
+	log.V(1).Info("Create Ceph image from volume")
+	image, err := s.createImageFromVolume(ctx, log, req.Volume)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
+	log.V(1).Info("Convert image to volume")
 	oriVolume, err := s.convertImageToOriVolume(ctx, log, image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)

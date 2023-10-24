@@ -34,7 +34,10 @@ var bucketClaimStateToORIState = map[objectbucketv1alpha1.ObjectBucketClaimStatu
 	objectbucketv1alpha1.ObjectBucketClaimStatusPhaseReleased: ori.BucketState_BUCKET_PENDING,
 }
 
-func (s *Server) convertBucketClaimAndAccessSecretToBucket(bucketClaim *objectbucketv1alpha1.ObjectBucketClaim, accessSecret *corev1.Secret) (*ori.Bucket, error) {
+func (s *Server) convertBucketClaimAndAccessSecretToBucket(
+	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
+	accessSecret *corev1.Secret,
+) (*ori.Bucket, error) {
 	metadata, err := apiutils.GetObjectMetadata(bucketClaim)
 	if err != nil {
 		return nil, err
@@ -78,7 +81,10 @@ func (s *Server) convertBucketClaimStateToBucketState(state objectbucketv1alpha1
 	return 0, fmt.Errorf("unknown bucket state %q", state)
 }
 
-func (s *Server) convertAccessSecretToBucketAccess(bucketClaim *objectbucketv1alpha1.ObjectBucketClaim, accessSecret *corev1.Secret) (*ori.BucketAccess, error) {
+func (s *Server) convertAccessSecretToBucketAccess(
+	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
+	accessSecret *corev1.Secret,
+) (*ori.BucketAccess, error) {
 	if bucketClaim.Status.Phase != objectbucketv1alpha1.ObjectBucketClaimStatusPhaseBound {
 		return nil, nil
 	}
