@@ -24,12 +24,30 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
+
+	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
+	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 )
 
 var _ = Describe("DeleteBucket test", func() {
+	BeforeEach(func(ctx SpecContext) {
+		bucketClass := &storagev1alpha1.BucketClass{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "foo",
+			},
+			Capabilities: corev1alpha1.ResourceList{
+				corev1alpha1.ResourceIOPS: resource.MustParse("100"),
+				corev1alpha1.ResourceTPS:  resource.MustParse("1"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, bucketClass)).To(Succeed())
+		DeferCleanup(k8sClient.Delete, bucketClass)
+	})
 	It("Should delete a bucket", func(ctx SpecContext) {
 		By("Creating a bucket")
 		createResp, err := bucketClient.CreateBucket(ctx, &oriv1alpha1.CreateBucketRequest{
