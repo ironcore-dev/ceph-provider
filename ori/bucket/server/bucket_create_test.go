@@ -32,7 +32,6 @@ import (
 )
 
 var _ = Describe("CreateBucket test", func() {
-
 	BeforeEach(func(ctx SpecContext) {
 		bucketClass := &storagev1alpha1.BucketClass{
 			TypeMeta: metav1.TypeMeta{},

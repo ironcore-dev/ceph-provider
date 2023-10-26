@@ -34,7 +34,6 @@ import (
 )
 
 var _ = Describe("DeleteBucket test", func() {
-
 	BeforeEach(func(ctx SpecContext) {
 		bucketClass := &storagev1alpha1.BucketClass{
 			TypeMeta: metav1.TypeMeta{},

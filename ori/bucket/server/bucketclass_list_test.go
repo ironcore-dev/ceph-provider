@@ -17,17 +17,16 @@ package server_test
 import (
 	corev1alpha1 "github.com/onmetal/onmetal-api/api/core/v1alpha1"
 	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("List bucketclass", func() {
-
-	It("should check empty bucket classes list", func(ctx SpecContext) {
-		By("creating a bucket classes")
+var _ = Describe("ListBucketClasses test", func() {
+	It("Should check empty BucketClasses list", func(ctx SpecContext) {
+		By("Creating a BucketClass")
 		bucketClass1 := &storagev1alpha1.BucketClass{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -40,6 +39,7 @@ var _ = Describe("List bucketclass", func() {
 		}
 		Expect(k8sClient.Create(ctx, bucketClass1)).To(Succeed())
 
+		By("Creating a second BucketClass")
 		bucketClass2 := &storagev1alpha1.BucketClass{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -52,32 +52,36 @@ var _ = Describe("List bucketclass", func() {
 		}
 		Expect(k8sClient.Create(ctx, bucketClass2)).To(Succeed())
 
-		By("listing bucket class list")
-		listBuckClasses, err := bucketClient.ListBucketClasses(ctx, &v1alpha1.ListBucketClassesRequest{})
+		By("Listing the available BucketClasses")
+		listBuckClasses, err := bucketClient.ListBucketClasses(ctx, &oriv1alpha1.ListBucketClassesRequest{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(listBuckClasses.BucketClasses).NotTo(BeEmpty())
+		Expect(listBuckClasses.BucketClasses).To(ContainElements(
+			&oriv1alpha1.BucketClass{
+				Name: "foo",
+				Capabilities: &oriv1alpha1.BucketClassCapabilities{
+					Tps:  1,
+					Iops: 100,
+				},
+			},
+			&oriv1alpha1.BucketClass{
+				Name: "bar",
+				Capabilities: &oriv1alpha1.BucketClassCapabilities{
+					Tps:  2,
+					Iops: 200,
+				},
+			},
+		))
 
-		for _, class := range listBuckClasses.BucketClasses {
-			if class.Name == "foo" {
-				Expect(class.Capabilities.Iops).Should(Equal(int64(100)))
-				Expect(class.Capabilities.Tps).Should(Equal(int64(1)))
-			}
-			if class.Name == "bar" {
-				Expect(class.Capabilities.Iops).Should(Equal(int64(200)))
-				Expect(class.Capabilities.Tps).Should(Equal(int64(2)))
-			}
-		}
-
-		By("deleting bucket classes")
+		By("Deleting the BucketClasses")
 		Expect(k8sClient.Delete(ctx, bucketClass1)).To(Succeed())
 		Expect(k8sClient.Delete(ctx, bucketClass2)).To(Succeed())
 
-		By("listing bucket class to check empty list")
+		By("Ensuring that the BucketClasses list is empty")
 		Eventually(ctx, func() {
-			listBuckClasses, err = bucketClient.ListBucketClasses(ctx, &v1alpha1.ListBucketClassesRequest{})
+			listBuckClasses, err = bucketClient.ListBucketClasses(ctx, &oriv1alpha1.ListBucketClassesRequest{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(listBuckClasses.BucketClasses).To(BeEmpty())
 		})
 	})
-
 })
