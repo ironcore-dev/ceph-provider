@@ -20,15 +20,18 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/onmetal/cephlet/ori/bucket/server"
-	"github.com/onmetal/controller-utils/configutils"
-	"github.com/onmetal/onmetal-api/broker/common"
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/onmetal/cephlet/pkg/bcr"
+
+	"github.com/onmetal/cephlet/ori/bucket/server"
+	"github.com/onmetal/controller-utils/configutils"
+	"github.com/onmetal/onmetal-api/broker/common"
+	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
 
 type Options struct {
@@ -52,6 +55,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.BucketEndpoint, "bucket-endpoint", o.BucketEndpoint, "Endpoint at which the buckets are reachable.")
 
 	fs.StringToStringVar(&o.BucketClassSelector, "bucket-class-selector", nil, "Selector for bucket classes to report as available.")
+	fs.StringVar(&o.PathSupportedBucketClasses, "supported-bucket-classes", o.PathSupportedBucketClasses, "File containing supported bucket classes.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -96,7 +100,17 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	srv, err := server.New(cfg, server.Options{
+	supportedClasses, err := bcr.LoadBucketClassesFile(opts.PathSupportedBucketClasses)
+	if err != nil {
+		return fmt.Errorf("failed to load supported volume classes: %w", err)
+	}
+
+	classRegistry, err := bcr.NewBucketClassRegistry(supportedClasses)
+	if err != nil {
+		return fmt.Errorf("failed to initialize volume class registry: %w", err)
+	}
+
+	srv, err := server.New(cfg, classRegistry, server.Options{
 		Namespace:                  opts.Namespace,
 		BucketPoolStorageClassName: opts.BucketPoolStorageClassName,
 		BucketClassSelector:        opts.BucketClassSelector,
