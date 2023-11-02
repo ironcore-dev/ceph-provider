@@ -23,6 +23,7 @@ import (
 
 func (s *Server) Status(ctx context.Context, req *ori.StatusRequest) (*ori.StatusResponse, error) {
 	log := s.loggerFrom(ctx)
+	log.V(1).Info("Volume Status called")
 
 	log.V(1).Info("Listing onmetal volume classes")
 	volumeClassList := s.volumeClasses.List()
@@ -41,7 +42,7 @@ func (s *Server) Status(ctx context.Context, req *ori.StatusRequest) (*ori.Statu
 		})
 	}
 
-	log.V(1).Info("Returning volume classes")
+	log.V(1).Info("Returning status with volume classes")
 	return &ori.StatusResponse{
 		VolumeClassStatus: volumeClassStatus,
 	}, nil

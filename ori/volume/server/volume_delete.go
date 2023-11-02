@@ -26,7 +26,7 @@ import (
 )
 
 func (s *Server) DeleteVolume(ctx context.Context, req *ori.DeleteVolumeRequest) (*ori.DeleteVolumeResponse, error) {
-	log := s.loggerFrom(ctx)
+	log := s.loggerFrom(ctx, "VolumeID", req.GetVolumeId())
 
 	log.V(1).Info("Deleting volume")
 	if err := s.imageStore.Delete(ctx, req.VolumeId); err != nil {
@@ -35,7 +35,7 @@ func (s *Server) DeleteVolume(ctx context.Context, req *ori.DeleteVolumeRequest)
 		}
 		return nil, status.Errorf(codes.NotFound, "volume %s not found", req.VolumeId)
 	}
-	log.V(1).Info("Volume deleted")
 
+	log.V(1).Info("Volume deleted")
 	return &ori.DeleteVolumeResponse{}, nil
 }

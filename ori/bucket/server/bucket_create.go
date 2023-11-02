@@ -53,12 +53,12 @@ func (s *Server) createBucketClaimAndAccessSecretFromBucket(
 	apiutils.SetClassLabel(bucketClaim, bucket.Spec.Class)
 	apiutils.SetBucketManagerLabel(bucketClaim, apiutils.BucketManager)
 
-	log.V(1).Info("Creating bucket claim")
+	log.V(2).Info("Creating bucket claim")
 	if err := s.client.Create(ctx, bucketClaim); err != nil {
-		return nil, nil, fmt.Errorf("error creating bucket: %w", err)
+		return nil, nil, fmt.Errorf("failed to create bucket claim: %w", err)
 	}
 
-	log.V(1).Info("Getting bucket access secret")
+	log.V(2).Info("Getting bucket access secret")
 	accessSecret, err := s.getBucketAccessSecretIfRequired(bucketClaim, s.clientGetSecretFunc(ctx))
 	if err != nil {
 		return nil, nil, err
@@ -72,20 +72,24 @@ func (s *Server) CreateBucket(
 	req *oriv1alpha1.CreateBucketRequest,
 ) (res *oriv1alpha1.CreateBucketResponse, retErr error) {
 	log := s.loggerFrom(ctx)
+	log.V(1).Info("Creating bucket")
 
-	log.V(1).Info("Create bucket claim and bucket access secret")
+	log.V(1).Info("Creating bucket claim and bucket access secret")
 	bucketClaim, accessSecret, err := s.createBucketClaimAndAccessSecretFromBucket(ctx, log, req.Bucket)
 	if err != nil {
 		return nil, fmt.Errorf("error getting bucket config: %w", err)
 	}
 
-	log.V(1).Info("Generate ORI bucket object")
-	v, err := s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
+	log = log.WithValues("BucketClaimName", bucketClaim.Name)
+
+	log.V(1).Info("Getting ORI bucket object")
+	oriBucket, err := s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 	if err != nil {
 		return nil, err
 	}
 
+	log.V(1).Info("Bucket created", "Bucket", oriBucket.Metadata.Id, "State", oriBucket.Status.State)
 	return &oriv1alpha1.CreateBucketResponse{
-		Bucket: v,
+		Bucket: oriBucket,
 	}, nil
 }

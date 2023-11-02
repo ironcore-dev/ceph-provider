@@ -49,12 +49,13 @@ func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId strin
 }
 
 func (s *Server) ExpandVolume(ctx context.Context, req *ori.ExpandVolumeRequest) (*ori.ExpandVolumeResponse, error) {
-	volumeID := req.VolumeId
-	log := s.loggerFrom(ctx, "VolumeID", volumeID)
+	log := s.loggerFrom(ctx, "VolumeID", req.GetVolumeId())
 
+	log.V(1).Info("Expanding volume with new size", "storageBytes", req.Resources.StorageBytes)
 	if err := s.expandImage(ctx, log, req.VolumeId, req.Resources.StorageBytes); err != nil {
 		return nil, fmt.Errorf("failed to expand volume: %w", err)
 	}
 
+	log.V(1).Info("Volume expanded")
 	return &ori.ExpandVolumeResponse{}, nil
 }

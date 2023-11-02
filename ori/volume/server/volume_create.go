@@ -35,7 +35,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		return nil, fmt.Errorf("got an empty volume")
 	}
 
-	log.V(2).Info("Get volumeclass")
+	log.V(2).Info("Getting volume class")
 	class, found := s.volumeClasses.Get(volume.Spec.Class)
 	if !found {
 		return nil, fmt.Errorf("volume class '%s' not supported", volume.Spec.Class)
@@ -62,6 +62,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		},
 	}
 
+	log.V(2).Info("Checking volume encryption")
 	if encryption := volume.Spec.Encryption; encryption != nil {
 		if encryption.SecretData == nil {
 			return nil, fmt.Errorf("encryption enabled but SecretData missing")
@@ -80,36 +81,42 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		image.Spec.Encryption.EncryptedPassphrase = encryptedPassphrase
 	}
 
+	log.V(2).Info("Setting volume metadata to image")
 	if err := apiutils.SetObjectMetadata(image, volume.Metadata); err != nil {
 		return nil, fmt.Errorf("failed to set metadata: %w", err)
 	}
 	apiutils.SetClassLabel(image, volume.Spec.Class)
 	apiutils.SetManagerLabel(image, apiutils.VolumeManager)
 
-	log.V(2).Info("Create image in store")
+	log.V(2).Info("Creating image in store")
 	image, err = s.imageStore.Create(ctx, image)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create image: %w", err)
 	}
 
+	log.V(2).Info("Image created", "ImageID", image.Metadata.ID)
 	return image, nil
 }
 
 func (s *Server) CreateVolume(ctx context.Context, req *ori.CreateVolumeRequest) (res *ori.CreateVolumeResponse, retErr error) {
 	log := s.loggerFrom(ctx)
+	log.V(1).Info("Creating volume")
 
-	log.V(1).Info("Create Ceph image from volume")
+	log.V(1).Info("Creating Ceph image from volume")
 	image, err := s.createImageFromVolume(ctx, log, req.Volume)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
-	log.V(1).Info("Convert image to volume")
-	oriVolume, err := s.convertImageToOriVolume(ctx, log, image)
+	log = log.WithValues("ImageID", image.Metadata.ID)
+
+	log.V(1).Info("Converting image to ORI volume")
+	oriVolume, err := s.convertImageToOriVolume(image)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
 	}
 
+	log.V(1).Info("Volume created", "Volume", oriVolume.Metadata.Id, "State", oriVolume.Status.State)
 	return &ori.CreateVolumeResponse{
 		Volume: oriVolume,
 	}, nil

@@ -40,12 +40,12 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 ) (*oriv1alpha1.Bucket, error) {
 	metadata, err := apiutils.GetObjectMetadata(bucketClaim)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get bucket claim object metadata: %w", err)
 	}
 
 	state, err := s.convertBucketClaimStateToBucketState(bucketClaim.Status.Phase)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert bucket claim state to bucket state: %w", err)
 	}
 
 	class, ok := apiutils.GetClassLabel(bucketClaim)
@@ -55,7 +55,7 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 
 	access, err := s.convertAccessSecretToBucketAccess(bucketClaim, accessSecret)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert access secret to bucket access: %w", err)
 	}
 
 	return &oriv1alpha1.Bucket{
