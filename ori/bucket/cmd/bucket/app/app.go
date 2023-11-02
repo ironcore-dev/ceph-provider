@@ -102,12 +102,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	supportedClasses, err := bcr.LoadBucketClassesFile(opts.PathSupportedBucketClasses)
 	if err != nil {
-		return fmt.Errorf("failed to load supported volume classes: %w", err)
+		return fmt.Errorf("failed to load supported bucket classes: %w", err)
 	}
 
 	classRegistry, err := bcr.NewBucketClassRegistry(supportedClasses)
 	if err != nil {
-		return fmt.Errorf("failed to initialize volume class registry: %w", err)
+		return fmt.Errorf("failed to initialize bucket class registry: %w", err)
 	}
 
 	srv, err := server.New(cfg, classRegistry, server.Options{

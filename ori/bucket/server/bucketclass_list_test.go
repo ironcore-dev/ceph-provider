@@ -22,7 +22,7 @@ import (
 )
 
 var _ = Describe("ListBucketClasses test", func() {
-	It("Should check empty BucketClasses list", func(ctx SpecContext) {
+	It("Should check BucketClasses list", func(ctx SpecContext) {
 		By("Listing the available BucketClasses")
 		listBuckClasses, err := bucketClient.ListBucketClasses(ctx, &oriv1alpha1.ListBucketClassesRequest{})
 		Expect(err).NotTo(HaveOccurred())
