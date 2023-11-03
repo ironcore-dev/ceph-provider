@@ -16,6 +16,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,14 +24,6 @@ import (
 	"time"
 
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
-	"github.com/onmetal/controller-utils/buildutils"
-	"github.com/onmetal/controller-utils/modutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/remote/bucket"
-	envtestutils "github.com/onmetal/onmetal-api/utils/envtest"
-	"github.com/onmetal/onmetal-api/utils/envtest/apiserver"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
@@ -44,6 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/onmetal/cephlet/ori/bucket/cmd/bucket/app"
+	"github.com/onmetal/controller-utils/modutils"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	"github.com/onmetal/onmetal-api/ori/remote/bucket"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -51,14 +49,12 @@ const (
 	pollingInterval      = 250 * time.Millisecond
 	eventuallyTimeout    = 20 * time.Second
 	consistentlyDuration = 1 * time.Second
-	apiServiceTimeout    = 5 * time.Minute
 	bucketBaseURL        = "example.com"
 )
 
 var (
 	bucketClient  oriv1alpha1.BucketRuntimeClient
 	testEnv       *envtest.Environment
-	testEnvExt    *envtestutils.EnvironmentExtensions
 	cfg           *rest.Config
 	k8sClient     client.Client
 	rookNamespace *corev1.Namespace
@@ -87,21 +83,37 @@ var _ = BeforeSuite(func() {
 		ErrorIfCRDPathMissing: true,
 	}
 
-	testEnvExt = &envtestutils.EnvironmentExtensions{
-		APIServiceDirectoryPaths: []string{
-			modutils.Dir("github.com/onmetal/onmetal-api", "config", "apiserver", "apiservice", "bases"),
+	bucketClasses := []oriv1alpha1.BucketClass{
+		{
+			Name: "foo",
+			Capabilities: &oriv1alpha1.BucketClassCapabilities{
+				Tps:  1,
+				Iops: 100,
+			},
 		},
-		ErrorIfAPIServicePathIsMissing: true,
-	}
+		{
+			Name: "bar",
+			Capabilities: &oriv1alpha1.BucketClassCapabilities{
+				Tps:  2,
+				Iops: 200,
+			},
+		}}
 
-	cfg, err = envtestutils.StartWithExtensions(testEnv, testEnvExt)
+	bucketClassesData, err := json.Marshal(bucketClasses)
+	Expect(err).NotTo(HaveOccurred())
+
+	bucketClassesFile, err := os.CreateTemp(GinkgoT().TempDir(), "bucketClasses")
+	Expect(err).NotTo(HaveOccurred())
+	Expect(os.WriteFile(bucketClassesFile.Name(), bucketClassesData, 0666)).To(Succeed())
+	DeferCleanup(bucketClassesFile.Close)
+
+	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	DeferCleanup(envtestutils.StopWithExtensions, testEnv, testEnvExt)
+	DeferCleanup(testEnv.Stop)
 
 	Expect(rookv1.AddToScheme(scheme.Scheme)).To(Succeed())
-	Expect(storagev1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(bucketv1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -109,22 +121,6 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	komega.SetClient(k8sClient)
-
-	apiSrv, err := apiserver.New(cfg, apiserver.Options{
-		MainPath:     "github.com/onmetal/onmetal-api/cmd/onmetal-apiserver",
-		BuildOptions: []buildutils.BuildOption{buildutils.ModModeMod},
-		ETCDServers:  []string{testEnv.ControlPlane.Etcd.URL.String()},
-		Host:         testEnvExt.APIServiceInstallOptions.LocalServingHost,
-		Port:         testEnvExt.APIServiceInstallOptions.LocalServingPort,
-		CertDir:      testEnvExt.APIServiceInstallOptions.LocalServingCertDir,
-	})
-	Expect(err).NotTo(HaveOccurred())
-
-	By("starting the onmetal-api aggregated api server")
-	Expect(apiSrv.Start()).To(Succeed())
-	DeferCleanup(apiSrv.Stop)
-
-	Expect(envtestutils.WaitUntilAPIServicesReadyWithTimeout(apiServiceTimeout, testEnvExt, k8sClient, scheme.Scheme)).To(Succeed())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	DeferCleanup(cancel)
@@ -143,6 +139,7 @@ var _ = BeforeSuite(func() {
 		Name:   "dummy",
 		Groups: []string{"system:authenticated", "system:masters"},
 	}, cfg)
+
 	Expect(err).NotTo(HaveOccurred())
 
 	kubeconfig, err := user.KubeConfig()
@@ -160,6 +157,7 @@ var _ = BeforeSuite(func() {
 		Namespace:                  rookNamespace.Name,
 		BucketEndpoint:             bucketBaseURL,
 		BucketPoolStorageClassName: "foo",
+		PathSupportedBucketClasses: bucketClassesFile.Name(),
 	}
 
 	go func() {

@@ -16,42 +16,15 @@ package server
 
 import (
 	"context"
-	"fmt"
 
-	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
 	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
-
-func (s *Server) convertBucketClass(bucketClass *storagev1alpha1.BucketClass) (*oriv1alpha1.BucketClass, error) {
-	tps := bucketClass.Capabilities.TPS()
-	iops := bucketClass.Capabilities.IOPS()
-
-	return &oriv1alpha1.BucketClass{
-		Name: bucketClass.Name,
-		Capabilities: &oriv1alpha1.BucketClassCapabilities{
-			Tps:  tps.Value(),
-			Iops: iops.Value(),
-		},
-	}, nil
-}
 
 func (s *Server) ListBucketClasses(ctx context.Context, req *oriv1alpha1.ListBucketClassesRequest) (*oriv1alpha1.ListBucketClassesResponse, error) {
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Listing bucket classes")
 
-	list := &storagev1alpha1.BucketClassList{}
-	if err := s.client.List(ctx, list, s.bucketClassSelector); err != nil {
-		return nil, fmt.Errorf("error listing bucket classes: %w", err)
-	}
-
-	var classes []*oriv1alpha1.BucketClass
-	for _, class := range list.Items {
-		bucketClass, err := s.convertBucketClass(&class)
-		if err != nil {
-			return nil, fmt.Errorf("error converting bucket class %s: %w", class.Name, err)
-		}
-		classes = append(classes, bucketClass)
-	}
+	classes := s.bucketClassess.List()
 
 	log.V(1).Info("Returning bucket classes")
 	return &oriv1alpha1.ListBucketClassesResponse{
