@@ -39,6 +39,7 @@ func LoadBucketClassesFile(filename string) ([]ori.BucketClass, error) {
 		return nil, fmt.Errorf("unable to open bucket class file (%s): %w", filename, err)
 	}
 
+	defer file.Close()
 	return LoadBucketClasses(file)
 }
 

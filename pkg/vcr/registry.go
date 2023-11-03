@@ -19,8 +19,9 @@ import (
 	"io"
 	"os"
 
-	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/yaml"
+
+	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
 )
 
 func LoadVolumeClasses(reader io.Reader) ([]ori.VolumeClass, error) {
@@ -38,6 +39,7 @@ func LoadVolumeClassesFile(filename string) ([]ori.VolumeClass, error) {
 		return nil, fmt.Errorf("unable to open volume class file (%s): %w", filename, err)
 	}
 
+	defer file.Close()
 	return LoadVolumeClasses(file)
 }
 

@@ -104,10 +104,8 @@ var _ = BeforeSuite(func() {
 
 	bucketClassesFile, err := os.CreateTemp(GinkgoT().TempDir(), "bucketClasses")
 	Expect(err).NotTo(HaveOccurred())
-	defer func() {
-		_ = bucketClassesFile.Close()
-	}()
 	Expect(os.WriteFile(bucketClassesFile.Name(), bucketClassesData, 0666)).To(Succeed())
+	DeferCleanup(bucketClassesFile.Close)
 
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
