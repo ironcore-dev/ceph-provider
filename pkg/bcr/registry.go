@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package vcr
+package bcr
 
 import (
 	"fmt"
@@ -21,31 +21,31 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	ori "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
 
-func LoadVolumeClasses(reader io.Reader) ([]ori.VolumeClass, error) {
-	var classList []ori.VolumeClass
+func LoadBucketClasses(reader io.Reader) ([]ori.BucketClass, error) {
+	var classList []ori.BucketClass
 	if err := yaml.NewYAMLOrJSONDecoder(reader, 4096).Decode(&classList); err != nil {
-		return nil, fmt.Errorf("unable to unmarshal volume classes: %w", err)
+		return nil, fmt.Errorf("unable to unmarshal bucket classes: %w", err)
 	}
 
 	return classList, nil
 }
 
-func LoadVolumeClassesFile(filename string) ([]ori.VolumeClass, error) {
+func LoadBucketClassesFile(filename string) ([]ori.BucketClass, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("unable to open volume class file (%s): %w", filename, err)
+		return nil, fmt.Errorf("unable to open bucket class file (%s): %w", filename, err)
 	}
 
 	defer file.Close()
-	return LoadVolumeClasses(file)
+	return LoadBucketClasses(file)
 }
 
-func NewVolumeClassRegistry(classes []ori.VolumeClass) (*Vcr, error) {
-	registry := Vcr{
-		classes: map[string]ori.VolumeClass{},
+func NewBucketClassRegistry(classes []ori.BucketClass) (*Bcr, error) {
+	registry := Bcr{
+		classes: map[string]ori.BucketClass{},
 	}
 
 	for _, class := range classes {
@@ -58,17 +58,17 @@ func NewVolumeClassRegistry(classes []ori.VolumeClass) (*Vcr, error) {
 	return &registry, nil
 }
 
-type Vcr struct {
-	classes map[string]ori.VolumeClass
+type Bcr struct {
+	classes map[string]ori.BucketClass
 }
 
-func (v *Vcr) Get(volumeClassName string) (*ori.VolumeClass, bool) {
-	class, found := v.classes[volumeClassName]
+func (v *Bcr) Get(bucketClassName string) (*ori.BucketClass, bool) {
+	class, found := v.classes[bucketClassName]
 	return &class, found
 }
 
-func (v *Vcr) List() []*ori.VolumeClass {
-	var classes []*ori.VolumeClass
+func (v *Bcr) List() []*ori.BucketClass {
+	var classes []*ori.BucketClass
 	for name := range v.classes {
 		class := v.classes[name]
 		classes = append(classes, &class)

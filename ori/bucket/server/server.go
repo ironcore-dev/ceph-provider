@@ -20,10 +20,6 @@ import (
 
 	"github.com/go-logr/logr"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"github.com/onmetal/cephlet/ori/bucket/apiutils"
-	storagev1alpha1 "github.com/onmetal/onmetal-api/api/storage/v1alpha1"
-	"github.com/onmetal/onmetal-api/broker/common/idgen"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,19 +31,22 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/onmetal/cephlet/ori/bucket/apiutils"
+	"github.com/onmetal/onmetal-api/broker/common/idgen"
+	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
 )
 
 var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(kubernetes.AddToScheme(scheme))
-	utilruntime.Must(storagev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(rookv1.AddToScheme(scheme))
 	utilruntime.Must(objectbucketv1alpha1.AddToScheme(scheme))
 }
 
 type BucketClassRegistry interface {
-	Get(volumeClassName string) (*oriv1alpha1.BucketClass, bool)
+	Get(bucketClassName string) (*oriv1alpha1.BucketClass, bool)
 	List() []*oriv1alpha1.BucketClass
 }
 
@@ -55,6 +54,7 @@ type Server struct {
 	idGen  idgen.IDGen
 	client client.Client
 
+	bucketClassess      BucketClassRegistry
 	bucketClassSelector client.MatchingLabels
 
 	namespace string
@@ -98,7 +98,7 @@ var _ oriv1alpha1.BucketRuntimeServer = (*Server)(nil)
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 
-func New(cfg *rest.Config, opts Options) (*Server, error) {
+func New(cfg *rest.Config, bucketClassRegistry BucketClassRegistry, opts Options) (*Server, error) {
 	setOptionsDefaults(&opts)
 
 	c, err := client.New(cfg, client.Options{
@@ -111,6 +111,7 @@ func New(cfg *rest.Config, opts Options) (*Server, error) {
 	return &Server{
 		client:                     c,
 		idGen:                      opts.IDGen,
+		bucketClassess:             bucketClassRegistry,
 		bucketClassSelector:        opts.BucketClassSelector,
 		namespace:                  opts.Namespace,
 		bucketPoolStorageClassName: opts.BucketPoolStorageClassName,
