@@ -32,7 +32,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *oriv1alpha1.DeleteBucket
 		return nil, err
 	}
 
-	log.V(1).Info("Deleting the bucket")
+	log.V(1).Info("Deleting bucket")
 	if err := s.client.Delete(ctx, bucketClaim); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("error deleting bucket claim: %w", err)
@@ -40,5 +40,6 @@ func (s *Server) DeleteBucket(ctx context.Context, req *oriv1alpha1.DeleteBucket
 		return nil, status.Errorf(codes.NotFound, "bucket claim %s not found", req.BucketId)
 	}
 
+	log.V(1).Info("Bucket deleted")
 	return &oriv1alpha1.DeleteBucketResponse{}, nil
 }

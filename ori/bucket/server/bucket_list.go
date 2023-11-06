@@ -149,6 +149,9 @@ func (s *Server) getBucketForID(ctx context.Context, id string) (*oriv1alpha1.Bu
 }
 
 func (s *Server) ListBuckets(ctx context.Context, req *oriv1alpha1.ListBucketsRequest) (*oriv1alpha1.ListBucketsResponse, error) {
+	log := s.loggerFrom(ctx)
+	log.V(2).Info("Listing buckets")
+
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		bucket, err := s.getBucketForID(ctx, filter.Id)
 		if err != nil {
@@ -172,6 +175,7 @@ func (s *Server) ListBuckets(ctx context.Context, req *oriv1alpha1.ListBucketsRe
 
 	buckets = s.filterBuckets(buckets, req.Filter)
 
+	log.V(2).Info("Returning buckets list")
 	return &oriv1alpha1.ListBucketsResponse{
 		Buckets: buckets,
 	}, nil

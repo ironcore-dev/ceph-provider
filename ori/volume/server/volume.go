@@ -15,10 +15,8 @@
 package server
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/onmetal/cephlet/ori/volume/apiutils"
 	"github.com/onmetal/cephlet/pkg/api"
 	"github.com/onmetal/cephlet/pkg/utils"
@@ -33,7 +31,7 @@ const (
 	DriverName  = "ceph"
 )
 
-func (s *Server) convertImageToOriVolume(ctx context.Context, log logr.Logger, image *api.Image) (*ori.Volume, error) {
+func (s *Server) convertImageToOriVolume(image *api.Image) (*ori.Volume, error) {
 	metadata, err := apiutils.GetObjectMetadata(image.Metadata)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ori metadata: %w", err)
@@ -51,7 +49,7 @@ func (s *Server) convertImageToOriVolume(ctx context.Context, log logr.Logger, i
 
 	var access *ori.VolumeAccess
 	if state == ori.VolumeState_VOLUME_AVAILABLE {
-		access, err = s.getOriVolumeAccess(ctx, log, image)
+		access, err = s.getOriVolumeAccess(image)
 		if err != nil {
 			return nil, fmt.Errorf("error getting ori volume access: %w", err)
 		}
@@ -67,7 +65,7 @@ func (s *Server) convertImageToOriVolume(ctx context.Context, log logr.Logger, i
 	}, nil
 }
 
-func (s *Server) getOriVolumeAccess(ctx context.Context, log logr.Logger, image *api.Image) (*ori.VolumeAccess, error) {
+func (s *Server) getOriVolumeAccess(image *api.Image) (*ori.VolumeAccess, error) {
 	access := image.Status.Access
 	if access == nil {
 		return nil, fmt.Errorf("image access not present")
