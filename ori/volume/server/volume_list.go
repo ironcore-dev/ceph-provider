@@ -41,7 +41,7 @@ func (s *Server) getOriVolume(ctx context.Context, log logr.Logger, imageId stri
 		return nil, status.Errorf(codes.NotFound, "image %s not found", imageId)
 	}
 
-	return s.convertImageToOriVolume(ctx, log, cephImage)
+	return s.convertImageToOriVolume(cephImage)
 }
 
 func (s *Server) filterVolumes(volumes []*ori.Volume, filter *ori.VolumeFilter) []*ori.Volume {
@@ -75,7 +75,7 @@ func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volum
 			continue
 		}
 
-		oriVolume, err := s.convertImageToOriVolume(ctx, log, cephImage)
+		oriVolume, err := s.convertImageToOriVolume(cephImage)
 		if err != nil {
 			return nil, err
 		}
@@ -87,6 +87,7 @@ func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*ori.Volum
 
 func (s *Server) ListVolumes(ctx context.Context, req *ori.ListVolumesRequest) (*ori.ListVolumesResponse, error) {
 	log := s.loggerFrom(ctx)
+	log.V(2).Info("Listing volumes")
 
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		volume, err := s.getOriVolume(ctx, log, filter.Id)
@@ -111,6 +112,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *ori.ListVolumesRequest) (
 
 	volumes = s.filterVolumes(volumes, req.Filter)
 
+	log.V(2).Info("Returning volumes list")
 	return &ori.ListVolumesResponse{
 		Volumes: volumes,
 	}, nil
