@@ -11,7 +11,7 @@ require (
 	github.com/onmetal/controller-utils v0.8.2
 	github.com/onmetal/onmetal-api v0.1.2-0.20231020111039-8b2f6cadd567
 	github.com/onmetal/onmetal-image v0.1.1
-	github.com/onsi/ginkgo/v2 v2.13.0
+	github.com/onsi/ginkgo/v2 v2.13.1
 	github.com/onsi/gomega v1.30.0
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook v1.12.7
@@ -122,7 +122,7 @@ require (
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/oauth2 v0.13.0 // indirect
 	golang.org/x/sync v0.4.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.14.0 // indirect
 	golang.org/x/term v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
