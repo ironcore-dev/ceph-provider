@@ -21,6 +21,9 @@ kubectl apply -f ./scripts/migration.yaml
 ```
 /prepare-ceph-config.sh -d dry_run -n volumepoollet-system
 
+# in case volumes failed to migrate, run the script again with the failed volumes
+/prepare-ceph-config.sh -d dry_run -n volumepoollet-system -l "$(cat volume-migration_err.log | awk '{print $6}' | tr '\n' ' ')"
+
 # check volume-migration.log for errors 
 ```
 
@@ -31,14 +34,17 @@ kubectl apply -f ./scripts/migration.yaml
 ## Run the script without dry run flag
 ```
 /prepare-ceph-config.sh -n volumepoollet-system
+
+# in case volumes failed to migrate, run the script again with the failed volumes
+/prepare-ceph-config.sh -n volumepoollet-system -l "$(cat volume-migration_err.log | awk '{print $6}' | tr '\n' ' ')"
 ```
 
 ## Adjust deployments on flux landscape
+- check if the ceph client `volume-rook-ceph--ceph` still exists and remove only the ownerReferences from the object
 - enable the new cephlet-volume
 - enable all volumepoollets
 
 ## post migration tasks
-- check if the ceph client `volume-rook-ceph--ceph` still exists and remove only the ownerReferences from the object
 - remove StorageClass `k delete StorageClass volume-rook-ceph--ceph` 
 - remove VolumeSnapshotClass volume-rook-ceph--ceph `k delete VolumeSnapshotClass volume-rook-ceph--ceph`
 - change ROOK_CSI_ENABLE_RBD=false and CSI_ENABLE_RBD_SNAPSHOTTER=false in rook-ceph-operator-config in the landscape.
