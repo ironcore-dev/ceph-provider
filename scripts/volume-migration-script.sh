@@ -28,10 +28,11 @@ multiply_k8s_values() {
     echo $result
 }
 
-while getopts d:n: opt; do
+while getopts d:n:l: opt; do
     case "$opt" in
         d) dry_run=true ;;
-    n) namespace=${OPTARG} ;;
+        n) namespace=${OPTARG} ;;
+        l) list=${OPTARG} ;;
         *) echo 'error in command line parsing' >&2
            exit 1
     esac
@@ -53,28 +54,38 @@ done
 ##### List the all Volumes
 volumes=$(kubectl get volume -n $namespace  --field-selector=metadata.namespace=$namespace -o name)
 
-list=()
-# Print the list of volume names
-#echo "Running volumes:"
-for volume in $volumes; do
-    volume_name=$(echo "$volume" | sed 's/^[^/]*//;s|/||g')
-    list+=($volume_name)
-done
+# if list is empty populate with all volumes
+if [ -z "$list" ]; then
+  for volume in $volumes; do
+      volume_name=$(echo "$volume" | sed 's/^[^/]*//;s|/||g')
+      list+=($volume_name)
+  done
+fi
 
 echo "${list[@]}"
 
+ceph quorum_status | jq .monmap.mons | jq .[] | jq .addr > mons.txt
+cat mons.txt
+
 ##Loop through the list of volumes to migrate
 for val in ${list[@]}; do
-  VOLUME_ID=`kubectl get volume $val -n $namespace -o json | jq '.status | .access |.volumeAttributes["image"] | .[5:]'`
+  kubectl get volume $val -n $namespace -o json > vol-$val.json
+  # if exit code is not 0, then write the error to log file and continue
+  if [ $? -ne 0 ]; then
+    echo "Error in getting the volume $val details" >> volume-migration_err.log
+    continue
+  fi
+
+  VOLUME_ID=`cat vol-$val.json | jq '.status | .access |.volumeAttributes["image"] | .[5:]'`
   VOLUME_ID_FORMATTED=`echo "$VOLUME_ID" | tr -d '"'`
-  VOLUME_NAME=`kubectl get volume  $val -n $namespace -o json | jq '.status | .access | .secretRef["name"]'`
+  VOLUME_NAME=`cat vol-$val.json | jq '.status | .access | .secretRef["name"]'`
   VOLUME_NAME=$(echo "$VOLUME_NAME" | sed 's/^"//' | sed 's/"$//')
   VOLUME_NAME1="${VOLUME_NAME}\\"
-  VOLUME_UUID=`kubectl get volume  $val -n $namespace -o json | jq '.metadata | .uid '`
+  VOLUME_UUID=`cat vol-$val.json | jq '.metadata | .uid '`
   VOLUME_UUID=$(echo "$VOLUME_UUID" | sed 's/^"//' | sed 's/"$//')
   VOLUME_UUID="${VOLUME_UUID}\\"
-  VOLUME_TIMESTAMP=`kubectl get volume $val -n $namespace -o json | jq '.metadata.creationTimestamp'`
-  IMAGE=`kubectl get volume $val -n $namespace -o json | jq '.spec' | jq '.image'`
+  VOLUME_TIMESTAMP=`cat vol-$val.json | jq '.metadata.creationTimestamp'`
+  IMAGE=`cat vol-$val.json | jq '.spec' | jq '.image'`
   IMAGE1=`echo "$IMAGE" | tr -d '"'`
 
   ## if IMAGE1 is not empty and not contains null, pull the image and get the snapshot ref
@@ -87,25 +98,29 @@ for val in ${list[@]}; do
   fi
 
   USERKEY=`ceph auth get-or-create-key client.volume-rook-ceph--ceph`
-  HANDLE=`kubectl get volume  $val -n $namespace -o json | jq '.status | .access |.volumeAttributes["image"]'`
-  WWN=`kubectl get volume $val  -n $namespace -o json | jq .status |jq .access |jq .handle`
+  HANDLE=`cat vol-$val.json | jq '.status | .access |.volumeAttributes["image"]'`
+  WWN=`cat vol-$val.json | jq .status |jq .access |jq .handle`
   NAMESPACE="${namespace}\\"
 
-  MONITOR=$(ceph quorum_status | jq .monmap.mons | jq .[] | jq .addr)
+  MONITOR=$(cat mons.txt)
   MONITOR=$(echo "${MONITOR[@]}" | sed 's/:6789/:6789,/g' | sed 's/$/"/')
   MONITOR=$(echo $MONITOR | sed 's/\/\0//g')
   MONITOR=$(echo "$MONITOR" | sed 's/,//g')
   MONITOR=$(echo "$MONITOR" | sed 's/ /, /g')
   MONITOR=$(echo "$MONITOR" | sed 's/"//g; s/"//g')
 
-  SIZE=`kubectl get volume $val  -n $namespace -o json | jq '.spec.resources.storage'`
+  SIZE=`cat vol-$val.json | jq '.spec.resources.storage'`
   SIZE=$( echo "$SIZE" | sed 's/Gi/1073741824/g' | bc )
 
-  VOLUMECLASS=`kubectl get volume  $val -n $namespace  -o json | jq .spec.volumeClassRef.name`
+  VOLUMECLASS=`cat vol-$val.json | jq .spec.volumeClassRef.name`
   VOLUMECLASS=`echo $VOLUMECLASS | sed 's/"//g'`
-  IOPS=`kubectl get volumeclass $VOLUMECLASS -o json | jq .capabilities.iops`
+  # if file does not exists create it
+  if [ ! -f volclass-$VOLUMECLASS.json ]; then
+    kubectl get volumeclass $VOLUMECLASS -o json > volclass-$VOLUMECLASS.json
+  fi
+  IOPS=`cat volclass-$VOLUMECLASS.json | jq .capabilities.iops`
   IOPS=`echo $IOPS | sed 's/"//g'`
-  TPS=`kubectl get volumeclass $VOLUMECLASS -o json | jq .capabilities.tps`
+  TPS=`cat volclass-$VOLUMECLASS.json | jq .capabilities.tps`
   TPS=`echo $TPS | sed 's/"//g'`
   DEFAULT_BURST_DURATION_SEC=15
   DEFAULT_BURST_FACTOR=10

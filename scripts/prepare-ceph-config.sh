@@ -6,12 +6,13 @@ KEYRING_FILE="/etc/ceph/keyring"
 
 dry_run=false
 skip_watch=false
-while getopts d:s:n: flag
+while getopts d:s:n:l: flag
 do
     case "${flag}" in
         d) dry_run=true ;;
         s) skip_watch=true ;;
         n) namespace=${OPTARG} ;;
+        l) list=${OPTARG} ;;
         *) echo 'error in command line parsing' >&2
            exit 1
     esac
@@ -77,9 +78,9 @@ write_endpoints
 # Run volume migration script
 if [ "$dry_run" = true ]; then
         echo "In dry run mode" >> volume-migration.log
-        ./volume-migration-script.sh -d dry_run -n $namespace >> volume-migration.log
+        ./volume-migration-script.sh -d dry_run -n $namespace -l "$list" >> volume-migration.log
 else
-        ./volume-migration-script.sh -n $namespace >> volume-migration.log
+        ./volume-migration-script.sh -n $namespace -l "$list" >> volume-migration.log
 fi
 
 # continuously update the mon endpoints if they fail over

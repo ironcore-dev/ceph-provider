@@ -23,7 +23,7 @@ spec:
             - tail
             - -f
             - /dev/null
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           tty: true
           env:
             - name: ROOK_CEPH_USERNAME
