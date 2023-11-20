@@ -19,7 +19,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/exp v0.0.0-20230206171751-46f607a40771
 	google.golang.org/grpc v1.59.0
-	k8s.io/api v0.28.3
+	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.3
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
