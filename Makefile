@@ -1,10 +1,10 @@
 
 # Image URL to use all building/pushing image targets
-CEPHLET_VOLUME_IMG ?= cephlet-volume:latest
-CEPHLET_BUCKET_IMG ?= cephlet-bucket:latest
+CEPH_VOLUME_PROVIDER_IMG ?= ceph-volume-provider:latest
+CEPH_BUCKET_PROVIDER_IMG ?= ceph-bucket-provider:latest
 
 # Docker image name for the mkdocs based local development setup
-MKDOCS_IMG=onmetal/cephlet-docs
+MKDOCS_IMG=ironcore-dev/ceph-provider-docs
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.28.0
@@ -46,7 +46,7 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	# bucket
-	$(CONTROLLER_GEN) rbac:roleName=broker-role paths="./ori/bucket/..." output:rbac:artifacts:config=config/cephlet-bucket/cephlet-rbac
+	$(CONTROLLER_GEN) rbac:roleName=broker-role paths="./iri/bucket/..." output:rbac:artifacts:config=config/ceph-bucket-provider/ceph-provider-rbac
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -90,35 +90,35 @@ start-docs: ## Start the local mkdocs based development environment.
 
 .PHONY: clean-docs
 clean-docs: ## Remove all local mkdocs Docker images (cleanup).
-	docker container prune --force --filter "label=project=cephlet_documentation"
+	docker container prune --force --filter "label=project=ceph-provider_documentation"
 
 ##@ Build
 
 .PHONY: build-volume
 build-volume: generate fmt vet ## Build manager binary.
-	CGO_ENABLED=1 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-volume ./ori/volume/cmd/volume/main.go
+	CGO_ENABLED=1 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./iri/volume/cmd/volume/main.go
 
 .PHONY: build-bucket
 build-bucket: generate fmt vet ## Build manager binary.
-	CGO_ENABLED=0 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-bucket ./ori/bucket/cmd/bucket/main.go
+	CGO_ENABLED=0 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./iri/bucket/cmd/bucket/main.go
 
 .PHONY: run-volume
 run-volume: manifests generate fmt vet ## Run a controller from your host.
-	go run ./ori/bucket/cmd/volume/main.go
+	go run ./iri/bucket/cmd/volume/main.go
 
 .PHONY: run-bucket
 run-bucket: manifests generate fmt vet ## Run a controller from your host.
-	go run ./ori/bucket/cmd/bucket/main.go
+	go run ./iri/bucket/cmd/bucket/main.go
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --target cephlet-volume -t ${CEPHLET_VOLUME_IMG} .
-	docker build --target cephlet-bucket -t ${CEPHLET_BUCKET_IMG} .
+	docker build --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
+	docker build --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${CEPHLET_VOLUME_IMG}
-	docker push ${CEPHLET_BUCKET_IMG}
+	docker push ${CEPH_VOLUME_PROVIDER_IMG}
+	docker push ${CEPH_BUCKET_PROVIDER_IMG}
 
 ##@ Deployment
 

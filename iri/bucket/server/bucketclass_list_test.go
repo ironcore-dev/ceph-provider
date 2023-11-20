@@ -1,0 +1,47 @@
+// Copyright 2023 OnMetal authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package server_test
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
+)
+
+var _ = Describe("ListBucketClasses test", func() {
+	It("Should check BucketClasses list", func(ctx SpecContext) {
+		By("Listing the available BucketClasses")
+		listBuckClasses, err := bucketClient.ListBucketClasses(ctx, &iriv1alpha1.ListBucketClassesRequest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(listBuckClasses.BucketClasses).NotTo(BeEmpty())
+		Expect(listBuckClasses.BucketClasses).To(ContainElements(
+			&iriv1alpha1.BucketClass{
+				Name: "foo",
+				Capabilities: &iriv1alpha1.BucketClassCapabilities{
+					Tps:  1,
+					Iops: 100,
+				},
+			},
+			&iriv1alpha1.BucketClass{
+				Name: "bar",
+				Capabilities: &iriv1alpha1.BucketClassCapabilities{
+					Tps:  2,
+					Iops: 200,
+				},
+			},
+		))
+	})
+})

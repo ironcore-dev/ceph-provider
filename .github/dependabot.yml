@@ -7,18 +7,18 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     reviewers:
-      - "onmetal/cephlet-maintainers"
+      - "ironcore-dev/storage"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
     reviewers:
-      - "onmetal/cephlet-maintainers"
+      - "ironcore-dev/storage"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
     reviewers:
-      - "onmetal/cephlet-maintainers"
+      - "ironcore-dev/storage"

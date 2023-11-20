@@ -1,0 +1,310 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ceph.rook.io
+    resources:
+      - cephblockpools
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ceph.rook.io
+    resources:
+      - cephclients
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ceph.rook.io
+    resources:
+      - cephobjectstores
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims/status
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumes
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumes/status
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - objectbucket.io
+    resources:
+      - objectbucketclaims
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - objectbucket.io
+    resources:
+      - objectbucketclaims/status
+    verbs:
+      - get
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshotclasses
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - snapshot.storage.k8s.io
+    resources:
+      - volumesnapshots
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - bucketclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - bucketpools
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - bucketpools/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - bucketpools/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - buckets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - buckets/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - buckets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumepools
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumepools/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumepools/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumes
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumes/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - storage.ironcore.dev
+    resources:
+      - volumes/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - storage.k8s.io
+    resources:
+      - storageclasses
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch

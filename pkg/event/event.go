@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/cephlet/pkg/store"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/store"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 )

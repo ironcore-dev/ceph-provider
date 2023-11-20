@@ -17,7 +17,7 @@ package store
 import (
 	"context"
 
-	"github.com/onmetal/cephlet/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
 	"github.com/pkg/errors"
 )
 

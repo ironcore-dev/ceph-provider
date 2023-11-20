@@ -24,6 +24,7 @@ jobs:
           set -x
           
           sudo snap install microceph --edge
+          sudo apt-get update
           sudo apt-get install --no-install-recommends -y ceph-common
           sudo microceph cluster bootstrap
           sudo microceph.ceph config set global osd_pool_default_size 1
@@ -64,6 +65,7 @@ jobs:
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
+          echo "CEPH_DISK_SIZE=65260281856" >> $GITHUB_ENV
           echo "CEPH_KEYRING_FILENAME=/etc/ceph/ceph.client.admin.keyring" >> $GITHUB_ENV
           echo "CEPH_MONITORS=$(hostname):6789" >> $GITHUB_ENV
           echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV

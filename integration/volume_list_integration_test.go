@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/cephlet/pkg/omap"
-	metav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/omap"
+	metav1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
+	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -30,15 +30,15 @@ import (
 var _ = Describe("List Volume", func() {
 	It("should create a volume", func(ctx SpecContext) {
 		By("creating a volume")
-		createResp, err := volumeClient.CreateVolume(ctx, &oriv1alpha1.CreateVolumeRequest{
-			Volume: &oriv1alpha1.Volume{
+		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
 					Id:     "foo",
 					Labels: map[string]string{"foo": "bar"},
 				},
-				Spec: &oriv1alpha1.VolumeSpec{
+				Spec: &iriv1alpha1.VolumeSpec{
 					Class: "foo",
-					Resources: &oriv1alpha1.VolumeResources{
+					Resources: &iriv1alpha1.VolumeResources{
 						StorageBytes: 1024 * 1024 * 1024,
 					},
 				},
@@ -66,14 +66,14 @@ var _ = Describe("List Volume", func() {
 			HaveField("Status.Encryption", api.EncryptionState("")),
 		))
 
-		DeferCleanup(volumeClient.DeleteVolume, &oriv1alpha1.DeleteVolumeRequest{
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 		})
 
 		By("listing volume with volume id")
-		Eventually(func() *oriv1alpha1.VolumeStatus {
-			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
-				Filter: &oriv1alpha1.VolumeFilter{
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
 				},
 			})
@@ -81,7 +81,7 @@ var _ = Describe("List Volume", func() {
 			Expect(resp.Volumes).NotTo(BeEmpty())
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(oriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),
@@ -97,9 +97,9 @@ var _ = Describe("List Volume", func() {
 		))
 
 		By("listing volume with correct Label selectors")
-		Eventually(func() *oriv1alpha1.VolumeStatus {
-			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
-				Filter: &oriv1alpha1.VolumeFilter{
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
 					LabelSelector: map[string]string{"foo": "bar"},
 				},
 			})
@@ -107,7 +107,7 @@ var _ = Describe("List Volume", func() {
 			Expect(resp.Volumes).NotTo(BeEmpty())
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(oriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),
@@ -124,8 +124,8 @@ var _ = Describe("List Volume", func() {
 
 		By("listing volume with incorrect Labels ")
 		Eventually(func() {
-			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
-				Filter: &oriv1alpha1.VolumeFilter{
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
 					LabelSelector: map[string]string{"foo": "wrong"},
 				},
 			})

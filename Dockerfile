@@ -13,20 +13,20 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Copy the go source
 COPY pkg/ pkg/
-COPY ori/ ori/
+COPY iri/ iri/
 COPY hack/ hack/
 
 ARG TARGETOS
 ARG TARGETARCH
 
-FROM builder as cephlet-bucket-builder
+FROM builder as ceph-bucket-provider-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-bucket ./ori/bucket/cmd/bucket/main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./iri/bucket/cmd/bucket/main.go
 
 
 # Start from Kubernetes Debian base.
-FROM builder as cephlet-volume-builder
+FROM builder as ceph-volume-provider-builder
 # Install necessary dependencies
 
 RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
@@ -34,7 +34,7 @@ RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/cephlet-volume ./ori/volume/cmd/volume/main.go
+    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./iri/volume/cmd/volume/main.go
 
 
 # Use distroless as minimal base image to package the manager binary
@@ -63,11 +63,11 @@ ENV LIB_DIR_PREFIX_MINUS aarch64
 
 
 FROM busybox:1.36.1-uclibc as busybox
-FROM distroless-$TARGETARCH  as cephlet-volume
+FROM distroless-$TARGETARCH  as ceph-volume-provider
 WORKDIR /
 COPY --from=busybox /bin/sh /bin/sh
 COPY --from=busybox /bin/mkdir /bin/mkdir
-COPY --from=cephlet-volume-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.2 \
+COPY --from=ceph-volume-provider-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.2 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/librbd.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libc.so.6 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libfmt.so.9 \
@@ -98,15 +98,15 @@ COPY --from=cephlet-volume-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpthread.so.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu
 RUN mkdir -p /lib64
-COPY --from=cephlet-volume-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
+COPY --from=ceph-volume-provider-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
 RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
-COPY --from=cephlet-volume-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
+COPY --from=ceph-volume-provider-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
 
-COPY --from=cephlet-volume-builder /workspace/bin/cephlet-volume /cephlet-volume
+COPY --from=ceph-volume-provider-builder /workspace/bin/ceph-volume-provider /ceph-volume-provider
 
 # Build stage used for validation of the output-image
 # See validate-container-linux-* targets in Makefile
-FROM cephlet-volume as validation-image
+FROM ceph-volume-provider as validation-image
 
 COPY --from=busybox /usr/bin/ldd /usr/bin/find /usr/bin/xargs /usr/bin/
 COPY --from=builder /workspace/hack/print-missing-deps.sh /print-missing-deps.sh
@@ -115,14 +115,14 @@ RUN /print-missing-deps.sh
 
 
 # Final build stage, create the real Docker image with ENTRYPOINT
-FROM cephlet-volume
+FROM ceph-volume-provider
 USER 65532:65532
 
-ENTRYPOINT ["/cephlet-volume"]
+ENTRYPOINT ["/ceph-volume-provider"]
 
 
 
-FROM distroless-base  as cephlet-bucket
-COPY --from=cephlet-bucket-builder /workspace/bin/cephlet-bucket /cephlet-bucket
+FROM distroless-base  as ceph-bucket-provider
+COPY --from=ceph-bucket-provider-builder /workspace/bin/ceph-bucket-provider /ceph-bucket-provider
 USER 65532:65532
-ENTRYPOINT ["/cephlet-bucket"]
+ENTRYPOINT ["/ceph-bucket-provider"]

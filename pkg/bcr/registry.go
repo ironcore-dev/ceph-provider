@@ -21,11 +21,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	ori "github.com/onmetal/onmetal-api/ori/apis/bucket/v1alpha1"
+	iri "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 )
 
-func LoadBucketClasses(reader io.Reader) ([]ori.BucketClass, error) {
-	var classList []ori.BucketClass
+func LoadBucketClasses(reader io.Reader) ([]iri.BucketClass, error) {
+	var classList []iri.BucketClass
 	if err := yaml.NewYAMLOrJSONDecoder(reader, 4096).Decode(&classList); err != nil {
 		return nil, fmt.Errorf("unable to unmarshal bucket classes: %w", err)
 	}
@@ -33,7 +33,7 @@ func LoadBucketClasses(reader io.Reader) ([]ori.BucketClass, error) {
 	return classList, nil
 }
 
-func LoadBucketClassesFile(filename string) ([]ori.BucketClass, error) {
+func LoadBucketClassesFile(filename string) ([]iri.BucketClass, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open bucket class file (%s): %w", filename, err)
@@ -43,9 +43,9 @@ func LoadBucketClassesFile(filename string) ([]ori.BucketClass, error) {
 	return LoadBucketClasses(file)
 }
 
-func NewBucketClassRegistry(classes []ori.BucketClass) (*Bcr, error) {
+func NewBucketClassRegistry(classes []iri.BucketClass) (*Bcr, error) {
 	registry := Bcr{
-		classes: map[string]ori.BucketClass{},
+		classes: map[string]iri.BucketClass{},
 	}
 
 	for _, class := range classes {
@@ -59,16 +59,16 @@ func NewBucketClassRegistry(classes []ori.BucketClass) (*Bcr, error) {
 }
 
 type Bcr struct {
-	classes map[string]ori.BucketClass
+	classes map[string]iri.BucketClass
 }
 
-func (v *Bcr) Get(bucketClassName string) (*ori.BucketClass, bool) {
+func (v *Bcr) Get(bucketClassName string) (*iri.BucketClass, bool) {
 	class, found := v.classes[bucketClassName]
 	return &class, found
 }
 
-func (v *Bcr) List() []*ori.BucketClass {
-	var classes []*ori.BucketClass
+func (v *Bcr) List() []*iri.BucketClass {
+	var classes []*iri.BucketClass
 	for name := range v.classes {
 		class := v.classes[name]
 		classes = append(classes, &class)
