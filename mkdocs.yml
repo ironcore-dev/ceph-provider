@@ -1,5 +1,5 @@
-site_name: Gardener on Metal / Cephlet
-repo_url: https://github.com/onmetal/cephlet/
+site_name: Gardener on Metal / Ceph Provider
+repo_url: https://github.com/ironcore-dev/ceph-provider/
 edit_uri: edit/main/docs/
 theme:
   icon:
@@ -58,4 +58,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/onmetal/cephlet
+      link: https://github.com/ironcore-dev/ceph-provider

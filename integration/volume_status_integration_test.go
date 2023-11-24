@@ -16,12 +16,13 @@ package integration
 
 import (
 	"encoding/json"
+	"strconv"
 
-	"github.com/onmetal/cephlet/ori/volume/apiutils"
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/cephlet/pkg/omap"
-	metav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/ceph-provider/iri/volume/apiutils"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/omap"
+	metav1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
+	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -29,14 +30,17 @@ import (
 var _ = Describe("Volume Status", func() {
 	It("should get the supported volume class status", func(ctx SpecContext) {
 		By("getting volume status")
-		resp, err := volumeClient.Status(ctx, &oriv1alpha1.StatusRequest{})
+		resp, err := volumeClient.Status(ctx, &iriv1alpha1.StatusRequest{})
+		Expect(err).NotTo(HaveOccurred())
+
+		size, err := strconv.Atoi(cephDiskSize)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("validating volume class status")
 		Expect(resp.VolumeClassStatus[0]).Should(SatisfyAll(
-			HaveField("VolumeClass", Equal(&oriv1alpha1.VolumeClass{
+			HaveField("VolumeClass", Equal(&iriv1alpha1.VolumeClass{
 				Name: "foo",
-				Capabilities: &oriv1alpha1.VolumeClassCapabilities{
+				Capabilities: &iriv1alpha1.VolumeClassCapabilities{
 					Tps:  100,
 					Iops: 100,
 				},
@@ -44,20 +48,20 @@ var _ = Describe("Volume Status", func() {
 			// TODO: The pool size depends on the ceph setup in the integration test workflow.
 			// We need to adjust/make the pool size configurable in the future.
 			HaveField("Quantity", And(
-				BeNumerically(">", int64(9*1024*1024*1024)),
-				BeNumerically("<=", int64(14*1024*1024*1024)),
+				BeNumerically(">", int64((size/10)*9)),
+				BeNumerically("<=", int64((size/10)*11)),
 			)),
 		))
 
 		By("creating a volume with the given volume class")
-		createResp, err := volumeClient.CreateVolume(ctx, &oriv1alpha1.CreateVolumeRequest{
-			Volume: &oriv1alpha1.Volume{
+		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
 					Id: "foo",
 				},
-				Spec: &oriv1alpha1.VolumeSpec{
+				Spec: &iriv1alpha1.VolumeSpec{
 					Class: "foo",
-					Resources: &oriv1alpha1.VolumeResources{
+					Resources: &iriv1alpha1.VolumeResources{
 						StorageBytes: 1 * 1024,
 					},
 				},
@@ -91,7 +95,7 @@ var _ = Describe("Volume Status", func() {
 			)),
 		))
 
-		DeferCleanup(volumeClient.DeleteVolume, &oriv1alpha1.DeleteVolumeRequest{
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 		})
 	})

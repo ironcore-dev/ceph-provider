@@ -1,7 +1,7 @@
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
-  name: cephlet-pool
+  name: ceph-provider-pool
   namespace: rook-ceph
 spec:
   erasureCoded:
@@ -27,7 +27,7 @@ parameters:
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
   csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
   imageFeatures: layering,exclusive-lock,object-map,fast-diff
-  pool: cephlet-pool
+  pool: ceph-provider-pool
 provisioner: rook-ceph.rbd.csi.ceph.com
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -35,18 +35,18 @@ volumeBindingMode: Immediate
 apiVersion: ceph.rook.io/v1
 kind: CephClient
 metadata:
-  name: cephlet-pool
+  name: ceph-provider-pool
   namespace: rook-ceph
 spec:
   caps:
-    mgr: profile rbd pool=cephlet-pool
+    mgr: profile rbd pool=ceph-provider-pool
     mon: profile rbd
-    osd: profile rbd pool=cephlet-pool
+    osd: profile rbd pool=ceph-provider-pool
 ---
 apiVersion: ceph.rook.io/v1
 kind: CephObjectStore
 metadata:
-  name: cephlet-pool
+  name: ceph-provider-pool
   namespace: rook-ceph
 spec:
   metadataPool:
@@ -70,5 +70,5 @@ metadata:
 provisioner: rook-ceph.ceph.rook.io/bucket
 reclaimPolicy: Delete
 parameters:
-  objectStoreName: cephlet-pool
+  objectStoreName: ceph-provider-pool
   objectStoreNamespace: rook-ceph

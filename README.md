@@ -1,13 +1,13 @@
-# cephlet
+# ceph-provider
 
-[![Test](https://github.com/onmetal/cephlet/actions/workflows/test.yml/badge.svg)](https://github.com/onmetal/cephlet/actions/workflows/test.yml)
+[![Test](https://github.com/ironcore-dev/ceph-provider/actions/workflows/test.yml/badge.svg)](https://github.com/ironcore-dev/ceph-provider/actions/workflows/test.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
 [![GitHub License](https://img.shields.io/static/v1?label=License&message=Apache-2.0&color=blue&style=flat-square)](LICENSE)
 
-`cephlet` is a Ceph based provider implementation of the [onmetal-api](https://github.com/onmetal/onmetal-api) `Volume` 
+`ceph-provider` is a Ceph based provider implementation of the [ironcore](https://github.com/ironcore-dev/ironcore) `Volume` 
 and `VolumePool` types.
 
-Please consult the [project documentation](https://onmetal.github.io/cephlet/) for additional information.
+Please consult the [project documentation](https://onmetal.github.io/ceph-provider/) for additional information.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
@@ -23,13 +23,13 @@ kubectl apply -f config/samples/
 2. Build and push your image to the location specified by `IMG`:
 	
 ```sh
-make docker-build docker-push IMG=<some-registry>/cephlet:tag
+make docker-build docker-push IMG=<some-registry>/ceph-provider:tag
 ```
 	
 3. Deploy the controller to the cluster with the image specified by `IMG`:
 
 ```sh
-make deploy IMG=<some-registry>/cephlet:tag
+make deploy IMG=<some-registry>/ceph-provider:tag
 ```
 
 ### Undeploy controller

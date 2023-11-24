@@ -30,9 +30,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/onmetal/cephlet/ori/volume/cmd/volume/app"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
-	"github.com/onmetal/onmetal-api/ori/remote/volume"
+	"github.com/ironcore-dev/ceph-provider/iri/volume/cmd/volume/app"
+	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/ironcore/iri/remote/volume"
 )
 
 const (
@@ -42,7 +42,7 @@ const (
 )
 
 var (
-	volumeClient oriv1alpha1.VolumeRuntimeClient
+	volumeClient iriv1alpha1.VolumeRuntimeClient
 	ioctx        *rados.IOContext
 
 	cephMonitors        = os.Getenv("CEPH_MONITORS")
@@ -51,6 +51,7 @@ var (
 	cephPoolname        = os.Getenv("CEPH_POOLNAME")
 	cephClientname      = os.Getenv("CEPH_CLIENTNAME")
 	cephConfigFile      = os.Getenv("CEPH_CONFIG_FILE")
+	cephDiskSize        = os.Getenv("CEPH_DISK_SIZE")
 )
 
 func TestIntegration_GRPCServer(t *testing.T) {
@@ -73,9 +74,9 @@ var _ = BeforeSuite(func() {
 	}()
 	Expect(os.WriteFile(keyEncryptionKeyFile.Name(), []byte("abcjdkekakakakakakakkadfkkasfdks"), 0666)).To(Succeed())
 
-	volumeClasses := []oriv1alpha1.VolumeClass{{
+	volumeClasses := []iriv1alpha1.VolumeClass{{
 		Name: "foo",
-		Capabilities: &oriv1alpha1.VolumeClassCapabilities{
+		Capabilities: &iriv1alpha1.VolumeClassCapabilities{
 			Tps:  100,
 			Iops: 100,
 		},
@@ -91,7 +92,7 @@ var _ = BeforeSuite(func() {
 	Expect(os.WriteFile(volumeClassesFile.Name(), volumeClassesData, 0666)).To(Succeed())
 
 	opts := app.Options{
-		Address:                    fmt.Sprintf("%s/cephlet-volume.sock", os.Getenv("PWD")),
+		Address:                    fmt.Sprintf("%s/ceph-volume-provider.sock", os.Getenv("PWD")),
 		PathSupportedVolumeClasses: volumeClassesFile.Name(),
 		Ceph: app.CephOptions{
 			ConnectTimeout:         10 * time.Second,
@@ -123,7 +124,7 @@ var _ = BeforeSuite(func() {
 	gconn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	Expect(err).NotTo(HaveOccurred())
 
-	volumeClient = oriv1alpha1.NewVolumeRuntimeClient(gconn)
+	volumeClient = iriv1alpha1.NewVolumeRuntimeClient(gconn)
 	DeferCleanup(gconn.Close)
 
 	conn, err := rados.NewConn()

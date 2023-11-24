@@ -1,0 +1,91 @@
+// Copyright 2022 OnMetal authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package server
+
+import (
+	"context"
+
+	"github.com/go-logr/logr"
+	cephapi "github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/ceph"
+	"github.com/ironcore-dev/ceph-provider/pkg/encryption"
+	"github.com/ironcore-dev/ceph-provider/pkg/store"
+	"github.com/ironcore-dev/ironcore/broker/common/idgen"
+	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	ctrl "sigs.k8s.io/controller-runtime"
+)
+
+type VolumeClassRegistry interface {
+	Get(volumeClassName string) (*iri.VolumeClass, bool)
+	List() []*iri.VolumeClass
+}
+
+type Server struct {
+	idGen idgen.IDGen
+
+	imageStore    store.Store[*cephapi.Image]
+	snapshotStore store.Store[*cephapi.Snapshot]
+
+	volumeClasses     VolumeClassRegistry
+	cephCommandClient ceph.Command
+
+	burstFactor            int64
+	burstDurationInSeconds int64
+
+	keyEncryption encryption.Encryptor
+}
+
+func (s *Server) loggerFrom(ctx context.Context, keysWithValues ...interface{}) logr.Logger {
+	return ctrl.LoggerFrom(ctx, keysWithValues...)
+}
+
+type Options struct {
+	IDGen idgen.IDGen
+
+	BurstFactor            int64
+	BurstDurationInSeconds int64
+}
+
+func setOptionsDefaults(o *Options) {
+	if o.IDGen == nil {
+		o.IDGen = idgen.Default
+	}
+}
+
+var _ iri.VolumeRuntimeServer = (*Server)(nil)
+
+func New(imageStore store.Store[*cephapi.Image],
+	snapshotStore store.Store[*cephapi.Snapshot],
+	volumeClassRegistry VolumeClassRegistry,
+	keyEncryption encryption.Encryptor,
+	cephCommandClient ceph.Command,
+	opts Options,
+) (*Server, error) {
+
+	setOptionsDefaults(&opts)
+
+	return &Server{
+		idGen:         opts.IDGen,
+		imageStore:    imageStore,
+		snapshotStore: snapshotStore,
+		volumeClasses: volumeClassRegistry,
+
+		keyEncryption:     keyEncryption,
+		cephCommandClient: cephCommandClient,
+
+		burstFactor:            opts.BurstFactor,
+		burstDurationInSeconds: opts.BurstDurationInSeconds,
+	}, nil
+}

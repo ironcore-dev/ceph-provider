@@ -17,8 +17,8 @@ package utils
 import (
 	"crypto/rand"
 
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/onmetal-api/broker/common/idgen"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ironcore/broker/common/idgen"
 )
 
 var SnapshotStrategy = snapshotStrategy{}

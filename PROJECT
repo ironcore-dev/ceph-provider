@@ -1,17 +1,27 @@
-domain: onmetal.de
+domain: ironcore.dev
 layout:
 - go.kubebuilder.io/v3
-projectName: cephlet
-repo: github.com/onmetal/cephlet
+projectName: ceph-provider
+repo: github.com/ironcore-dev/ceph-provider
 resources:
 - controller: true
-  domain: onmetal.de
-  group: storage.api.onmetal.de
+  domain: ironcore.dev
+  group: storage
   kind: Volume
   version: v1alpha1
 - controller: true
-  domain: onmetal.de
-  group: storage.api
+  domain: ironcore.dev
+  group: storage
   kind: VolumePool
+  version: v1alpha1
+- controller: true
+  domain: ironcore.dev
+  group: storage
+  kind: Bucket
+  version: v1alpha1
+- controller: true
+  domain: ironcore.dev
+  group: storage
+  kind: BucketPool
   version: v1alpha1
 version: "3"

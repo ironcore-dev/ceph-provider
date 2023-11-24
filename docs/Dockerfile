@@ -1,6 +1,6 @@
 FROM ghcr.io/afritzler/mkdocs-material:latest
 
-LABEL project=cephlet_documentation
+LABEL project=ceph-provider_documentation
 
 WORKDIR /docs
 
