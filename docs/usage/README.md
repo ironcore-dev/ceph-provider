@@ -1,6 +1,6 @@
 # Usage Guides
 
-This section provides an overview on how `Volume`s from the [onmetal-api](https://github.com/onmetal/onmetal-api) project can be provisioned using the `cephlet` provider. The samples are equivalent for `Bucket`s. 
+This section provides an overview on how `Volume`s from the [ironcore](https://github.com/ironcore-dev/ironcore) project can be provisioned using the `ceph-provider` provider. The samples are equivalent for `Bucket`s. 
 
 ## Available Pools and Classes
 
@@ -26,7 +26,7 @@ A `Volume` is referencing a `VolumePool` and a matching `VolumeClass` which the 
 
 ```yaml
 # sample-volume.yaml
-apiVersion: storage.api.onmetal.de/v1alpha1
+apiVersion: storage.ironcore.dev/v1alpha1
 kind: Volume
 metadata:
   name: sample-volume
@@ -42,7 +42,7 @@ spec:
 
 ```shell
 kubectl apply -f sample-volume.yaml 
-volume.storage.api.onmetal.de/sample-volume created
+volume.storage.ironcore.dev/sample-volume created
 ```
 
 ## `Volume` Status
@@ -58,7 +58,7 @@ default   sample-volume   ceph            fast          Available   Unbound   4m
 The status of the `Volume` will contain the information which is needed to be able to consume the volume with a ceph client.
 
 ```yaml
-apiVersion: storage.api.onmetal.de/v1alpha1
+apiVersion: storage.ironcore.dev/v1alpha1
 kind: Volume
 metadata:
   name: sample-volume

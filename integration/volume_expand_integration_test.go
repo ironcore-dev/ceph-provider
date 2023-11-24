@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/onmetal/cephlet/ori/volume/apiutils"
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/cephlet/pkg/omap"
-	metav1alpha1 "github.com/onmetal/onmetal-api/ori/apis/meta/v1alpha1"
-	oriv1alpha1 "github.com/onmetal/onmetal-api/ori/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/ceph-provider/iri/volume/apiutils"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/omap"
+	metav1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
+	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -31,14 +31,14 @@ import (
 var _ = Describe("Expand Volume", func() {
 	It("should expand a volume", func(ctx SpecContext) {
 		By("creating a volume")
-		createResp, err := volumeClient.CreateVolume(ctx, &oriv1alpha1.CreateVolumeRequest{
-			Volume: &oriv1alpha1.Volume{
+		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
 					Id: "foo",
 				},
-				Spec: &oriv1alpha1.VolumeSpec{
+				Spec: &iriv1alpha1.VolumeSpec{
 					Class: "foo",
-					Resources: &oriv1alpha1.VolumeResources{
+					Resources: &iriv1alpha1.VolumeResources{
 						StorageBytes: 1024 * 1024 * 1024,
 					},
 				},
@@ -52,11 +52,11 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Volume.Spec.Class", Equal("foo")),
 			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
-			HaveField("Volume.Status.State", Equal(oriv1alpha1.VolumeState_VOLUME_PENDING)),
+			HaveField("Volume.Status.State", Equal(iriv1alpha1.VolumeState_VOLUME_PENDING)),
 			HaveField("Volume.Status.Access", BeNil()),
 		))
 
-		DeferCleanup(volumeClient.DeleteVolume, &oriv1alpha1.DeleteVolumeRequest{
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 		})
 
@@ -98,9 +98,9 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		By("ensuring volume is in available state and other state fields have been updated")
-		Eventually(func() *oriv1alpha1.VolumeStatus {
-			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
-				Filter: &oriv1alpha1.VolumeFilter{
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
 				},
 			})
@@ -108,7 +108,7 @@ var _ = Describe("Expand Volume", func() {
 			Expect(resp.Volumes).NotTo(BeEmpty())
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(oriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),
@@ -124,9 +124,9 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		By("expanding a volume")
-		_, err = volumeClient.ExpandVolume(ctx, &oriv1alpha1.ExpandVolumeRequest{
+		_, err = volumeClient.ExpandVolume(ctx, &iriv1alpha1.ExpandVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
-			Resources: &oriv1alpha1.VolumeResources{
+			Resources: &iriv1alpha1.VolumeResources{
 				StorageBytes: 2048 * 2048 * 2048,
 			},
 		})
@@ -169,9 +169,9 @@ var _ = Describe("Expand Volume", func() {
 		))
 
 		By("ensuring volume is in available state and other state fields have been updated")
-		Eventually(func() *oriv1alpha1.VolumeStatus {
-			resp, err := volumeClient.ListVolumes(ctx, &oriv1alpha1.ListVolumesRequest{
-				Filter: &oriv1alpha1.VolumeFilter{
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
 					Id: createResp.Volume.Metadata.Id,
 				},
 			})
@@ -179,7 +179,7 @@ var _ = Describe("Expand Volume", func() {
 			Expect(resp.Volumes).NotTo(BeEmpty())
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(oriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),

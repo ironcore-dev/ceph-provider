@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/ceph/go-ceph/rados"
-	"github.com/onmetal/cephlet/pkg/api"
-	"github.com/onmetal/cephlet/pkg/store"
-	utilssync "github.com/onmetal/cephlet/pkg/sync"
-	"github.com/onmetal/cephlet/pkg/utils"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/store"
+	utilssync "github.com/ironcore-dev/ceph-provider/pkg/sync"
+	"github.com/ironcore-dev/ceph-provider/pkg/utils"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

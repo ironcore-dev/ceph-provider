@@ -15,7 +15,7 @@
 package limits
 
 import (
-	"github.com/onmetal/cephlet/pkg/api"
+	"github.com/ironcore-dev/ceph-provider/pkg/api"
 )
 
 func Calculate(iops, tps int64, burstFactor, burstDurationInSeconds int64) api.Limits {

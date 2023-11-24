@@ -22,10 +22,10 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: cephlet-bucket
-            target: cephlet-bucket
-          - name: cephlet-volume
-            target: cephlet-volume
+          - name: ceph-bucket-provider
+            target: ceph-bucket-provider
+          - name: ceph-volume-provider
+            target: ceph-volume-provider
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -22,9 +22,9 @@ If there is no [cert-manager](https://cert-manager.io/docs/) present in the clus
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml
 ```
 
-### Setup `onmetal-api`
+### Setup `ironcore`
 
-Reference: [onmetal-api docs](https://github.com/onmetal/onmetal-api/blob/main/docs/development/setup.md)
+Reference: [ironcore docs](https://github.com/ironcore-dev/ironcore/blob/main/docs/development/setup.md)
 
 ### Setup `Rook`
 
@@ -76,41 +76,41 @@ kubectl apply -f ./rook/pool.yaml
 
 ## Clone the Repository
 
-To bring up and start locally the `cephlet` project for development purposes you first need to clone the repository.
+To bring up and start locally the `ceph-provider` project for development purposes you first need to clone the repository.
 
 ```shell
-git clone git@github.com:onmetal/cephlet.git
-cd cephlet
+git clone git@github.com:ironcore-dev/ceph-provider.git
+cd ceph-provider
 ```
 
-## Build the `cephlet`
+## Build the `ceph-provider`
 
 
-1. Build the `volume-cephlet`
+1. Build the `ceph-volume-provider`
 ```shell
 make build-volume
 ```
 
-2. Build the `bucket-cephlet`
+2. Build the `ceph-bucket-provider`
 ```shell
 make build-bucket
 ```
 
-## Run the `cephlet-volume`
+## Run the `ceph-volume-provider`
 
-The required `cephlet` flags needs to be defined in order to connect to ceph. 
+The required `ceph-provider` flags needs to be defined in order to connect to ceph. 
 
-The following command starts a `volume-cephlet` and connects to a local `ceph` cluster.
+The following command starts a `ceph-volume-provider` and connects to a local `ceph` cluster.
 ```shell
-go run ./ori/volume/cmd/volume/main.go \
-    --address=./ori-volume.sock
+go run ./iri/volume/cmd/volume/main.go \
+    --address=./iri-volume.sock
     --supported-volume-classes=./classes.json
     --zap-log-level=2
     --ceph-key-file=./key
     --ceph-monitors=192.168.64.23:6789
     --ceph-user=admin
-    --ceph-pool=cephlet-pool
-    --ceph-client=client.cephlet-pool
+    --ceph-pool=ceph-provider-pool
+    --ceph-client=client.ceph-provider-pool
 ```
 
 
@@ -133,46 +133,46 @@ kubectl get secrets -n rook-ceph rook-ceph-admin-keyring -o yaml
 ```
 
 
-## Run the `cephlet-bucket`
+## Run the `ceph-bucket-provider`
 
-The required `cephlet` flags needs to be defined in order to work with rook.
+The required `ceph-provider` flags needs to be defined in order to work with rook.
 
-The following command starts a `bucket-cephlet`. 
+The following command starts a `ceph-bucket-provider`. 
 The flag `bucket-pool-storage-class-name` defines the `StorageClass` and hereby implicit the `CephBlockPool` (see rook [docs](https://rook.io/docs/rook/v1.11/Storage-Configuration/Object-Storage-RGW/object-storage/)). 
 ```shell
-go run ./ori/bucket/cmd/bucket/main.go \
-    --address=./ori-bucket.sock
+go run ./iri/bucket/cmd/bucket/main.go \
+    --address=./iri-bucket.sock
     --bucket-pool-storage-class-name=rook-ceph-bucket
 ```
 
 
-## Interact with the  `cephlet`
+## Interact with the  `ceph-provider`
 
 ### Prerequisites
-* orictl-volume
+* irictl-volume
     * locally running or
-    * https://github.com/onmetal/onmetal-api/pkgs/container/onmetal-api-orictl-volume
-* orictl-bucket
+    * https://github.com/ironcore-dev/ironcore/pkgs/container/ironcore-irictl-volume
+* irictl-bucket
     * locally running or
-    * https://github.com/onmetal/onmetal-api/pkgs/container/onmetal-api-orictl-bucket
+    * https://github.com/ironcore-dev/ironcore/pkgs/container/ironcore-irictl-bucket
 
 ### Listing supported `VolumeClass` 
 ```shell
-orictl-volume --address=unix:./ori-volume.sock get volumeclass
+irictl-volume --address=unix:./iri-volume.sock get volumeclass
 Name           TPS         IOPS
 experimental   262144000   15000
 ```
 
 ### Listing supported `VolumeClass`
 ```shell
-orictl-volume --address=unix:./ori-volume.sock get volumeclass
+irictl-volume --address=unix:./iri-volume.sock get volumeclass
 Name           TPS         IOPS
 experimental   262144000   15000
 ```
 
 ### Creating a  `Volume`
 ```shell
-orictl-volume --address=unix:./ori-volume.sock create volume -f ./volume.json
+irictl-volume --address=unix:./iri-volume.sock create volume -f ./volume.json
 
 Created volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2
 ```
@@ -182,7 +182,7 @@ Sample volume.json
 {
   "metadata": {
     "labels": {
-      "test.api.onmetal.de/volume-name": "test"
+      "test.api.ironcore.dev/volume-name": "test"
     }
   },
   "spec": {
@@ -196,13 +196,13 @@ Sample volume.json
 
 ### Listing `Volume`s
 ```shell
-orictl-volume --address=unix:./ori-volume.sock get  volume
+irictl-volume --address=unix:./iri-volume.sock get  volume
 ID                                                                Class          Image   State              Age
 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2   experimental           VOLUME_AVAILABLE   2s
 ```
 
 ### Deleting a `Volume`s
 ```shell
-orictl-volume --address=unix:./ori-volume.sock delete  volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2
+irictl-volume --address=unix:./iri-volume.sock delete  volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2
 Volume 796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2 deleted
 ```
