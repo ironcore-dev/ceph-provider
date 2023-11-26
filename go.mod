@@ -7,6 +7,7 @@ require (
 	github.com/containerd/containerd v1.7.9
 	github.com/go-logr/logr v1.3.0
 	github.com/google/addlicense v1.1.1
+	github.com/ironcore-dev/ironcore v0.1.2-0.20231120144059-30dd02e88870
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onmetal/controller-utils v0.8.3
 	github.com/onmetal/onmetal-image v0.1.1
@@ -51,7 +52,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.7.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.2.4 // indirect
 	github.com/go-openapi/jsonpointer v0.20.0 // indirect
@@ -83,7 +84,6 @@ require (
 	github.com/hashicorp/vault/api/auth/kubernetes v0.5.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/ironcore-dev/ironcore v0.1.2-0.20231120144059-30dd02e88870 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0 // indirect
