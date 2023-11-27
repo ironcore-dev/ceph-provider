@@ -1,5 +1,6 @@
 # ceph-provider
 
+[![REUSE status](https://api.reuse.software/badge/github.com/ironcore-dev/ceph-provider)](https://api.reuse.software/info/github.com/ironcore-dev/ceph-provider)
 [![Test](https://github.com/ironcore-dev/ceph-provider/actions/workflows/test.yml/badge.svg)](https://github.com/ironcore-dev/ceph-provider/actions/workflows/test.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
 [![GitHub License](https://img.shields.io/static/v1?label=License&message=Apache-2.0&color=blue&style=flat-square)](LICENSE)
@@ -78,4 +79,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
