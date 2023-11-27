@@ -61,7 +61,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest checklicense ## Run tests.
+test: manifests generate fmt vet envtest check-license ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go run github.com/onsi/ginkgo/v2/ginkgo --label-filter="!integration" -coverprofile cover.out ./...
 
 .PHONY: integration-tests
