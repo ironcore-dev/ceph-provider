@@ -39,9 +39,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/ironcore-dev/ceph-provider/iri/bucket/cmd/bucket/app"
+	"github.com/ironcore-dev/controller-utils/modutils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	"github.com/ironcore-dev/ironcore/iri/remote/bucket"
-	"github.com/onmetal/controller-utils/modutils"
 	//+kubebuilder:scaffold:imports
 )
 
