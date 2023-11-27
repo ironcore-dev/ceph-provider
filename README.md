@@ -6,9 +6,9 @@
 [![GitHub License](https://img.shields.io/static/v1?label=License&message=Apache-2.0&color=blue&style=flat-square)](LICENSE)
 
 `ceph-provider` is a Ceph based provider implementation of the [ironcore](https://github.com/ironcore-dev/ironcore) `Volume` 
-and `VolumePool` types.
+and `Bucket` types.
 
-Please consult the [project documentation](https://onmetal.github.io/ceph-provider/) for additional information.
+Please consult the [project documentation](https://ironcore-dev.github.io/ceph-provider/) for additional information.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
