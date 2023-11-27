@@ -52,8 +52,8 @@ nav:
   - Usage: usage/README.md
   - Developer Guide:
     - Local Setup: development/setup.md
-  - Main Documentation ⧉: https://onmetal.github.io/documentation/
-  - Landing Page ⧉: https://onmetal.github.io/
+  - Main Documentation ⧉: https://ironcore-dev.github.io/documentation/
+  - Landing Page ⧉: https://ironcore-dev.github.io/
 
 extra:
   social:
