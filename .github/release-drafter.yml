@@ -1,6 +1,9 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 categories:
+  - title: '⚠️ Breaking'
+    labels:
+      - 'breaking'
   - title: '🚀 Features'
     labels:
       - 'feature'
@@ -32,9 +35,6 @@ version-resolver:
 exclude-labels:
   - 'skip-changelog'
 autolabeler:
-  - label: 'controllers'
-    files:
-      - '/controllers/*'
   - label: 'integration-tests'
     files:
       - 'integration/*'
@@ -54,6 +54,9 @@ autolabeler:
   - label: 'enhancement'
     branch:
       - '/enh\/.+/'
+  - label: 'chore'
+    branch:
+      - '/chore\/.+/'
 template: |
   ## Changes
   $CHANGES
