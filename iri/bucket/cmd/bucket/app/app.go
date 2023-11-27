@@ -29,9 +29,9 @@ import (
 	"github.com/ironcore-dev/ceph-provider/pkg/bcr"
 
 	"github.com/ironcore-dev/ceph-provider/iri/bucket/server"
+	"github.com/ironcore-dev/controller-utils/configutils"
 	"github.com/ironcore-dev/ironcore/broker/common"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
-	"github.com/onmetal/controller-utils/configutils"
 )
 
 type Options struct {

@@ -19,8 +19,8 @@ import (
 	"fmt"
 
 	"github.com/ironcore-dev/ceph-provider/pkg/api"
+	"github.com/ironcore-dev/controller-utils/metautils"
 	irimeta "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
-	"github.com/onmetal/controller-utils/metautils"
 )
 
 func GetObjectMetadata(o api.Metadata) (*irimeta.ObjectMetadata, error) {

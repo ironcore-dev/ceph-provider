@@ -18,9 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ironcore-dev/controller-utils/metautils"
 	irimeta "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"github.com/onmetal/controller-utils/metautils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
