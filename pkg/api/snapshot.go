@@ -24,5 +24,5 @@ type SnapshotStatus struct {
 }
 
 type SnapshotSource struct {
-	OnmetalImage string `json:"onmetalImage"`
+	IronCoreImage string `json:"ironcoreImage"`
 }

@@ -14,7 +14,7 @@ func (s *Server) Status(ctx context.Context, req *iri.StatusRequest) (*iri.Statu
 	log := s.loggerFrom(ctx)
 	log.V(1).Info("Volume Status called")
 
-	log.V(1).Info("Listing onmetal volume classes")
+	log.V(1).Info("Listing ironcore volume classes")
 	volumeClassList := s.volumeClasses.List()
 
 	log.V(1).Info("Getting ceph pool stats")
