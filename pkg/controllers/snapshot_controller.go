@@ -19,8 +19,8 @@ import (
 	"github.com/ironcore-dev/ceph-provider/pkg/round"
 	"github.com/ironcore-dev/ceph-provider/pkg/store"
 	"github.com/ironcore-dev/ceph-provider/pkg/utils"
-	onmetalimage "github.com/onmetal/onmetal-image"
-	"github.com/onmetal/onmetal-image/oci/image"
+	ironcoreimage "github.com/ironcore-dev/ironcore-image"
+	"github.com/ironcore-dev/ironcore-image/oci/image"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
 )
@@ -90,19 +90,19 @@ type SnapshotReconciler struct {
 
 func (r *SnapshotReconciler) openSnapshotSource(ctx context.Context, src api.SnapshotSource) (io.ReadCloser, uint64, string, error) {
 	switch {
-	case src.OnmetalImage != "":
+	case src.IronCoreImage != "":
 
-		img, err := r.registry.Resolve(ctx, src.OnmetalImage)
+		img, err := r.registry.Resolve(ctx, src.IronCoreImage)
 		if err != nil {
 			return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
 		}
 
-		onmetalImage, err := onmetalimage.ResolveImage(ctx, img)
+		ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
 		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to resolve onmetal image: %w", err)
+			return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
 		}
 
-		rootFS := onmetalImage.RootFS
+		rootFS := ironcoreImage.RootFS
 		if rootFS == nil {
 			return nil, 0, "", fmt.Errorf("image has no root fs")
 		}
