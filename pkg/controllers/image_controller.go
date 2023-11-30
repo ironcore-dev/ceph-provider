@@ -22,7 +22,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/pkg/round"
 	"github.com/ironcore-dev/ceph-provider/pkg/store"
 	"github.com/ironcore-dev/ceph-provider/pkg/utils"
-	"github.com/onmetal/onmetal-image/oci/image"
+	"github.com/ironcore-dev/ironcore-image/oci/image"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
@@ -290,7 +290,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 					},
 				},
 				Source: api.SnapshotSource{
-					OnmetalImage: resolvedImageName,
+					IronCoreImage: resolvedImageName,
 				},
 			})
 			if err != nil {
