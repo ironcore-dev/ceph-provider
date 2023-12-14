@@ -63,6 +63,8 @@ jobs:
       - name: Set Environment Variables
         run: |
           disk_size=$(df --output=size $ephemeral_disk | sed -n '2p' | sed 's/[[:blank:]]//g')
+          echo "ephemeral_disk=$ephemeral_disk"
+          echo "CEPH_DISK_SIZE=$disk_size"
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
