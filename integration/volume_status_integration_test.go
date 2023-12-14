@@ -5,7 +5,6 @@ package integration
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"github.com/ironcore-dev/ceph-provider/iri/volume/apiutils"
@@ -27,7 +26,6 @@ var _ = Describe("Volume Status", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("validating volume class status")
-		fmt.Println("Quantity: ", resp.VolumeClassStatus[0].Quantity)
 		Expect(resp.VolumeClassStatus[0]).Should(SatisfyAll(
 			HaveField("VolumeClass", Equal(&iriv1alpha1.VolumeClass{
 				Name: "foo",
