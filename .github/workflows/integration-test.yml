@@ -62,10 +62,11 @@ jobs:
 
       - name: Set Environment Variables
         run: |
+          disk_size=$(df --output=size $ephemeral_disk | sed -n '2p')
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
-          echo "CEPH_DISK_SIZE=65260281856" >> $GITHUB_ENV
+          echo "CEPH_DISK_SIZE=$disk_size" >> $GITHUB_ENV
           echo "CEPH_KEYRING_FILENAME=/etc/ceph/ceph.client.admin.keyring" >> $GITHUB_ENV
           echo "CEPH_MONITORS=$(hostname):6789" >> $GITHUB_ENV
           echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV
