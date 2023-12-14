@@ -62,6 +62,7 @@ jobs:
 
       - name: Set Environment Variables
         run: |
+          ephemeral_disk="$(findmnt --noheadings --output SOURCE --target /mnt | sed 's/[0-9]\+$//')"
           disk_size=$(df --output=size $ephemeral_disk | sed -n '2p' | sed 's/[[:blank:]]//g')
           echo "ephemeral_disk=$ephemeral_disk"
           echo "CEPH_DISK_SIZE=$disk_size"
