@@ -62,7 +62,6 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          df -B 1
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
