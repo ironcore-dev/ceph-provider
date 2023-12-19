@@ -39,7 +39,6 @@ jobs:
           # Repurpose the ephemeral disk for ceph OSD.
           sudo swapoff /mnt/swapfile
           ephemeral_disk="$(findmnt --noheadings --output SOURCE --target /mnt | sed 's/[0-9]\+$//')"
-          # sudo umount /mnt
           sudo microceph disk add --wipe "${ephemeral_disk}"
           sudo rm -rf /etc/ceph
           sudo ln -s /var/snap/microceph/current/conf/ /etc/ceph
