@@ -39,7 +39,6 @@ jobs:
           # Repurpose the ephemeral disk for ceph OSD.
           sudo swapoff /mnt/swapfile
           ephemeral_disk="$(findmnt --noheadings --output SOURCE --target /mnt | sed 's/[0-9]\+$//')"
-          sudo umount /mnt
           sudo microceph disk add --wipe "${ephemeral_disk}"
           sudo rm -rf /etc/ceph
           sudo ln -s /var/snap/microceph/current/conf/ /etc/ceph
@@ -65,7 +64,7 @@ jobs:
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
-          echo "CEPH_DISK_SIZE=65260281856" >> $GITHUB_ENV
+          echo "CEPH_DISK_SIZE=$(df --output=size -B 1 /mnt | sed -n '2p' | sed 's/[[:blank:]]//g')" >> $GITHUB_ENV
           echo "CEPH_KEYRING_FILENAME=/etc/ceph/ceph.client.admin.keyring" >> $GITHUB_ENV
           echo "CEPH_MONITORS=$(hostname):6789" >> $GITHUB_ENV
           echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV
