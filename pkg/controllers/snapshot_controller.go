@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/pkg/utils"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
-	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
 )
 
