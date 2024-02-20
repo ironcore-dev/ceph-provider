@@ -7,7 +7,7 @@ require (
 	github.com/containerd/containerd v1.7.12
 	github.com/go-logr/logr v1.4.1
 	github.com/google/addlicense v1.1.1
-	github.com/ironcore-dev/controller-utils v0.9.1
+	github.com/ironcore-dev/controller-utils v0.9.2
 	github.com/ironcore-dev/ironcore v0.1.2-0.20231120144059-30dd02e88870
 	github.com/ironcore-dev/ironcore-image v0.2.0
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -135,9 +135,9 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.29.0 // indirect
-	k8s.io/apiserver v0.29.0 // indirect
-	k8s.io/component-base v0.29.0 // indirect
+	k8s.io/apiextensions-apiserver v0.29.1 // indirect
+	k8s.io/apiserver v0.29.1 // indirect
+	k8s.io/component-base v0.29.1 // indirect
 	k8s.io/klog/v2 v2.110.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
 	oras.land/oras-go v1.2.4 // indirect
