@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/ceph/go-ceph v0.26.0
-	github.com/containerd/containerd v1.7.12
+	github.com/containerd/containerd v1.7.13
 	github.com/go-logr/logr v1.4.1
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.2
