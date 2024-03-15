@@ -23,7 +23,6 @@ type CreateStrategy[E api.Object] interface {
 	PrepareForCreate(obj E)
 }
 
-
 var ErrResourceVersionNotLatest = errors.New("resourceVersion is not latest")
 
 type Options[E api.Object] struct {
@@ -248,8 +247,6 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 	if err != nil {
 		return utils.Zero[E](), err
 	}
-	
-
 	s.enqueue(store.WatchEvent[E]{
 		Type:   store.WatchEventTypeUpdated,
 		Object: obj,

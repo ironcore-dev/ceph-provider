@@ -6,7 +6,7 @@ package api
 import "time"
 
 type Metadata struct {
-	ID          string            `json:"id"`
+    ID          string            `json:"id"`
 	Annotations map[string]string `json:"annotations"`
 	Labels      map[string]string `json:"labels"`
 
