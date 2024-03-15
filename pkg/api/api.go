@@ -10,9 +10,9 @@ type Metadata struct {
 	Annotations map[string]string `json:"annotations"`
 	Labels      map[string]string `json:"labels"`
 
-	CreatedAt  time.Time  `json:"createdAt"`
-	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
-	Generation int64      `json:"generation"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	DeletedAt       *time.Time `json:"deletedAt,omitempty"`
+	Generation      int64      `json:"generation"`
 	ResourceVersion uint64     `json:"resourceVersion"`
 
 	Finalizers []string `json:"finalizers,omitempty"`
@@ -90,7 +90,7 @@ type Object interface {
 	GetDeletedAt() *time.Time
 	GetGeneration() int64
 	GetFinalizers() []string
-	GetResourceVersion() uint64 
+	GetResourceVersion() uint64
 
 	SetID(id string)
 	SetAnnotations(annotations map[string]string)
@@ -99,5 +99,5 @@ type Object interface {
 	SetDeletedAt(deleted *time.Time)
 	SetGeneration(generation int64)
 	SetFinalizers(finalizers []string)
-	IncrementResourceVersion() 
+	IncrementResourceVersion()
 }
