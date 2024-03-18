@@ -464,7 +464,6 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	if _, err = r.images.Update(ctx, img); err != nil {
 		return fmt.Errorf("failed to update image metadate: %w", err)
 	}
-
 	log.V(1).Info("Successfully reconciled image")
 
 	return nil
