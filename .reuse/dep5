@@ -19,7 +19,7 @@ Files:
   CONTRIBUTING.md
   Dockerfile
   Makefile
-  pkg/ceph/test.key
+  internal/ceph/test.key
   mkdocs.yml
   hack/*.sh
 Copyright: 2023 SAP SE or an SAP affiliate company and IronCore contributors
