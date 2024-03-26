@@ -12,8 +12,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go mod download
 
 # Copy the go source
-COPY pkg/ pkg/
-COPY iri/ iri/
+COPY api/ api/
+COPY internal/ internal/
+COPY cmd/ cmd/
 COPY hack/ hack/
 
 ARG TARGETOS
@@ -22,7 +23,7 @@ ARG TARGETARCH
 FROM builder as ceph-bucket-provider-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./iri/bucket/cmd/bucket/main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
 
 
 # Start from Kubernetes Debian base.
@@ -34,7 +35,7 @@ RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./iri/volume/cmd/volume/main.go
+    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
 
 
 # Use distroless as minimal base image to package the manager binary

@@ -102,7 +102,7 @@ The required `ceph-provider` flags needs to be defined in order to connect to ce
 
 The following command starts a `ceph-volume-provider` and connects to a local `ceph` cluster.
 ```shell
-go run ./iri/volume/cmd/volume/main.go \
+go run ./cmd/volumeprovider/main.go \
     --address=./iri-volume.sock
     --supported-volume-classes=./classes.json
     --zap-log-level=2
@@ -140,7 +140,7 @@ The required `ceph-provider` flags needs to be defined in order to work with roo
 The following command starts a `ceph-bucket-provider`. 
 The flag `bucket-pool-storage-class-name` defines the `StorageClass` and hereby implicit the `CephBlockPool` (see rook [docs](https://rook.io/docs/rook/v1.11/Storage-Configuration/Object-Storage-RGW/object-storage/)). 
 ```shell
-go run ./iri/bucket/cmd/bucket/main.go \
+go run ./cmd/bucketprovider/main.go \
     --address=./iri-bucket.sock
     --bucket-pool-storage-class-name=rook-ceph-bucket
 ```
