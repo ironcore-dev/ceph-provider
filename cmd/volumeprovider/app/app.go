@@ -18,7 +18,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/event"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
-	"github.com/ironcore-dev/ceph-provider/internal/snapshotstrategy"
+	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
 	"github.com/ironcore-dev/ceph-provider/internal/volumeserver"
 	"github.com/ironcore-dev/ironcore-image/oci/remote"
@@ -195,7 +195,7 @@ func Run(ctx context.Context, opts Options) error {
 	imageStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Image]{
 		OmapName:       omap.OmapNameVolumes,
 		NewFunc:        func() *providerapi.Image { return &providerapi.Image{} },
-		CreateStrategy: snapshotstrategy.ImageStrategy,
+		CreateStrategy: strategy.ImageStrategy,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize image store: %w", err)
@@ -214,7 +214,7 @@ func Run(ctx context.Context, opts Options) error {
 	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Snapshot]{
 		OmapName:       omap.OmapNameOsImages,
 		NewFunc:        func() *providerapi.Snapshot { return &providerapi.Snapshot{} },
-		CreateStrategy: snapshotstrategy.SnapshotStrategy,
+		CreateStrategy: strategy.SnapshotStrategy,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize snapshot store: %w", err)
