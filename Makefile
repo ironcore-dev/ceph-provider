@@ -46,7 +46,7 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	# bucket
-	$(CONTROLLER_GEN) rbac:roleName=broker-role paths="./iri/bucket/..." output:rbac:artifacts:config=config/ceph-bucket-provider/ceph-provider-rbac
+	$(CONTROLLER_GEN) rbac:roleName=broker-role paths="./internal/bucketserver/..." output:rbac:artifacts:config=config/ceph-bucket-provider/ceph-provider-rbac
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -76,8 +76,9 @@ add-license: addlicense ## Add license headers to all go files.
 check-license: addlicense ## Check that every file has a license header present.
 	find . -name '*.go' -exec $(ADDLICENSE) -check -c 'IronCore authors' {} +
 
-lint: ## Run golangci-lint against code.
-	golangci-lint run ./...
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint on the code.
+	$(GOLANGCI_LINT) run ./...
 
 check: manifests generate check-license lint test
 
@@ -96,19 +97,19 @@ clean-docs: ## Remove all local mkdocs Docker images (cleanup).
 
 .PHONY: build-volume
 build-volume: generate fmt vet ## Build manager binary.
-	CGO_ENABLED=1 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./iri/volume/cmd/volume/main.go
+	CGO_ENABLED=1 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
 
 .PHONY: build-bucket
 build-bucket: generate fmt vet ## Build manager binary.
-	CGO_ENABLED=0 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./iri/bucket/cmd/bucket/main.go
+	CGO_ENABLED=0 GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
 
 .PHONY: run-volume
 run-volume: manifests generate fmt vet ## Run a controller from your host.
-	go run ./iri/bucket/cmd/volume/main.go
+	go run ./cmd/volumeprovider/main.go
 
 .PHONY: run-bucket
 run-bucket: manifests generate fmt vet ## Run a controller from your host.
-	go run ./iri/bucket/cmd/bucket/main.go
+	go run ./cmd/bucketprovider/main.go
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
@@ -139,11 +140,13 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 ADDLICENSE ?= $(LOCALBIN)/addlicense
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
-CONTROLLER_TOOLS_VERSION ?= v0.13.0
+CONTROLLER_TOOLS_VERSION ?= v0.14.0
 ADDLICENSE_VERSION ?= v1.1.1
+GOLANGCI_LINT_VERSION ?= v1.57.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -165,3 +168,8 @@ $(ENVTEST): $(LOCALBIN)
 addlicense: $(ADDLICENSE) ## Download addlicense locally if necessary.
 $(ADDLICENSE): $(LOCALBIN)
 	test -s $(LOCALBIN)/addlicense || GOBIN=$(LOCALBIN) go install github.com/google/addlicense@$(ADDLICENSE_VERSION)
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	test -s $(LOCALBIN)/golangci-lint || GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
