@@ -7,13 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ironcore-dev/ceph-provider/cmd/bucketprovider/app"
-	"github.com/ironcore-dev/controller-utils/modutils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	"github.com/ironcore-dev/ironcore/iri/remote/bucket"
 	bucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -58,15 +58,34 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Bucket GRPC Server Suite")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(GinkgoLogr)
 
 	var err error
 
+	// Define temporary file for the Rook CRDs
+	rookCRDs, err := os.CreateTemp(GinkgoT().TempDir(), "rookcrds.yaml")
+	Expect(err).NotTo(HaveOccurred())
+	defer func() {
+		_ = rookCRDs.Close()
+		_ = os.Remove(rookCRDs.Name())
+	}()
+
+	// Download the Rook CRDs
+	rookCRDsURL := "https://raw.githubusercontent.com/rook/rook/v1.13.7/deploy/examples/crds.yaml"
+	response, err := http.Get(rookCRDsURL)
+	Expect(err).NotTo(HaveOccurred())
+	defer response.Body.Close()
+
+	Expect(response.StatusCode).To(Equal(http.StatusOK))
+
+	_, err = io.Copy(rookCRDs, response.Body)
+	Expect(err).NotTo(HaveOccurred())
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join(modutils.Dir("github.com/rook/rook", "deploy", "examples", "crds.yaml")),
+			rookCRDs.Name(),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -110,9 +129,6 @@ var _ = BeforeSuite(func() {
 
 	komega.SetClient(k8sClient)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	DeferCleanup(cancel)
-
 	By("creating the rook namespace")
 	rookNamespace = &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -148,9 +164,12 @@ var _ = BeforeSuite(func() {
 		PathSupportedBucketClasses: bucketClassesFile.Name(),
 	}
 
+	serverCtx, cancel := context.WithCancel(context.Background())
+	DeferCleanup(cancel)
+
 	go func() {
 		defer GinkgoRecover()
-		Expect(app.Run(ctx, opts)).To(Succeed())
+		Expect(app.Run(serverCtx, opts)).To(Succeed())
 	}()
 
 	Eventually(func() (bool, error) {
