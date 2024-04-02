@@ -1,6 +1,6 @@
 module github.com/ironcore-dev/ceph-provider
 
-go 1.22
+go 1.22.1
 
 require (
 	github.com/ceph/go-ceph v0.26.0
