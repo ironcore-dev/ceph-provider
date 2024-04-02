@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,6 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	//+kubebuilder:scaffold:imports
+)
+
+const (
+	rookCRDsURL = "https://raw.githubusercontent.com/rook/rook/v1.13.7/deploy/examples/crds.yaml"
 )
 
 const (
@@ -64,7 +69,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	var err error
 
 	// Define temporary file for the Rook CRDs
-	rookCRDs, err := os.CreateTemp(GinkgoT().TempDir(), "rookcrds.yaml")
+	rookCRDs, err := os.CreateTemp(GinkgoT().TempDir(), "*-crds.yaml")
 	Expect(err).NotTo(HaveOccurred())
 	defer func() {
 		_ = rookCRDs.Close()
@@ -72,7 +77,6 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	}()
 
 	// Download the Rook CRDs
-	rookCRDsURL := "https://raw.githubusercontent.com/rook/rook/v1.13.7/deploy/examples/crds.yaml"
 	response, err := http.Get(rookCRDsURL)
 	Expect(err).NotTo(HaveOccurred())
 	defer response.Body.Close()
@@ -85,7 +89,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			rookCRDs.Name(),
+			filepath.Dir(rookCRDs.Name()),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
