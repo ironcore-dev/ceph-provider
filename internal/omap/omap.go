@@ -179,6 +179,10 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 		return s.delete(ioCtx, id)
 	}
 
+	if obj.GetDeletedAt() != nil {
+		return nil
+	}
+
 	now := time.Now()
 	obj.SetDeletedAt(&now)
 
