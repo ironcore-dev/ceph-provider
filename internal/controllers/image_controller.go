@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,7 +24,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
-	"golang.org/x/exp/slices"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 )
