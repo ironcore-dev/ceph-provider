@@ -183,7 +183,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	address, err := bucket.GetAddressWithTimeout(3*time.Second, fmt.Sprintf("unix://%s", opts.Address))
 	Expect(err).NotTo(HaveOccurred())
 
-	gconn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	gconn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	Expect(err).NotTo(HaveOccurred())
 
 	bucketClient = iriv1alpha1.NewBucketRuntimeClient(gconn)
