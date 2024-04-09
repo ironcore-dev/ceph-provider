@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
@@ -461,6 +462,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		UserKey:  key,
 	}
 	img.Status.State = providerapi.ImageStateAvailable
+	time.Sleep(90 * time.Second)
 	if _, err = r.images.Update(ctx, img); err != nil {
 		return fmt.Errorf("failed to update image metadate: %w", err)
 	}
