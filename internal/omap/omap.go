@@ -23,8 +23,6 @@ type CreateStrategy[E api.Object] interface {
 	PrepareForCreate(obj E)
 }
 
-var ErrResourceVersionNotLatest = errors.New("resourceVersion is not latest")
-
 type Options[E api.Object] struct {
 	OmapName       string
 	NewFunc        func() E
@@ -148,7 +146,6 @@ func (s *Store[E]) Create(ctx context.Context, obj E) (E, error) {
 	}
 
 	obj.SetCreatedAt(time.Now())
-	obj.IncrementResourceVersion()
 
 	obj, err = s.set(ioCtx, obj)
 	if err != nil {
@@ -188,7 +185,6 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 
 	now := time.Now()
 	obj.SetDeletedAt(&now)
-	obj.IncrementResourceVersion()
 
 	if _, err := s.set(ioCtx, obj); err != nil {
 		return fmt.Errorf("failed to set object metadata: %w", err)
@@ -229,7 +225,7 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 	}
 	defer ioCtx.Destroy()
 
-	oldObj, err := s.get(ioCtx, obj.GetID())
+	_, err = s.get(ioCtx, obj.GetID())
 	if err != nil {
 		return utils.Zero[E](), err
 	}
@@ -240,11 +236,6 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 		}
 		return obj, nil
 	}
-
-	if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
-		return utils.Zero[E](), fmt.Errorf("failed to update object: %w", ErrResourceVersionNotLatest)
-	}
-	obj.IncrementResourceVersion()
 
 	//Todo: update version
 	obj, err = s.set(ioCtx, obj)
