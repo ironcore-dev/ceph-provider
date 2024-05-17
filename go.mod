@@ -4,7 +4,7 @@ go 1.22.1
 
 require (
 	github.com/ceph/go-ceph v0.27.0
-	github.com/containerd/containerd v1.7.16
+	github.com/containerd/containerd v1.7.17
 	github.com/go-logr/logr v1.4.1
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.3
@@ -28,7 +28,7 @@ require (
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
-	github.com/Microsoft/hcsshim v0.11.4 // indirect
+	github.com/Microsoft/hcsshim v0.11.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.0.2 // indirect
