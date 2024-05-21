@@ -64,7 +64,7 @@ ENV LIB_DIR_PREFIX_MINUS aarch64
 
 
 FROM busybox:1.36.1-uclibc as busybox
-FROM distroless-$TARGETARCH  as ceph-volume-provider
+FROM distroless-$TARGETARCH as ceph-volume-provider-image
 WORKDIR /
 COPY --from=busybox /bin/sh /bin/sh
 COPY --from=busybox /bin/mkdir /bin/mkdir
@@ -107,7 +107,7 @@ COPY --from=ceph-volume-provider-builder /workspace/bin/ceph-volume-provider /ce
 
 # Build stage used for validation of the output-image
 # See validate-container-linux-* targets in Makefile
-FROM ceph-volume-provider as validation-image
+FROM ceph-volume-provider-image as validation-image
 
 COPY --from=busybox /usr/bin/ldd /usr/bin/find /usr/bin/xargs /usr/bin/
 COPY --from=builder /workspace/hack/print-missing-deps.sh /print-missing-deps.sh
@@ -116,7 +116,7 @@ RUN /print-missing-deps.sh
 
 
 # Final build stage, create the real Docker image with ENTRYPOINT
-FROM ceph-volume-provider
+FROM ceph-volume-provider-image as ceph-volume-provider
 USER 65532:65532
 
 ENTRYPOINT ["/ceph-volume-provider"]
