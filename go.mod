@@ -1,6 +1,7 @@
 module github.com/ironcore-dev/ceph-provider
 
 go 1.22.1
+toolchain go1.22.3
 
 require (
 	github.com/ceph/go-ceph v0.27.0
@@ -8,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.3
-	github.com/ironcore-dev/ironcore v0.1.2-0.20231120144059-30dd02e88870
+	github.com/ironcore-dev/ironcore v0.1.2
 	github.com/ironcore-dev/ironcore-image v0.2.1
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.19.0
@@ -106,7 +107,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.45.0 // indirect
 	go.opentelemetry.io/otel v1.26.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.26.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.19.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.21.0 // indirect
 	go.opentelemetry.io/otel/metric v1.26.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.26.0 // indirect
 	go.opentelemetry.io/otel/trace v1.26.0 // indirect
