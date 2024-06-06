@@ -4,7 +4,7 @@ go 1.22.1
 
 require (
 	github.com/ceph/go-ceph v0.27.0
-	github.com/containerd/containerd v1.7.17
+	github.com/containerd/containerd v1.7.18
 	github.com/go-logr/logr v1.4.2
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.3
@@ -35,6 +35,7 @@ require (
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containernetworking/cni v1.2.0-rc1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
