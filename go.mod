@@ -3,7 +3,7 @@ module github.com/ironcore-dev/ceph-provider
 go 1.22.1
 
 require (
-	github.com/ceph/go-ceph v0.27.0
+	github.com/ceph/go-ceph v0.28.0
 	github.com/containerd/containerd v1.7.18
 	github.com/go-logr/logr v1.4.2
 	github.com/google/addlicense v1.1.1
