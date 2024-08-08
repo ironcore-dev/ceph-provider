@@ -17,6 +17,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/event"
+	eventrecorder "github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
@@ -55,6 +56,8 @@ type CephOptions struct {
 	PopulatorBufferSize int64
 
 	KeyEncryptionKeyPath string
+
+	VolumeEventStoreOptions eventrecorder.EventStoreOptions
 }
 
 func (o *Options) Defaults() {
@@ -82,6 +85,9 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Ceph.Pool, "ceph-pool", o.Ceph.Pool, "Ceph pool which is used to store objects.")
 	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
 	fs.StringVar(&o.Ceph.KeyEncryptionKeyPath, "ceph-kek-path", o.Ceph.KeyEncryptionKeyPath, "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
+	fs.IntVar(&o.Ceph.VolumeEventStoreOptions.MaxEvents, "volume-event-max-events", 100, "Maximum number of volume events that can be stored.")
+	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.EventTTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
+	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.EventResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -234,11 +240,14 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize docker registry: %w", err)
 	}
 
+	volumeEventStore := eventrecorder.NewEventStore(log, opts.Ceph.VolumeEventStoreOptions)
+
 	imageReconciler, err := controllers.NewImageReconciler(
 		log.WithName("image-reconciler"),
 		conn,
 		reg,
 		imageStore, snapshotStore,
+		volumeEventStore,
 		imageEvents,
 		snapshotEvents,
 		encryptor,
@@ -304,6 +313,13 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		setupLog.Info("Starting volume events garbage collector")
+		volumeEventStore.Start(ctx)
+	}()
+
 	supportedClasses, err := vcr.LoadVolumeClassesFile(opts.PathSupportedVolumeClasses)
 	if err != nil {
 		return fmt.Errorf("failed to load supported volume classes: %w", err)
@@ -326,6 +342,7 @@ func Run(ctx context.Context, opts Options) error {
 		encryptor,
 		cephCommandClient,
 		volumeserver.Options{
+			VolumeEventStore:       volumeEventStore,
 			BurstFactor:            opts.Ceph.BurstFactor,
 			BurstDurationInSeconds: opts.Ceph.BurstDurationInSeconds,
 		},
