@@ -289,6 +289,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
+			r.Eventf(log, img.Metadata, corev1.EventTypeNormal, "CreateImageSnapshot", "Image snapshot was not found. Creating new snapshot")
 			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
 				Metadata: providerapi.Metadata{
 					ID: snapshotDigest,
@@ -301,6 +302,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 				},
 			})
 			if err != nil {
+				r.Eventf(log, img.Metadata, corev1.EventTypeWarning, "CreateImageSnapshot", "Create image snapshot failed with error: %s", err)
 				return fmt.Errorf("failed to create snapshot: %w", err)
 			}
 		default:
@@ -357,6 +359,7 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 		log.V(2).Info("No update needed: Old and new image size same")
 		return nil
 	case requestedSize < currentImageSize:
+		r.Eventf(log, image.Metadata, corev1.EventTypeWarning, "UpdateImageSize", "Failed to shrink image: not supported")
 		return fmt.Errorf("failed to shrink image: not supported")
 	}
 
@@ -451,7 +454,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {
-		r.Eventf(log, img.Metadata, corev1.EventTypeWarning, "SetEncryptionFormat", "Set encryption header failed")
+		r.Eventf(log, img.Metadata, corev1.EventTypeWarning, "SetEncryptionFormat", "Set encryption header failed with error: %s", err)
 		return fmt.Errorf("failed to set encryption header: %w", err)
 	}
 
