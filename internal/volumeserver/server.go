@@ -10,6 +10,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
+	"github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ironcore/broker/common/idgen"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
@@ -24,8 +25,9 @@ type VolumeClassRegistry interface {
 type Server struct {
 	idGen idgen.IDGen
 
-	imageStore    store.Store[*api.Image]
-	snapshotStore store.Store[*api.Snapshot]
+	imageStore       store.Store[*api.Image]
+	snapshotStore    store.Store[*api.Snapshot]
+	volumeEventStore recorder.EventStore
 
 	volumeClasses     VolumeClassRegistry
 	cephCommandClient ceph.Command
@@ -45,6 +47,8 @@ type Options struct {
 
 	BurstFactor            int64
 	BurstDurationInSeconds int64
+
+	VolumeEventStore recorder.EventStore
 }
 
 func setOptionsDefaults(o *Options) {
@@ -66,10 +70,11 @@ func New(imageStore store.Store[*api.Image],
 	setOptionsDefaults(&opts)
 
 	return &Server{
-		idGen:         opts.IDGen,
-		imageStore:    imageStore,
-		snapshotStore: snapshotStore,
-		volumeClasses: volumeClassRegistry,
+		idGen:            opts.IDGen,
+		imageStore:       imageStore,
+		snapshotStore:    snapshotStore,
+		volumeEventStore: opts.VolumeEventStore,
+		volumeClasses:    volumeClassRegistry,
 
 		keyEncryption:     keyEncryption,
 		cephCommandClient: cephCommandClient,
