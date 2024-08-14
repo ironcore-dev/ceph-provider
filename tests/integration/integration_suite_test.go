@@ -13,6 +13,7 @@ import (
 
 	"github.com/ceph/go-ceph/rados"
 	"github.com/ironcore-dev/ceph-provider/cmd/volumeprovider/app"
+	eventrecorder "github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/ironcore/iri/remote/volume"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,6 +28,9 @@ const (
 	pollingInterval      = 50 * time.Millisecond
 	eventuallyTimeout    = 5 * time.Second
 	consistentlyDuration = 1 * time.Second
+	maxEvents            = 5
+	eventTTL             = 2 * time.Second
+	resyncInterval       = 2 * time.Second
 )
 
 var (
@@ -91,6 +95,11 @@ var _ = BeforeSuite(func() {
 			Client:                 cephClientname,
 			KeyEncryptionKeyPath:   keyEncryptionKeyFile.Name(),
 			BurstDurationInSeconds: 15,
+			VolumeEventStoreOptions: eventrecorder.EventStoreOptions{
+				MaxEvents:           maxEvents,
+				EventTTL:            eventTTL,
+				EventResyncInterval: resyncInterval,
+			},
 		},
 	}
 
