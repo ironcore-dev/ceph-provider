@@ -393,7 +393,6 @@ func Run(ctx context.Context, opts Options) error {
 	if err := grpcSrv.Serve(l); err != nil {
 		return fmt.Errorf("error serving: %w", err)
 	}
-
 	wg.Wait()
 	return nil
 }
