@@ -67,7 +67,7 @@ func NewSnapshotReconciler(
 		log:                 log,
 		conn:                conn,
 		registry:            registry,
-		queue:               workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:               workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		store:               store,
 		events:              events,
 		pool:                opts.Pool,
@@ -80,7 +80,7 @@ type SnapshotReconciler struct {
 	conn *rados.Conn
 
 	registry image.Source
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 
 	store  store.Store[*providerapi.Snapshot]
 	events event.Source[*providerapi.Snapshot]
@@ -155,23 +155,22 @@ func (r *SnapshotReconciler) Start(ctx context.Context) error {
 }
 
 func (r *SnapshotReconciler) processNextWorkItem(ctx context.Context, log logr.Logger) bool {
-	item, shutdown := r.queue.Get()
+	id, shutdown := r.queue.Get()
 	if shutdown {
 		return false
 	}
-	defer r.queue.Done(item)
+	defer r.queue.Done(id)
 
-	id := item.(string)
 	log = log.WithValues("snapshotId", id)
 	ctx = logr.NewContext(ctx, log)
 
 	if err := r.reconcileSnapshot(ctx, id); err != nil {
 		log.Error(err, "failed to reconcile snapshot")
-		r.queue.AddRateLimited(item)
+		r.queue.AddRateLimited(id)
 		return true
 	}
 
-	r.queue.Forget(item)
+	r.queue.Forget(id)
 	return true
 }
 
