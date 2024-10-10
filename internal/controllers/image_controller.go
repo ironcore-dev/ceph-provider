@@ -98,7 +98,7 @@ func NewImageReconciler(
 		log:            log,
 		conn:           conn,
 		registry:       registry,
-		queue:          workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		images:         images,
 		snapshots:      snapshots,
 		EventRecorder:  eventRecorder,
@@ -116,7 +116,7 @@ type ImageReconciler struct {
 	conn *rados.Conn
 
 	registry image.Source
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 
 	images    store.Store[*providerapi.Image]
 	snapshots store.Store[*providerapi.Snapshot]
@@ -193,23 +193,22 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 }
 
 func (r *ImageReconciler) processNextWorkItem(ctx context.Context, log logr.Logger) bool {
-	item, shutdown := r.queue.Get()
+	id, shutdown := r.queue.Get()
 	if shutdown {
 		return false
 	}
-	defer r.queue.Done(item)
+	defer r.queue.Done(id)
 
-	id := item.(string)
 	log = log.WithValues("imageId", id)
 	ctx = logr.NewContext(ctx, log)
 
 	if err := r.reconcileImage(ctx, id); err != nil {
 		log.Error(err, "failed to reconcile image")
-		r.queue.AddRateLimited(item)
+		r.queue.AddRateLimited(id)
 		return true
 	}
 
-	r.queue.Forget(item)
+	r.queue.Forget(id)
 	return true
 }
 
