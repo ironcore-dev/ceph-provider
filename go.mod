@@ -13,7 +13,7 @@ require (
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.22.0
-	github.com/onsi/gomega v1.35.1
+	github.com/onsi/gomega v1.36.0
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook/pkg/apis v0.0.0-20241121212004-a8f8d57131fb
 	github.com/spf13/cobra v1.8.1
