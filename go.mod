@@ -8,12 +8,12 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/addlicense v1.1.1
-	github.com/ironcore-dev/controller-utils v0.9.5
+	github.com/ironcore-dev/controller-utils v0.9.6
 	github.com/ironcore-dev/ironcore v0.2.0
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.22.0
-	github.com/onsi/gomega v1.36.0
+	github.com/onsi/gomega v1.36.1
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook/pkg/apis v0.0.0-20241121212004-a8f8d57131fb
 	github.com/spf13/cobra v1.8.1
