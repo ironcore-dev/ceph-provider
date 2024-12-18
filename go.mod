@@ -3,7 +3,7 @@ module github.com/ironcore-dev/ceph-provider
 go 1.23.0
 
 require (
-	github.com/ceph/go-ceph v0.30.0
+	github.com/ceph/go-ceph v0.31.0
 	github.com/containerd/containerd v1.7.24
 	github.com/go-logr/logr v1.4.2
 	github.com/gogo/protobuf v1.3.2
@@ -117,7 +117,7 @@ require (
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
