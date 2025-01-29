@@ -20,7 +20,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	google.golang.org/grpc v1.70.0
 	k8s.io/api v0.32.0
-	k8s.io/apimachinery v0.32.0
+	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.0
 	k8s.io/utils v0.0.0-20241104163129-6fe5fd82f078
 	sigs.k8s.io/controller-runtime v0.20.1
