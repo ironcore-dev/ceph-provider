@@ -9,7 +9,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.7
-	github.com/ironcore-dev/ironcore v0.2.0
+	github.com/ironcore-dev/ironcore v0.2.1
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.22.2
@@ -136,7 +136,7 @@ require (
 	oras.land/oras-go v1.2.6 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.0 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.4.3 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
