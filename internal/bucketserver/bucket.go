@@ -6,7 +6,7 @@ package bucketserver
 import (
 	"context"
 	"fmt"
-
+	"github.com/davecgh/go-spew/spew"
 	"github.com/ironcore-dev/ceph-provider/api"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
@@ -38,6 +38,15 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 	}
 
 	class, ok := api.GetClassLabel(bucketClaim)
+	/////////////////////////////////////////////////
+	//sizequota, ok := api.GetSizeQuota(bucketClaim)
+	//filesquota, ok := api.GetFilesQuota(bucketClaim)
+	sizequota := api.GetSizeQuota(bucketClaim.Spec.AdditionalConfig)
+	/////filesquota := api.GetFilesQuota(bucketClaim.Spec.AdditionalConfig)
+	spew.Dump(sizequota)
+	////sizequota := bucketClaim.Spec.AdditionalConfig.bucketMaxSize
+	filesquota := api.GetFilesQuota(bucketClaim.Spec.AdditionalConfig)
+	//////////////////////////////////////////////////
 	if !ok {
 		return nil, fmt.Errorf("failed to get bucket class")
 	}
@@ -50,7 +59,9 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 	return &iriv1alpha1.Bucket{
 		Metadata: metadata,
 		Spec: &iriv1alpha1.BucketSpec{
-			Class: class,
+			Class:      class,
+			SizeQuota:  sizequota,
+			FilesQuota: filesquota,
 		},
 		Status: &iriv1alpha1.BucketStatus{
 			State:  state,

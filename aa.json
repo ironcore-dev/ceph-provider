@@ -1,0 +1,9 @@
+[
+  {
+    "name": "bucketclass-sample",
+    "capabilities": {
+      "tps": 262144000,
+      "iops": 15000
+    }
+  }
+]

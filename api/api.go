@@ -9,6 +9,8 @@ type Metadata struct {
 	ID          string            `json:"id"`
 	Annotations map[string]string `json:"annotations"`
 	Labels      map[string]string `json:"labels"`
+	FilesQuota  string            `json:"filesquota"`
+	SizeQuota   string            `json:"sizequota"`
 
 	CreatedAt       time.Time  `json:"createdAt"`
 	DeletedAt       *time.Time `json:"deletedAt,omitempty"`
@@ -38,6 +40,14 @@ func (m *Metadata) GetLabels() map[string]string {
 	return m.Labels
 }
 
+func (m *Metadata) GetFilesQuota() string {
+	return m.FilesQuota
+}
+
+func (m *Metadata) GetSizeQuota() string {
+	return m.SizeQuota
+}
+
 func (m *Metadata) GetCreatedAt() time.Time {
 	return m.CreatedAt
 }
@@ -56,6 +66,14 @@ func (m *Metadata) GetFinalizers() []string {
 
 func (m *Metadata) SetID(id string) {
 	m.ID = id
+}
+
+func (m *Metadata) SetFilesQuota(filesquota string) {
+	m.FilesQuota = filesquota
+}
+
+func (m *Metadata) SetSizeQuota(sizequota string) {
+	m.SizeQuota = sizequota
 }
 
 func (m *Metadata) SetAnnotations(annotations map[string]string) {
@@ -86,6 +104,10 @@ type Object interface {
 	GetID() string
 	GetAnnotations() map[string]string
 	GetLabels() map[string]string
+	GetFilesQuota() string
+	GetSizeQuota() string
+	GetFilesQuotaUsed() string
+	GetSizeQuotaUsed() string
 	GetCreatedAt() time.Time
 	GetDeletedAt() *time.Time
 	GetGeneration() int64
@@ -93,6 +115,8 @@ type Object interface {
 	GetResourceVersion() uint64
 
 	SetID(id string)
+	SetFilesQuota(filesquota string)
+	SetSizeQuota(sizequota string)
 	SetAnnotations(annotations map[string]string)
 	SetLabels(labels map[string]string)
 	SetCreatedAt(createdAt time.Time)

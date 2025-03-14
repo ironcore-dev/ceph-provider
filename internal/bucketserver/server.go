@@ -6,7 +6,7 @@ package bucketserver
 import (
 	"context"
 	"fmt"
-
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ironcore/broker/common/idgen"
@@ -49,6 +49,8 @@ type Server struct {
 
 	bucketEndpoint             string
 	bucketPoolStorageClassName string
+	bucketSizeQuota            string
+	bucketFilesQuota           string
 }
 
 func (s *Server) loggerFrom(ctx context.Context, keysWithValues ...interface{}) logr.Logger {
@@ -62,6 +64,8 @@ type Options struct {
 	BucketEndpoint             string
 	BucketPoolStorageClassName string
 	BucketClassSelector        map[string]string
+	BucketSizeQuota            string
+	BucketFilesQuota           string
 }
 
 func setOptionsDefaults(o *Options) {
@@ -91,16 +95,24 @@ func New(cfg *rest.Config, bucketClassRegistry BucketClassRegistry, opts Options
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: %w", err)
 	}
-
-	return &Server{
+	//spew.Dump("opts values:")
+	//spew.Dump(opts)
+	serv := &Server{
 		client:                     c,
 		idGen:                      opts.IDGen,
 		bucketClassess:             bucketClassRegistry,
 		bucketClassSelector:        opts.BucketClassSelector,
 		namespace:                  opts.Namespace,
 		bucketPoolStorageClassName: opts.BucketPoolStorageClassName,
+		bucketSizeQuota:            opts.BucketSizeQuota,
+		bucketFilesQuota:           opts.BucketFilesQuota,
 		bucketEndpoint:             opts.BucketEndpoint,
-	}, nil
+	}
+	//spew.Dump("server values:")
+	//spew.Dump(serv.bucketSizeQuota)
+	//spew.Dump(serv.bucketFilesQuota)
+	return serv, nil
+
 }
 
 func (s *Server) getManagedAndCreated(ctx context.Context, name string, obj client.Object) error {
