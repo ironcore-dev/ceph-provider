@@ -16,13 +16,13 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ceph-provider/internal/event"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
+	"github.com/ironcore-dev/provider-utils/eventutils/event"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/client-go/util/workqueue"
 )
 

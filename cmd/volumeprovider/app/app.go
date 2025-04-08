@@ -16,8 +16,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
-	"github.com/ironcore-dev/ceph-provider/internal/event"
-	eventrecorder "github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
@@ -25,6 +23,8 @@ import (
 	"github.com/ironcore-dev/ironcore-image/oci/remote"
 	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/eventutils/event"
+	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
@@ -86,8 +86,8 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Ceph.Client, "ceph-client", o.Ceph.Client, "Ceph client which grants access to pools/images eg. 'client.volumes'")
 	fs.StringVar(&o.Ceph.KeyEncryptionKeyPath, "ceph-kek-path", o.Ceph.KeyEncryptionKeyPath, "path to the key encryption key file (32 Bit - KEK) to encrypt volume keys.")
 	fs.IntVar(&o.Ceph.VolumeEventStoreOptions.MaxEvents, "volume-event-max-events", 100, "Maximum number of volume events that can be stored.")
-	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.EventTTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
-	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.EventResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
+	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.TTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
+	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.ResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {

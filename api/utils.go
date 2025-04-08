@@ -6,6 +6,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 
 	"github.com/ironcore-dev/controller-utils/metautils"
 	irimeta "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
@@ -13,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func GetObjectMetadata(o metav1.Object) (*irimeta.ObjectMetadata, error) {
+func GetObjectMetadata(o apiutils.Metadata) (*irimeta.ObjectMetadata, error) {
 	annotations, err := GetAnnotationsAnnotation(o)
 	if err != nil {
 		return nil, err
@@ -113,7 +114,7 @@ func IsManagedBy(o metav1.Object, manager string) bool {
 	return ok && actual == manager
 }
 
-func GetObjectMetadataFromObjectID(o Metadata) (*irimeta.ObjectMetadata, error) {
+func GetObjectMetadataFromObjectID(o apiutils.Metadata) (*irimeta.ObjectMetadata, error) {
 	annotations, err := GetAnnotationsAnnotationForMetadata(o)
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func GetObjectMetadataFromObjectID(o Metadata) (*irimeta.ObjectMetadata, error) 
 	}, nil
 }
 
-func GetAnnotationsAnnotationForMetadata(o Metadata) (map[string]string, error) {
+func GetAnnotationsAnnotationForMetadata(o apiutils.Metadata) (map[string]string, error) {
 	data, ok := o.GetAnnotations()[AnnotationsAnnotation]
 	if !ok {
 		return nil, fmt.Errorf("object has no annotations at %s", AnnotationsAnnotation)
@@ -153,7 +154,7 @@ func GetAnnotationsAnnotationForMetadata(o Metadata) (map[string]string, error) 
 	return annotations, nil
 }
 
-func GetLabelsAnnotationForMetadata(o Metadata) (map[string]string, error) {
+func GetLabelsAnnotationForMetadata(o apiutils.Metadata) (map[string]string, error) {
 	data, ok := o.GetAnnotations()[LabelsAnnotation]
 	if !ok {
 		return nil, fmt.Errorf("object has no labels at %s", LabelsAnnotation)
@@ -167,12 +168,12 @@ func GetLabelsAnnotationForMetadata(o Metadata) (map[string]string, error) {
 	return labels, nil
 }
 
-func GetClassLabelFromObject(o Object) (string, bool) {
+func GetClassLabelFromObject(o apiutils.Object) (string, bool) {
 	class, found := o.GetLabels()[ClassLabel]
 	return class, found
 }
 
-func SetObjectMetadataFromMetadata(o Object, metadata *irimeta.ObjectMetadata) error {
+func SetObjectMetadataFromMetadata(o apiutils.Object, metadata *irimeta.ObjectMetadata) error {
 	if err := SetAnnotationsAnnotationForObject(o, metadata.Annotations); err != nil {
 		return err
 	}
@@ -182,7 +183,7 @@ func SetObjectMetadataFromMetadata(o Object, metadata *irimeta.ObjectMetadata) e
 	return nil
 }
 
-func SetLabelsAnnotationForOject(o Object, labels map[string]string) error {
+func SetLabelsAnnotationForOject(o apiutils.Object, labels map[string]string) error {
 	data, err := json.Marshal(labels)
 	if err != nil {
 		return fmt.Errorf("error marshalling labels: %w", err)
@@ -191,7 +192,7 @@ func SetLabelsAnnotationForOject(o Object, labels map[string]string) error {
 	return nil
 }
 
-func SetAnnotationsAnnotationForObject(o Object, annotations map[string]string) error {
+func SetAnnotationsAnnotationForObject(o apiutils.Object, annotations map[string]string) error {
 	data, err := json.Marshal(annotations)
 	if err != nil {
 		return fmt.Errorf("error marshalling annotations: %w", err)
@@ -201,15 +202,15 @@ func SetAnnotationsAnnotationForObject(o Object, annotations map[string]string) 
 	return nil
 }
 
-func SetClassLabelForObject(o Object, class string) {
+func SetClassLabelForObject(o apiutils.Object, class string) {
 	metautils.SetLabel(o, ClassLabel, class)
 }
 
-func IsObjectManagedBy(o Object, manager string) bool {
+func IsObjectManagedBy(o apiutils.Object, manager string) bool {
 	actual, ok := o.GetLabels()[ManagerLabel]
 	return ok && actual == manager
 }
 
-func SetManagerLabel(o Object, manager string) {
+func SetManagerLabel(o apiutils.Object, manager string) {
 	metautils.SetLabel(o, ManagerLabel, manager)
 }

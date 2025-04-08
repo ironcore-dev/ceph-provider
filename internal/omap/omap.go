@@ -13,9 +13,9 @@ import (
 
 	"github.com/ceph/go-ceph/rados"
 	"github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	utilssync "github.com/ironcore-dev/ceph-provider/internal/sync"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
