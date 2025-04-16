@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	github.com/ceph/go-ceph v0.32.0
+	github.com/ceph/go-ceph v0.33.0
 	github.com/containerd/containerd v1.7.27
 	github.com/go-logr/logr v1.4.2
 	github.com/gogo/protobuf v1.3.2
