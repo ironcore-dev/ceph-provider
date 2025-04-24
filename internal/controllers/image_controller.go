@@ -267,7 +267,7 @@ func (r *ImageReconciler) fetchAuth(ctx context.Context, log logr.Logger) (strin
 }
 
 func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger, img *providerapi.Image) error {
-	if !(img.Spec.Image != "" && img.Spec.SnapshotRef == nil) {
+	if img.Spec.Image == "" || img.Spec.SnapshotRef != nil {
 		return nil
 	}
 
