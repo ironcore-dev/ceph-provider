@@ -8,30 +8,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"sync"
 	"time"
 
 	"github.com/ceph/go-ceph/rados"
-	"github.com/ironcore-dev/ceph-provider/api"
 	utilssync "github.com/ironcore-dev/ceph-provider/internal/sync"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-type CreateStrategy[E api.Object] interface {
+type CreateStrategy[E apiutils.Object] interface {
 	PrepareForCreate(obj E)
 }
 
 var ErrResourceVersionNotLatest = errors.New("resourceVersion is not latest")
 
-type Options[E api.Object] struct {
+type Options[E apiutils.Object] struct {
 	OmapName       string
 	NewFunc        func() E
 	CreateStrategy CreateStrategy[E]
 }
 
-func New[E api.Object](conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
+func New[E apiutils.Object](conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
 	}
@@ -62,7 +62,7 @@ func New[E api.Object](conn *rados.Conn, pool string, opts Options[E]) (*Store[E
 	}, nil
 }
 
-type Store[E api.Object] struct {
+type Store[E apiutils.Object] struct {
 	idMu *utilssync.MutexMap[string]
 
 	conn     *rados.Conn
@@ -259,7 +259,7 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 	return obj, nil
 }
 
-type watch[E api.Object] struct {
+type watch[E apiutils.Object] struct {
 	store *Store[E]
 
 	events chan store.WatchEvent[E]

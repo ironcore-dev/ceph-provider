@@ -15,6 +15,32 @@ import (
 )
 
 func GetObjectMetadata(o apiutils.Metadata) (*irimeta.ObjectMetadata, error) {
+	annotations, err := apiutils.GetAnnotationsAnnotation(o, AnnotationsAnnotation)
+	if err != nil {
+		return nil, err
+	}
+
+	labels, err := apiutils.GetLabelsAnnotation(o, LabelsAnnotation)
+	if err != nil {
+		return nil, err
+	}
+
+	var deletedAt int64
+	if o.DeletedAt != nil {
+		deletedAt = o.DeletedAt.UnixNano()
+	}
+
+	return &irimeta.ObjectMetadata{
+		Id:          o.GetID(),
+		Annotations: annotations,
+		Labels:      labels,
+		Generation:  o.GetGeneration(),
+		CreatedAt:   o.GetCreatedAt().UnixNano(),
+		DeletedAt:   deletedAt,
+	}, nil
+}
+
+func GetObjectMetadataFromK8s(o metav1.Object) (*irimeta.ObjectMetadata, error) {
 	annotations, err := GetAnnotationsAnnotation(o)
 	if err != nil {
 		return nil, err

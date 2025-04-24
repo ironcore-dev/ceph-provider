@@ -197,9 +197,9 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("configuration invalid: %w", err)
 	}
 
-	setupLog.Info("Configuring image store", "OmapName", omap.OmapNameVolumes)
+	setupLog.Info("Configuring image store", "OmapName", omap.NameVolumes)
 	imageStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Image]{
-		OmapName:       omap.OmapNameVolumes,
+		OmapName:       omap.NameVolumes,
 		NewFunc:        func() *providerapi.Image { return &providerapi.Image{} },
 		CreateStrategy: strategy.ImageStrategy,
 	})
@@ -216,9 +216,9 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize image events: %w", err)
 	}
 
-	setupLog.Info("Configuring snapshot store", "OmapName", omap.OmapNameOsImages)
+	setupLog.Info("Configuring snapshot store", "OmapName", omap.NameOsImages)
 	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Snapshot]{
-		OmapName:       omap.OmapNameOsImages,
+		OmapName:       omap.NameOsImages,
 		NewFunc:        func() *providerapi.Snapshot { return &providerapi.Snapshot{} },
 		CreateStrategy: strategy.SnapshotStrategy,
 	})

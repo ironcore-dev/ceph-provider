@@ -5,6 +5,7 @@ package volumeserver
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
@@ -46,13 +47,16 @@ func (s *Server) filterEvents(log logr.Logger, events []*recorder.Event, filter 
 	return res
 }
 
-func (s *Server) convertEventToIriEvent(events []*recorder.Event) []*irievent.Event {
+func (s *Server) convertEventToIriEvent(events []*recorder.Event) ([]*irievent.Event, error) {
 	var (
 		res []*irievent.Event
 	)
 
 	for _, event := range events {
-		metadata, error := api.GetObjectMetadata(event.InvolvedObjectMeta)
+		metadata, err := api.GetObjectMetadata(event.InvolvedObjectMeta)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get object metadata: %w", err)
+		}
 		res = append(res, &irievent.Event{
 			Spec: &irievent.EventSpec{
 				InvolvedObjectMeta: metadata,
@@ -63,13 +67,17 @@ func (s *Server) convertEventToIriEvent(events []*recorder.Event) []*irievent.Ev
 			},
 		})
 	}
+	return res, nil
 }
 
 func (s *Server) ListEvents(ctx context.Context, req *iri.ListEventsRequest) (*iri.ListEventsResponse, error) {
 	events := s.volumeEventStore.ListEvents()
 	log := s.loggerFrom(ctx)
 	filteredEvents := s.filterEvents(log, events, req.Filter)
-	iriEvents := s.convertEventToIriEvent(filteredEvents)
+	iriEvents, err := s.convertEventToIriEvent(filteredEvents)
+	if err != nil {
+		return nil, err
+	}
 
 	return &iri.ListEventsResponse{
 		Events: iriEvents,

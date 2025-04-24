@@ -37,7 +37,7 @@ var _ = Describe("Delete Volume", func() {
 		By("ensure the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
 		Eventually(func() *api.Image {
-			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
@@ -75,7 +75,7 @@ var _ = Describe("Delete Volume", func() {
 
 		By("ensuring the image has been deleted inside the ceph cluster")
 		Eventually(func() {
-			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).NotTo(HaveKey(createResp.Volume.Metadata.Id))
 		})
