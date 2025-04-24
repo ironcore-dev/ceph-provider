@@ -19,12 +19,13 @@ import (
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
-	"github.com/ironcore-dev/ceph-provider/internal/event"
-	eventrecorder "github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
+	"github.com/ironcore-dev/provider-utils/eventutils/event"
+	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
@@ -161,7 +162,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 
 		for _, img := range imageList {
 			if snapshotRef := img.Spec.SnapshotRef; snapshotRef != nil && *snapshotRef == evt.Object.ID {
-				r.Eventf(log, img.Metadata, corev1.EventTypeNormal, "PulledImage", "Pulled image %s", *img.Spec.SnapshotRef)
+				r.Eventf(img.Metadata, corev1.EventTypeNormal, "PulledImage", "Pulled image %s", *img.Spec.SnapshotRef)
 				r.queue.Add(img.ID)
 			}
 		}
@@ -231,7 +232,7 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
 		return fmt.Errorf("failed to update image metadata: %w", err)
 	}
-	r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
 	log.V(2).Info("Removed Finalizers")
 
 	return nil
@@ -288,9 +289,9 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
-			r.Eventf(log, img.Metadata, corev1.EventTypeNormal, "CreateImageSnapshot", "Image snapshot was not found. Creating new snapshot")
+			r.Eventf(img.Metadata, corev1.EventTypeNormal, "CreateImageSnapshot", "Image snapshot was not found. Creating new snapshot")
 			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
-				Metadata: providerapi.Metadata{
+				Metadata: apiutils.Metadata{
 					ID: snapshotDigest,
 					Labels: map[string]string{
 						imageDigestLabel: snapshotDigest,
@@ -301,7 +302,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 				},
 			})
 			if err != nil {
-				r.Eventf(log, img.Metadata, corev1.EventTypeWarning, "CreateImageSnapshot", "Create image snapshot failed with error: %s", err)
+				r.Eventf(img.Metadata, corev1.EventTypeWarning, "CreateImageSnapshot", "Create image snapshot failed with error: %s", err)
 				return fmt.Errorf("failed to create snapshot: %w", err)
 			}
 		default:
@@ -315,7 +316,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to update image snapshot ref: %w", err)
 	}
 
-	r.Eventf(log, img.Metadata, corev1.EventTypeNormal, "UpdatedImageSnapshotRef", "Updated image snapshot ref: %s", *img.Spec.SnapshotRef)
+	r.Eventf(img.Metadata, corev1.EventTypeNormal, "UpdatedImageSnapshotRef", "Updated image snapshot ref: %s", *img.Spec.SnapshotRef)
 	return nil
 }
 
@@ -358,7 +359,7 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 		log.V(2).Info("No update needed: Old and new image size same")
 		return nil
 	case requestedSize < currentImageSize:
-		r.Eventf(log, image.Metadata, corev1.EventTypeWarning, "UpdateImageSize", "Failed to shrink image: not supported")
+		r.Eventf(image.Metadata, corev1.EventTypeWarning, "UpdateImageSize", "Failed to shrink image: not supported")
 		return fmt.Errorf("failed to shrink image: not supported")
 	}
 
@@ -366,7 +367,7 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 		return fmt.Errorf("failed to resize image: %w", err)
 	}
 
-	r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "UpdatedImageSize", "Image size changed. requestedSize: %d currentSize: %d", requestedSize, currentImageSize)
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "UpdatedImageSize", "Image size changed. requestedSize: %d currentSize: %d", requestedSize, currentImageSize)
 	log.V(1).Info("Updated image", "requestedSize", requestedSize, "currentSize", currentImageSize)
 	return nil
 }
@@ -453,7 +454,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	if err := r.setEncryptionHeader(ctx, log, ioCtx, img); err != nil {
-		r.Eventf(log, img.Metadata, corev1.EventTypeWarning, "SetEncryptionFormat", "Set encryption header failed with error: %s", err)
+		r.Eventf(img.Metadata, corev1.EventTypeWarning, "SetEncryptionFormat", "Set encryption header failed with error: %s", err)
 		return fmt.Errorf("failed to set encryption header: %w", err)
 	}
 
@@ -500,7 +501,7 @@ func (r *ImageReconciler) setImageLimits(ctx context.Context, log logr.Logger, i
 			}
 			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
 		}
-		r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "SetImageLimit", "Image limit set. limit: %s value: %d", limit, value)
+		r.Eventf(image.Metadata, corev1.EventTypeNormal, "SetImageLimit", "Image limit set. limit: %s value: %d", limit, value)
 		log.V(3).Info("Set image limit", "limit", limit, "value", value)
 	}
 
@@ -567,7 +568,7 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 	if _, err = r.images.Update(ctx, image); err != nil {
 		return fmt.Errorf("failed to update image encryption state: %w", err)
 	}
-	r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "ConfiguredEncryption", "Configured encryption")
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ConfiguredEncryption", "Configured encryption")
 
 	return nil
 }
@@ -576,7 +577,7 @@ func (r *ImageReconciler) createEmptyImage(ctx context.Context, log logr.Logger,
 	if err := librbd.CreateImage(ioCtx, ImageIDToRBDID(image.ID), round.OffBytes(image.Spec.Size), options); err != nil {
 		return fmt.Errorf("failed to create rbd image: %w", err)
 	}
-	r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "CreatedImage", "Created image. bytes: %d", image.Spec.Size)
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "CreatedImage", "Created image. bytes: %d", image.Spec.Size)
 	log.V(2).Info("Created image", "bytes", image.Spec.Size)
 
 	return nil
@@ -626,7 +627,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, fmt.Errorf("failed to close rbd image: %w", err)
 	}
 
-	r.Eventf(log, image.Metadata, corev1.EventTypeNormal, "ClonedImage", "Cloned image from snapshot. bytes:%d", image.Spec.Size)
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ClonedImage", "Cloned image from snapshot. bytes:%d", image.Spec.Size)
 	log.V(2).Info("Cloned image")
 	return true, nil
 }

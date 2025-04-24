@@ -13,9 +13,9 @@ import (
 
 	"github.com/ceph/go-ceph/rados"
 	"github.com/ironcore-dev/ceph-provider/cmd/volumeprovider/app"
-	eventrecorder "github.com/ironcore-dev/ceph-provider/internal/event/recorder"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/ironcore/iri/remote/volume"
+	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
@@ -96,9 +96,9 @@ var _ = BeforeSuite(func() {
 			KeyEncryptionKeyPath:   keyEncryptionKeyFile.Name(),
 			BurstDurationInSeconds: 15,
 			VolumeEventStoreOptions: eventrecorder.EventStoreOptions{
-				MaxEvents:           maxEvents,
-				EventTTL:            eventTTL,
-				EventResyncInterval: resyncInterval,
+				MaxEvents:      maxEvents,
+				TTL:            eventTTL,
+				ResyncInterval: resyncInterval,
 			},
 		},
 	}

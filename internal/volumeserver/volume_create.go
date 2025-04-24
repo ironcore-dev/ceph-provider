@@ -12,6 +12,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/limits"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 )
 
 const (
@@ -37,7 +38,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 	}
 
 	image := &api.Image{
-		Metadata: api.Metadata{
+		Metadata: apiutils.Metadata{
 			ID: s.idGen.Generate(),
 		},
 		Spec: api.ImageSpec{

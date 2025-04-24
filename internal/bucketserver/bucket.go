@@ -27,7 +27,7 @@ func (s *Server) convertBucketClaimAndAccessSecretToBucket(
 	bucketClaim *objectbucketv1alpha1.ObjectBucketClaim,
 	accessSecret *corev1.Secret,
 ) (*iriv1alpha1.Bucket, error) {
-	metadata, err := api.GetObjectMetadata(bucketClaim)
+	metadata, err := api.GetObjectMetadataFromK8s(bucketClaim)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bucket claim object metadata: %w", err)
 	}

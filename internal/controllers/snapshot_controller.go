@@ -16,13 +16,13 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ceph-provider/internal/event"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
+	"github.com/ironcore-dev/provider-utils/eventutils/event"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/client-go/util/workqueue"
 )
 
@@ -370,16 +370,16 @@ func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *lib
 }
 
 func (r *SnapshotReconciler) populateImage(log logr.Logger, dst io.WriteCloser, src io.Reader) error {
-	rater := rater.NewRater(src)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	raterObj := rater.NewRater(src)
+	tickerObj := time.NewTicker(5 * time.Second)
+	defer tickerObj.Stop()
 	done := make(chan struct{})
 
 	go func() {
 		for {
 			select {
-			case <-ticker.C:
-				log.Info("Populating", "rate", rater.String())
+			case <-tickerObj.C:
+				log.Info("Populating", "rate", raterObj.String())
 			case <-done:
 				return
 			}
@@ -388,7 +388,7 @@ func (r *SnapshotReconciler) populateImage(log logr.Logger, dst io.WriteCloser, 
 	defer func() { close(done) }()
 
 	buffer := make([]byte, r.populatorBufferSize)
-	_, err := io.CopyBuffer(dst, rater, buffer)
+	_, err := io.CopyBuffer(dst, raterObj, buffer)
 	if err != nil {
 		return fmt.Errorf("failed to populate image: %w", err)
 	}

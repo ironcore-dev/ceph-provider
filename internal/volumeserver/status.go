@@ -19,7 +19,7 @@ func (s *Server) Status(ctx context.Context, req *iri.StatusRequest) (*iri.Statu
 
 	log.V(1).Info("Getting ceph pool stats")
 	poolStats, err := s.cephCommandClient.PoolStats()
-	if err != err {
+	if err != nil {
 		return nil, fmt.Errorf("failed to get ceph pool stats: %w", err)
 	}
 
