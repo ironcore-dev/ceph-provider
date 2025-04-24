@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"sync"
 	"time"
 
 	"github.com/ceph/go-ceph/rados"
 	utilssync "github.com/ironcore-dev/ceph-provider/internal/sync"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/util/sets"
 )

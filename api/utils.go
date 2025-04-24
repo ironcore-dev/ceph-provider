@@ -6,10 +6,10 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 
 	"github.com/ironcore-dev/controller-utils/metautils"
 	irimeta "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
