@@ -71,8 +71,9 @@ func (s *Server) convertEventToIriEvent(events []*recorder.Event) ([]*irievent.E
 }
 
 func (s *Server) ListEvents(ctx context.Context, req *iri.ListEventsRequest) (*iri.ListEventsResponse, error) {
-	events := s.volumeEventStore.ListEvents()
 	log := s.loggerFrom(ctx)
+
+	events := s.volumeEventStore.ListEvents()
 	filteredEvents := s.filterEvents(log, events, req.Filter)
 	iriEvents, err := s.convertEventToIriEvent(filteredEvents)
 	if err != nil {
