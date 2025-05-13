@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/labels"

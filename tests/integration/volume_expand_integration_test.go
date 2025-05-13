@@ -51,7 +51,7 @@ var _ = Describe("Expand Volume", func() {
 		By("ensuring the correct image has been created inside the ceph cluster")
 		image := &api.Image{}
 		Eventually(func() *api.Image {
-			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
@@ -122,7 +122,7 @@ var _ = Describe("Expand Volume", func() {
 
 		By("ensuring image size has been updated inside the ceph cluster after expand")
 		Eventually(func() *api.Image {
-			oMap, err := ioctx.GetOmapValues(omap.OmapNameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())

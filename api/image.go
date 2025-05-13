@@ -3,8 +3,12 @@
 
 package api
 
+import (
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
+)
+
 type Image struct {
-	Metadata `json:"metadata,omitempty"`
+	apiutils.Metadata `json:"metadata,omitempty"`
 
 	Spec   ImageSpec   `json:"spec"`
 	Status ImageStatus `json:"status"`

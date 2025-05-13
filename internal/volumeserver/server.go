@@ -10,10 +10,10 @@ import (
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
-	"github.com/ironcore-dev/ceph-provider/internal/event/recorder"
-	"github.com/ironcore-dev/ceph-provider/internal/store"
 	"github.com/ironcore-dev/ironcore/broker/common/idgen"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/eventutils/recorder"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
