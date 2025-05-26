@@ -146,7 +146,7 @@ GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.14.0
 ADDLICENSE_VERSION ?= v1.1.1
-GOLANGCI_LINT_VERSION ?= v2.0
+GOLANGCI_LINT_VERSION ?= v2.1
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
