@@ -5,12 +5,13 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
+	github.com/blang/semver/v4 v4.0.0
 	github.com/ceph/go-ceph v0.33.0
 	github.com/containerd/containerd v1.7.27
 	github.com/go-logr/logr v1.4.2
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.9.9
-	github.com/ironcore-dev/ironcore v0.2.3
+	github.com/ironcore-dev/ironcore v0.2.4-0.20250519074909-783eafef3af4
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/ironcore-dev/provider-utils v0.0.0-20250409071032-ef57cc16e3c6
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -32,7 +33,6 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
 	github.com/Microsoft/hcsshim v0.13.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.8.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
