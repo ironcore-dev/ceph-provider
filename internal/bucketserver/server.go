@@ -39,6 +39,8 @@ type BucketClassRegistry interface {
 }
 
 type Server struct {
+	iriv1alpha1.UnimplementedBucketRuntimeServer
+
 	idGen  idgen.IDGen
 	client client.Client
 
