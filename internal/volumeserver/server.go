@@ -23,6 +23,7 @@ type VolumeClassRegistry interface {
 }
 
 type Server struct {
+	iri.UnimplementedVolumeRuntimeServer
 	idGen idgen.IDGen
 
 	imageStore       store.Store[*api.Image]
