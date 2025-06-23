@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 )
 
@@ -20,7 +21,7 @@ func (s *Server) Status(ctx context.Context, req *iri.StatusRequest) (*iri.Statu
 	log.V(1).Info("Getting ceph pool stats")
 	poolStats, err := s.cephCommandClient.PoolStats()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ceph pool stats: %w", err)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("failed to get ceph pool stats: %w", err))
 	}
 
 	var volumeClassStatus []*iri.VolumeClassStatus

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +67,7 @@ func (s *Server) CreateBucket(
 	log.V(1).Info("Creating bucket claim and bucket access secret")
 	bucketClaim, accessSecret, err := s.createBucketClaimAndAccessSecretFromBucket(ctx, log, req.Bucket)
 	if err != nil {
-		return nil, fmt.Errorf("error getting bucket config: %w", err)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("error getting bucket config: %w", err))
 	}
 
 	log = log.WithValues("BucketClaimName", bucketClaim.Name)
@@ -74,7 +75,7 @@ func (s *Server) CreateBucket(
 	log.V(1).Info("Getting IRI bucket object")
 	iriBucket, err := s.convertBucketClaimAndAccessSecretToBucket(bucketClaim, accessSecret)
 	if err != nil {
-		return nil, err
+		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
 	log.V(1).Info("Bucket created", "Bucket", iriBucket.Metadata.Id, "State", iriBucket.Status.State)

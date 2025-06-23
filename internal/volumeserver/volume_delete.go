@@ -7,11 +7,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
-	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func (s *Server) DeleteVolume(ctx context.Context, req *iri.DeleteVolumeRequest) (*iri.DeleteVolumeResponse, error) {
@@ -19,10 +17,10 @@ func (s *Server) DeleteVolume(ctx context.Context, req *iri.DeleteVolumeRequest)
 
 	log.V(1).Info("Deleting volume")
 	if err := s.imageStore.Delete(ctx, req.VolumeId); err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
+		if !errors.Is(err, utils.ErrVolumeNotFound) {
 			return nil, fmt.Errorf("error deleting volume: %w", err)
 		}
-		return nil, status.Errorf(codes.NotFound, "volume %s not found", req.VolumeId)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("failed to get volume %s: %w", req.VolumeId, utils.ErrVolumeNotFound))
 	}
 
 	log.V(1).Info("Volume deleted")

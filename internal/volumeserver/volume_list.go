@@ -10,24 +10,22 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
-	"github.com/ironcore-dev/provider-utils/storeutils/store"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (s *Server) getIriVolume(ctx context.Context, log logr.Logger, imageId string) (*iri.Volume, error) {
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, status.Errorf(codes.NotFound, "image %s not found", imageId)
+		if errors.Is(err, utils.ErrVolumeNotFound) {
+			return nil, fmt.Errorf("failed to get image %s: %w", imageId, utils.ErrVolumeNotFound)
 		}
 		return nil, fmt.Errorf("failed to get image: %w", err)
 	}
 
 	if !api.IsObjectManagedBy(cephImage, api.VolumeManager) {
-		return nil, status.Errorf(codes.NotFound, "image %s not found", imageId)
+		return nil, fmt.Errorf("failed to get image %s: %w", imageId, utils.ErrVolumeIsntManaged)
 	}
 
 	return s.convertImageToIriVolume(cephImage)
@@ -81,8 +79,8 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		volume, err := s.getIriVolume(ctx, log, filter.Id)
 		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return nil, err
+			if !errors.Is(err, utils.ErrVolumeNotFound) && errors.Is(err, utils.ErrVolumeIsntManaged) {
+				return nil, utils.ConvertInternalErrorToGRPC(err)
 			}
 			return &iri.ListVolumesResponse{
 				Volumes: []*iri.Volume{},
@@ -96,7 +94,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 
 	volumes, err := s.listVolumes(ctx, log)
 	if err != nil {
-		return nil, err
+		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
 	volumes = s.filterVolumes(volumes, req.Filter)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	irievent "github.com/ironcore-dev/ironcore/iri/apis/event/v1alpha1"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
@@ -77,7 +78,7 @@ func (s *Server) ListEvents(ctx context.Context, req *iri.ListEventsRequest) (*i
 	filteredEvents := s.filterEvents(log, events, req.Filter)
 	iriEvents, err := s.convertEventToIriEvent(filteredEvents)
 	if err != nil {
-		return nil, err
+		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
 	return &iri.ListEventsResponse{

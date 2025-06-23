@@ -7,9 +7,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -18,7 +17,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *iriv1alpha1.DeleteBucket
 
 	bucketClaim, err := s.getBucketClaimForID(ctx, req.BucketId)
 	if err != nil {
-		return nil, err
+		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
 	log.V(1).Info("Deleting bucket")
@@ -26,7 +25,7 @@ func (s *Server) DeleteBucket(ctx context.Context, req *iriv1alpha1.DeleteBucket
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("error deleting bucket claim: %w", err)
 		}
-		return nil, status.Errorf(codes.NotFound, "bucket claim %s not found", req.BucketId)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("failed to delete bucket claim %s: %w", req.BucketId, utils.ErrBucketNotFound))
 	}
 
 	log.V(1).Info("Bucket deleted")

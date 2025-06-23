@@ -5,14 +5,14 @@ package bucketserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -126,7 +126,7 @@ func (s *Server) getBucketForID(ctx context.Context, id string) (*iriv1alpha1.Bu
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("error getting bucket %s: %w", id, err)
 		}
-		return nil, status.Errorf(codes.NotFound, "bucket %s not found", id)
+		return nil, fmt.Errorf("failed to get bucket %s: %w", id, utils.ErrBucketIsntManaged)
 	}
 
 	accessSecret, err := s.getAccessSecretForBucketClaim(bucketClaim, s.clientGetSecretFunc(ctx))
@@ -144,8 +144,8 @@ func (s *Server) ListBuckets(ctx context.Context, req *iriv1alpha1.ListBucketsRe
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		bucket, err := s.getBucketForID(ctx, filter.Id)
 		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return nil, err
+			if !errors.Is(err, utils.ErrBucketNotFound) {
+				return nil, utils.ConvertInternalErrorToGRPC(err)
 			}
 			return &iriv1alpha1.ListBucketsResponse{
 				Buckets: []*iriv1alpha1.Bucket{},
@@ -159,7 +159,7 @@ func (s *Server) ListBuckets(ctx context.Context, req *iriv1alpha1.ListBucketsRe
 
 	buckets, err := s.getAllManagedBuckets(ctx)
 	if err != nil {
-		return nil, err
+		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
 	buckets = s.filterBuckets(buckets, req.Filter)
