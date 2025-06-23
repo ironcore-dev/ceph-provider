@@ -94,7 +94,7 @@ func (s *Server) CreateVolume(ctx context.Context, req *iriv1alpha1.CreateVolume
 	log.V(1).Info("Creating Ceph image from volume")
 	image, err := s.createImageFromVolume(ctx, log, req.Volume)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("unable to create ceph volume: %w", err))
 	}
 
 	log = log.WithValues("ImageID", image.ID)
@@ -102,7 +102,7 @@ func (s *Server) CreateVolume(ctx context.Context, req *iriv1alpha1.CreateVolume
 	log.V(1).Info("Converting image to IRI volume")
 	iriVolume, err := s.convertImageToIriVolume(image)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create ceph volume: %w", err)
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("unable to create ceph volume: %w", err))
 	}
 
 	log.V(1).Info("Volume created", "Volume", iriVolume.Metadata.Id, "State", iriVolume.Status.State)

@@ -8,10 +8,9 @@ import (
 	"fmt"
 
 	"github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -94,7 +93,7 @@ func (s *Server) getBucketClaimForID(ctx context.Context, id string) (*objectbuc
 		if !apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("error getting bucket claim with ID %s: %w", id, err)
 		}
-		return nil, status.Errorf(codes.NotFound, "bucket for ID %s not found", id)
+		return nil, fmt.Errorf("failed to get bucket %s: %w", id, utils.ErrBucketIsntManaged)
 	}
 
 	return bucketClaim, nil
