@@ -144,7 +144,7 @@ func (s *Server) ListBuckets(ctx context.Context, req *iriv1alpha1.ListBucketsRe
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		bucket, err := s.getBucketForID(ctx, filter.Id)
 		if err != nil {
-			if !errors.Is(err, utils.ErrBucketNotFound) {
+			if !errors.Is(err, utils.ErrBucketNotFound) && !errors.Is(err, utils.ErrBucketIsntManaged) {
 				return nil, utils.ConvertInternalErrorToGRPC(err)
 			}
 			return &iriv1alpha1.ListBucketsResponse{
