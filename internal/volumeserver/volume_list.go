@@ -79,7 +79,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		volume, err := s.getIriVolume(ctx, log, filter.Id)
 		if err != nil {
-			if !errors.Is(err, utils.ErrVolumeNotFound) && errors.Is(err, utils.ErrVolumeIsntManaged) {
+			if !errors.Is(err, utils.ErrVolumeNotFound) && !errors.Is(err, utils.ErrVolumeIsntManaged) {
 				return nil, utils.ConvertInternalErrorToGRPC(err)
 			}
 			return &iri.ListVolumesResponse{
