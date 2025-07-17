@@ -20,7 +20,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook/pkg/apis v0.0.0-20250619203122-80563e28b685
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.7
 	google.golang.org/grpc v1.73.0
 	k8s.io/api v0.33.2
 	k8s.io/apimachinery v0.33.2
