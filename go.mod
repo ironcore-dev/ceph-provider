@@ -21,7 +21,7 @@ require (
 	github.com/rook/rook/pkg/apis v0.0.0-20250716205136-e4da184ce30a
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
-	google.golang.org/grpc v1.74.0
+	google.golang.org/grpc v1.74.2
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
