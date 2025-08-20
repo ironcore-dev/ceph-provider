@@ -43,12 +43,20 @@ func (s *Server) convertImageToIriVolume(image *api.Image) (*iri.Volume, error) 
 		}
 	}
 
+	imageSize, err := utils.Uint64ToInt64(image.Spec.Size)
+	if err != nil {
+		return nil, err
+	}
+
 	return &iri.Volume{
 		Metadata: metadata,
 		Spec:     spec,
 		Status: &iri.VolumeStatus{
 			State:  state,
 			Access: access,
+			Resources: &iri.VolumeResources{
+				StorageBytes: imageSize,
+			},
 		},
 	}, nil
 }

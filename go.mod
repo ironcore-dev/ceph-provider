@@ -11,7 +11,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.1.1
 	github.com/ironcore-dev/controller-utils v0.10.0
-	github.com/ironcore-dev/ironcore v0.2.4-0.20250519074909-783eafef3af4
+	github.com/ironcore-dev/ironcore v0.2.4-0.20250814105144-3581ac04b243
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/ironcore-dev/provider-utils v0.0.0-20250617134512-c47138779fed
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -149,7 +149,7 @@ require (
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
-	sigs.k8s.io/yaml v1.5.0 // indirect
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
 replace (
