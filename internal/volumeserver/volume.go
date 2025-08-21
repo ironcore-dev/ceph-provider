@@ -43,7 +43,7 @@ func (s *Server) convertImageToIriVolume(image *api.Image) (*iri.Volume, error) 
 		}
 	}
 
-	imageSize, err := utils.Uint64ToInt64(image.Spec.Size)
+	imageSize, err := utils.Uint64ToInt64(image.Status.Size)
 	if err != nil {
 		return nil, err
 	}

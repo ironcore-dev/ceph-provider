@@ -367,6 +367,10 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 		return fmt.Errorf("failed to resize image: %w", err)
 	}
 
+	image.Status.Size = requestedSize
+	if _, err = r.images.Update(ctx, image); err != nil {
+		return fmt.Errorf("failed to update size information of image: %w", err)
+	}
 	r.Eventf(image.Metadata, corev1.EventTypeNormal, "UpdatedImageSize", "Image size changed. requestedSize: %d currentSize: %d", requestedSize, currentImageSize)
 	log.V(1).Info("Updated image", "requestedSize", requestedSize, "currentSize", currentImageSize)
 	return nil
@@ -474,6 +478,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		UserKey:  key,
 	}
 	img.Status.State = providerapi.ImageStateAvailable
+	img.Status.Size = round.OffBytes(img.Spec.Size)
 	if _, err = r.images.Update(ctx, img); err != nil {
 		return fmt.Errorf("failed to update image metadate: %w", err)
 	}
