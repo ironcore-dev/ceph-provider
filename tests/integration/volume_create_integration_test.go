@@ -14,6 +14,7 @@ import (
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Create Volume", func() {
@@ -97,6 +98,7 @@ var _ = Describe("Create Volume", func() {
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
 			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("Resources.StorageBytes", Equal(resource.NewQuantity(1024*1024*1024, resource.BinarySI).Value())),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),

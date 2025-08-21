@@ -52,6 +52,7 @@ type ImageStatus struct {
 	State      ImageState      `json:"state"`
 	Encryption EncryptionState `json:"encryption"`
 	Access     *ImageAccess    `json:"access"`
+	Size       uint64          `json:"size"`
 }
 
 type ImageAccess struct {

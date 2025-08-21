@@ -14,6 +14,7 @@ import (
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var _ = Describe("Expand Volume", func() {
@@ -97,6 +98,7 @@ var _ = Describe("Expand Volume", func() {
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
 			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("Resources.StorageBytes", Equal(resource.NewQuantity(1024*1024*1024, resource.BinarySI).Value())),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),
@@ -115,7 +117,7 @@ var _ = Describe("Expand Volume", func() {
 		_, err = volumeClient.ExpandVolume(ctx, &iriv1alpha1.ExpandVolumeRequest{
 			VolumeId: createResp.Volume.Metadata.Id,
 			Resources: &iriv1alpha1.VolumeResources{
-				StorageBytes: 2048 * 2048 * 2048,
+				StorageBytes: 2 * 1024 * 1024 * 1024,
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -131,7 +133,7 @@ var _ = Describe("Expand Volume", func() {
 			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
 			HaveField("Metadata.Labels", HaveKeyWithValue(api.ClassLabel, "foo")),
 			HaveField("Spec.Image", Equal("")),
-			HaveField("Spec.Size", Equal(uint64(2048*2048*2048))),
+			HaveField("Spec.Size", Equal(uint64(2*1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
 				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
@@ -168,6 +170,7 @@ var _ = Describe("Expand Volume", func() {
 			return resp.Volumes[0].Status
 		}).Should(SatisfyAll(
 			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+			HaveField("Resources.StorageBytes", Equal(resource.NewQuantity(2*1024*1024*1024, resource.BinarySI).Value())),
 			HaveField("Access", SatisfyAll(
 				HaveField("Driver", "ceph"),
 				HaveField("Handle", image.Spec.WWN),
