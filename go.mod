@@ -15,7 +15,7 @@ require (
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/ironcore-dev/provider-utils v0.0.0-20250617134512-c47138779fed
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
-	github.com/onsi/ginkgo/v2 v2.24.0
+	github.com/onsi/ginkgo/v2 v2.25.0
 	github.com/onsi/gomega v1.38.0
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook/pkg/apis v0.0.0-20250716205136-e4da184ce30a
