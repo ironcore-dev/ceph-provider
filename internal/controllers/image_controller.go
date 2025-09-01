@@ -150,7 +150,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	}()
 
 	snapEventReg, err := r.snapshotEvents.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(evt event.Event[*providerapi.Snapshot]) {
-		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.SnapshotStatePopulated {
+		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.SnapshotStateReady {
 			return
 		}
 
@@ -297,8 +297,10 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 						imageDigestLabel: snapshotDigest,
 					},
 				},
-				Source: providerapi.SnapshotSource{
-					IronCoreImage: resolvedImageName,
+				Spec: providerapi.SnapshotSpec{
+					Source: providerapi.SnapshotSource{
+						IronCoreOSImage: resolvedImageName,
+					},
 				},
 			})
 			if err != nil {
@@ -600,7 +602,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	if snapshot.Status.State != providerapi.SnapshotStatePopulated {
+	if snapshot.Status.State != providerapi.SnapshotStateReady {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
 	}
