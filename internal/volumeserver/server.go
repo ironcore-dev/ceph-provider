@@ -39,6 +39,16 @@ type Server struct {
 	keyEncryption encryption.Encryptor
 }
 
+// DeleteVolumeSnapshotContent implements v1alpha1.VolumeRuntimeServer.
+func (s *Server) DeleteVolumeSnapshotContent(context.Context, *iri.DeleteVolumeSnapshotContentRequest) (*iri.DeleteVolumeSnapshotContentResponse, error) {
+	panic("unimplemented")
+}
+
+// ListVolumeSnapshotContents implements v1alpha1.VolumeRuntimeServer.
+func (s *Server) ListVolumeSnapshotContents(context.Context, *iri.ListVolumeSnapshotContentsRequest) (*iri.ListVolumeSnapshotContentsResponse, error) {
+	panic("unimplemented")
+}
+
 func (s *Server) loggerFrom(ctx context.Context, keysWithValues ...interface{}) logr.Logger {
 	return ctrl.LoggerFrom(ctx, keysWithValues...)
 }

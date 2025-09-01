@@ -275,6 +275,7 @@ func Run(ctx context.Context, opts Options) error {
 		conn,
 		reg,
 		snapshotStore,
+		imageStore,
 		snapshotEvents,
 		controllers.SnapshotReconcilerOptions{
 			Pool:                opts.Ceph.Pool,
