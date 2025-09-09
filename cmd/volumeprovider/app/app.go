@@ -216,9 +216,28 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize image events: %w", err)
 	}
 
-	setupLog.Info("Configuring snapshot store", "OmapName", omap.NameOsImages)
-	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Snapshot]{
+	setupLog.Info("Configuring OS snapshot store", "OmapName", omap.NameOsImages)
+	osSnapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.OSSnapshot]{
 		OmapName:       omap.NameOsImages,
+		NewFunc:        func() *providerapi.OSSnapshot { return &providerapi.OSSnapshot{} },
+		CreateStrategy: strategy.OSSnapshotStrategy,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize OS snapshot store: %w", err)
+	}
+
+	osSnapshotEvents, err := event.NewListWatchSource[*providerapi.OSSnapshot](
+		osSnapshotStore.List,
+		osSnapshotStore.Watch,
+		event.ListWatchSourceOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize OS snapshot events: %w", err)
+	}
+
+	setupLog.Info("Configuring snapshot store", "OmapName", omap.NameSnapshots)
+	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Snapshot]{
+		OmapName:       omap.NameSnapshots,
 		NewFunc:        func() *providerapi.Snapshot { return &providerapi.Snapshot{} },
 		CreateStrategy: strategy.SnapshotStrategy,
 	})
@@ -246,10 +265,10 @@ func Run(ctx context.Context, opts Options) error {
 		log.WithName("image-reconciler"),
 		conn,
 		reg,
-		imageStore, snapshotStore,
+		imageStore, osSnapshotStore,
 		volumeEventStore,
 		imageEvents,
-		snapshotEvents,
+		osSnapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
 			Monitors: opts.Ceph.Monitors,
@@ -286,6 +305,21 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize snapshot reconciler: %w", err)
 	}
 
+	osSnapshotReconciler, err := controllers.NewOSSnapshotReconciler(
+		log.WithName("os-snapshot-reconciler"),
+		conn,
+		reg,
+		osSnapshotStore,
+		osSnapshotEvents,
+		controllers.OSSnapshotReconcilerOptions{
+			Pool:                opts.Ceph.Pool,
+			PopulatorBufferSize: opts.Ceph.PopulatorBufferSize,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize os snapshot reconciler: %w", err)
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -299,9 +333,28 @@ func Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		setupLog.Info("Starting os snapshot reconciler")
+		if err := osSnapshotReconciler.Start(ctx); err != nil {
+			log.Error(err, "failed to start os snapshot reconciler")
+		}
+
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		setupLog.Info("Starting image events")
 		if err := imageEvents.Start(ctx); err != nil {
 			log.Error(err, "failed to start image events")
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		setupLog.Info("Starting os snapshot events")
+		if err := osSnapshotEvents.Start(ctx); err != nil {
+			log.Error(err, "failed to start os snapshot events")
 		}
 	}()
 

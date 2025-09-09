@@ -37,7 +37,7 @@ func (s *Server) convertSnapshotToIriVolumeSnapshot(snapshot *api.Snapshot) (*ir
 }
 
 func (s *Server) getIriVolumeSnapshotSpec(snapshot *api.Snapshot) (*iri.VolumeSnapshotSpec, error) {
-	volumeID := snapshot.Spec.Source.IronCoreVolumeImage
+	volumeID := snapshot.Spec.Source.VolumeImageID
 
 	spec := &iri.VolumeSnapshotSpec{
 		VolumeId: volumeID,

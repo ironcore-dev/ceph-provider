@@ -29,11 +29,9 @@ const (
 
 type SnapshotStatus struct {
 	State       SnapshotState `json:"state"`
-	Digest      string        `json:"digest"`
 	RestoreSize int64         `json:"restoreSize"`
 }
 
 type SnapshotSource struct {
-	IronCoreOSImage     string `json:"ironcoreImage"`
-	IronCoreVolumeImage string `json:"ironcoreVolume"`
+	VolumeImageID string `json:"volumeImageID"`
 }

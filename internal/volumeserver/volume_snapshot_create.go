@@ -14,7 +14,8 @@ import (
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 )
 
-func (s *Server) createSnapshot(ctx context.Context, log logr.Logger, volumeID string) (*api.Snapshot, error) {
+func (s *Server) createSnapshot(ctx context.Context, log logr.Logger, volumeSnapshot *iriv1alpha1.VolumeSnapshot) (*api.Snapshot, error) {
+	volumeID := volumeSnapshot.GetSpec().GetVolumeId()
 	if volumeID == "" {
 		return nil, fmt.Errorf("got an empty volumeID")
 	}
@@ -25,11 +26,15 @@ func (s *Server) createSnapshot(ctx context.Context, log logr.Logger, volumeID s
 		},
 		Spec: api.SnapshotSpec{
 			Source: api.SnapshotSource{
-				IronCoreVolumeImage: volumeID,
+				VolumeImageID: volumeID,
 			},
 		},
 	}
 
+	log.V(2).Info("Setting volume metadata to image")
+	if err := api.SetObjectMetadataFromMetadata(snapshot, volumeSnapshot.Metadata); err != nil {
+		return nil, fmt.Errorf("failed to set metadata: %w", err)
+	}
 	api.SetManagerLabel(snapshot, api.VolumeManager)
 
 	log.V(2).Info("Creating snapshot in store")
@@ -47,7 +52,7 @@ func (s *Server) CreateVolumeSnapshot(ctx context.Context, req *iriv1alpha1.Crea
 	log.V(1).Info("Creating snapshot")
 
 	log.V(1).Info("Creating Ceph snapshot from volumeSnapshot")
-	snaphot, err := s.createSnapshot(ctx, log, req.VolumeSnapshot.Spec.VolumeId)
+	snaphot, err := s.createSnapshot(ctx, log, req.VolumeSnapshot)
 	if err != nil {
 		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("unable to create ceph snapshot: %w", err))
 	}

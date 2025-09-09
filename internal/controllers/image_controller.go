@@ -48,10 +48,10 @@ func NewImageReconciler(
 	conn *rados.Conn,
 	registry image.Source,
 	images store.Store[*providerapi.Image],
-	snapshots store.Store[*providerapi.Snapshot],
+	snapshots store.Store[*providerapi.OSSnapshot],
 	eventRecorder eventrecorder.EventRecorder,
 	imageEvents event.Source[*providerapi.Image],
-	snapshotEvents event.Source[*providerapi.Snapshot],
+	snapshotEvents event.Source[*providerapi.OSSnapshot],
 	keyEncryption encryption.Encryptor,
 	opts ImageReconcilerOptions,
 ) (*ImageReconciler, error) {
@@ -96,19 +96,19 @@ func NewImageReconciler(
 	}
 
 	return &ImageReconciler{
-		log:            log,
-		conn:           conn,
-		registry:       registry,
-		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
-		images:         images,
-		snapshots:      snapshots,
-		EventRecorder:  eventRecorder,
-		imageEvents:    imageEvents,
-		snapshotEvents: snapshotEvents,
-		monitors:       opts.Monitors,
-		client:         opts.Client,
-		pool:           opts.Pool,
-		keyEncryption:  keyEncryption,
+		log:              log,
+		conn:             conn,
+		registry:         registry,
+		queue:            workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
+		images:           images,
+		osSnapshots:      snapshots,
+		EventRecorder:    eventRecorder,
+		imageEvents:      imageEvents,
+		osSnapshotEvents: snapshotEvents,
+		monitors:         opts.Monitors,
+		client:           opts.Client,
+		pool:             opts.Pool,
+		keyEncryption:    keyEncryption,
 	}, nil
 }
 
@@ -119,12 +119,12 @@ type ImageReconciler struct {
 	registry image.Source
 	queue    workqueue.TypedRateLimitingInterface[string]
 
-	images    store.Store[*providerapi.Image]
-	snapshots store.Store[*providerapi.Snapshot]
+	images      store.Store[*providerapi.Image]
+	osSnapshots store.Store[*providerapi.OSSnapshot]
 
 	eventrecorder.EventRecorder
-	imageEvents    event.Source[*providerapi.Image]
-	snapshotEvents event.Source[*providerapi.Snapshot]
+	imageEvents      event.Source[*providerapi.Image]
+	osSnapshotEvents event.Source[*providerapi.OSSnapshot]
 
 	monitors string
 	client   string
@@ -149,8 +149,8 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 		_ = r.imageEvents.RemoveHandler(imgEventReg)
 	}()
 
-	snapEventReg, err := r.snapshotEvents.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(evt event.Event[*providerapi.Snapshot]) {
-		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.SnapshotStateReady {
+	snapEventReg, err := r.osSnapshotEvents.AddHandler(event.HandlerFunc[*providerapi.OSSnapshot](func(evt event.Event[*providerapi.OSSnapshot]) {
+		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.OSSnapshotStatePopulated {
 			return
 		}
 
@@ -171,7 +171,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 		return err
 	}
 	defer func() {
-		_ = r.snapshotEvents.RemoveHandler(snapEventReg)
+		_ = r.osSnapshotEvents.RemoveHandler(snapEventReg)
 	}()
 
 	go func() {
@@ -285,22 +285,20 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	resolvedImageName := fmt.Sprintf("%s@%s", spec.Locator, snapshotDigest)
 
 	//TODO select later by label
-	snap, err := r.snapshots.Get(ctx, snapshotDigest)
+	snap, err := r.osSnapshots.Get(ctx, snapshotDigest)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
-			r.Eventf(img.Metadata, corev1.EventTypeNormal, "CreateImageSnapshot", "Image snapshot was not found. Creating new snapshot")
-			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
+			r.Eventf(img.Metadata, corev1.EventTypeNormal, "CreateOSImageSnapshot", "OS Image snapshot was not found. Creating new os snapshot")
+			snap, err = r.osSnapshots.Create(ctx, &providerapi.OSSnapshot{
 				Metadata: apiutils.Metadata{
 					ID: snapshotDigest,
 					Labels: map[string]string{
 						imageDigestLabel: snapshotDigest,
 					},
 				},
-				Spec: providerapi.SnapshotSpec{
-					Source: providerapi.SnapshotSource{
-						IronCoreOSImage: resolvedImageName,
-					},
+				Source: providerapi.OSSnapshotSource{
+					IronCoreOSImage: resolvedImageName,
 				},
 			})
 			if err != nil {
@@ -318,7 +316,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to update image snapshot ref: %w", err)
 	}
 
-	r.Eventf(img.Metadata, corev1.EventTypeNormal, "UpdatedImageSnapshotRef", "Updated image snapshot ref: %s", *img.Spec.SnapshotRef)
+	r.Eventf(img.Metadata, corev1.EventTypeNormal, "UpdatedOSImageSnapshotRef", "Updated os image snapshot ref: %s", *img.Spec.SnapshotRef)
 	return nil
 }
 
@@ -591,7 +589,7 @@ func (r *ImageReconciler) createEmptyImage(ctx context.Context, log logr.Logger,
 }
 
 func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image, snapshotRef string, options *librbd.ImageOptions) (bool, error) {
-	snapshot, err := r.snapshots.Get(ctx, snapshotRef)
+	snapshot, err := r.osSnapshots.Get(ctx, snapshotRef)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			return false, fmt.Errorf("failed to get snapshot: %w", err)
@@ -602,7 +600,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	if snapshot.Status.State != providerapi.SnapshotStateReady {
+	if snapshot.Status.State != providerapi.OSSnapshotStatePopulated {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
 	}
