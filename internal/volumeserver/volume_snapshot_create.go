@@ -65,7 +65,7 @@ func (s *Server) CreateVolumeSnapshot(ctx context.Context, req *iriv1alpha1.Crea
 		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("unable to create ceph snapshot: %w", err))
 	}
 
-	log.V(1).Info("VolumeSnapshot created", "VolumeSnapshot", snaphot.Metadata.ID, "State", snaphot.Status.State)
+	log.V(1).Info("VolumeSnapshot created", "VolumeSnapshot", snaphot.ID, "State", snaphot.Status.State)
 	return &iriv1alpha1.CreateVolumeSnapshotResponse{
 		VolumeSnapshot: iriVolumeSnapshot,
 	}, nil
