@@ -10,6 +10,14 @@ import (
 	"github.com/ironcore-dev/ironcore/broker/common/idgen"
 )
 
+var OSSnapshotStrategy = osSnapshotStrategy{}
+
+type osSnapshotStrategy struct{}
+
+func (osSnapshotStrategy) PrepareForCreate(obj *api.OSSnapshot) {
+	obj.Status = api.OSSnapshotStatus{State: api.OSSnapshotStatePending}
+}
+
 var SnapshotStrategy = snapshotStrategy{}
 
 type snapshotStrategy struct{}

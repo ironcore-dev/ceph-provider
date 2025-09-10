@@ -16,6 +16,9 @@ var (
 
 	ErrVolumeIsntManaged = errors.New("volume isn't managed")
 	ErrBucketIsntManaged = errors.New("bucket isn't managed")
+
+	ErrSnapshotNotFound    = errors.New("snapshot not found")
+	ErrSnapshotIsntManaged = errors.New("snapshot isn't managed")
 )
 
 func ConvertInternalErrorToGRPC(err error) error {
@@ -26,9 +29,9 @@ func ConvertInternalErrorToGRPC(err error) error {
 	code := codes.Internal
 
 	switch {
-	case errors.Is(err, ErrBucketNotFound), errors.Is(err, ErrVolumeNotFound):
+	case errors.Is(err, ErrBucketNotFound), errors.Is(err, ErrVolumeNotFound), errors.Is(err, ErrSnapshotNotFound):
 		code = codes.NotFound
-	case errors.Is(err, ErrBucketIsntManaged), errors.Is(err, ErrVolumeIsntManaged):
+	case errors.Is(err, ErrBucketIsntManaged), errors.Is(err, ErrVolumeIsntManaged), errors.Is(err, ErrSnapshotIsntManaged):
 		code = codes.InvalidArgument
 	}
 

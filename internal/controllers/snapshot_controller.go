@@ -7,19 +7,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ceph-provider/internal/rater"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
-	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
@@ -36,6 +32,7 @@ func NewSnapshotReconciler(
 	conn *rados.Conn,
 	registry image.Source,
 	store store.Store[*providerapi.Snapshot],
+	images store.Store[*providerapi.Image],
 	events event.Source[*providerapi.Snapshot],
 	opts SnapshotReconcilerOptions,
 ) (*SnapshotReconciler, error) {
@@ -49,6 +46,10 @@ func NewSnapshotReconciler(
 
 	if store == nil {
 		return nil, fmt.Errorf("must specify store")
+	}
+
+	if images == nil {
+		return nil, fmt.Errorf("must specify image store")
 	}
 
 	if events == nil {
@@ -69,6 +70,7 @@ func NewSnapshotReconciler(
 		registry:            registry,
 		queue:               workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		store:               store,
+		images:              images,
 		events:              events,
 		pool:                opts.Pool,
 		populatorBufferSize: opts.PopulatorBufferSize,
@@ -83,40 +85,11 @@ type SnapshotReconciler struct {
 	queue    workqueue.TypedRateLimitingInterface[string]
 
 	store  store.Store[*providerapi.Snapshot]
+	images store.Store[*providerapi.Image]
 	events event.Source[*providerapi.Snapshot]
 
 	pool                string
 	populatorBufferSize int64
-}
-
-func (r *SnapshotReconciler) openSnapshotSource(ctx context.Context, src providerapi.SnapshotSource) (io.ReadCloser, uint64, string, error) {
-	switch {
-	case src.IronCoreImage != "":
-
-		img, err := r.registry.Resolve(ctx, src.IronCoreImage)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
-		}
-
-		ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
-		}
-
-		rootFS := ironcoreImage.RootFS
-		if rootFS == nil {
-			return nil, 0, "", fmt.Errorf("image has no root fs")
-		}
-
-		content, err := rootFS.Content(ctx)
-		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
-		}
-
-		return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
-	default:
-		return nil, 0, "", fmt.Errorf("unrecognized image source %#v", src)
-	}
 }
 
 func (r *SnapshotReconciler) Start(ctx context.Context) error {
@@ -178,7 +151,7 @@ const (
 	SnapshotFinalizer = "snapshot"
 )
 
-func (r *SnapshotReconciler) cleanupSnapshotResources(log logr.Logger, img *librbd.Image) error {
+func (r *SnapshotReconciler) cleanupSnapshotResources(log logr.Logger, img *librbd.Image, snapshotName string) error {
 	pools, imgs, err := img.ListChildren()
 	if err != nil {
 		return fmt.Errorf("unable to list children: %w", err)
@@ -189,30 +162,23 @@ func (r *SnapshotReconciler) cleanupSnapshotResources(log logr.Logger, img *libr
 		return fmt.Errorf("unable to delete snapshot: still in use")
 	}
 
-	snaps, err := img.GetSnapshotNames()
-	if err != nil {
-		return fmt.Errorf("unable to list snapshots: %w", err)
+	log.V(2).Info("Start to delete snapshot", "name", snapshotName)
+
+	snap := img.GetSnapshot(snapshotName)
+	//TODO: IsProtected call is failing need to check
+	// isProtected, err := snap.IsProtected()
+	// if err != nil {
+	// 	return fmt.Errorf("unable to chek if snapshot %s is protected: %w", snapshotName, err)
+	// }
+
+	// if isProtected {
+	if err := snap.Unprotect(); err != nil {
+		return fmt.Errorf("unable to unprotect snapshot: %w", err)
 	}
-	log.V(2).Info("Found snapshots", "count", len(snaps))
+	// }
 
-	for _, snapInfo := range snaps {
-		log.V(2).Info("Start to delete snapshot", "name", snapInfo.Name)
-
-		snap := img.GetSnapshot(snapInfo.Name)
-		isProtected, err := snap.IsProtected()
-		if err != nil {
-			return fmt.Errorf("unable to chek if snapshot is protected: %w", err)
-		}
-
-		if isProtected {
-			if err := snap.Unprotect(); err != nil {
-				return fmt.Errorf("unable to unprotect snapshot: %w", err)
-			}
-		}
-
-		if err := snap.Remove(); err != nil {
-			return fmt.Errorf("unable to remove snapshot snapshot: %w", err)
-		}
+	if err := snap.Remove(); err != nil {
+		return fmt.Errorf("unable to remove snapshot snapshot: %w", err)
 	}
 
 	return nil
@@ -224,10 +190,10 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return nil
 	}
 
-	img, err := librbd.OpenImage(ioCtx, SnapshotIDToRBDID(snapshot.ID), librbd.NoSnapshot)
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(snapshot.Spec.Source.VolumeImageID), librbd.NoSnapshot)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to fetch snapshot: %w", err)
+			return fmt.Errorf("failed to open image: %w", err)
 		}
 
 		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
@@ -240,7 +206,7 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 
 	}
 
-	if err := r.cleanupSnapshotResources(log, img); err != nil {
+	if err := r.cleanupSnapshotResources(log, img, SnapshotIDToRBDID(snapshot.ID)); err != nil {
 		if closeErr := img.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
 		}
@@ -250,12 +216,6 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	if err := img.Close(); err != nil {
 		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
-
-	log.V(2).Info("Remove snapshot")
-	if err := img.Remove(); err != nil {
-		return fmt.Errorf("unable to remove snapshot: %w", err)
-	}
-	log.V(2).Info("Snapshot deleted")
 
 	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
 	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
@@ -289,7 +249,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		}
 	}
 
-	if snapshot.Status.State == providerapi.SnapshotStatePopulated {
+	if snapshot.Status.State == providerapi.SnapshotStateReady {
 		log.V(1).Info("Snapshot already populated")
 		return nil
 	}
@@ -301,63 +261,20 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		}
 	}
 
-	rc, snapshotSize, digest, err := r.openSnapshotSource(ctx, snapshot.Source)
+	image, err := r.images.Get(ctx, snapshot.Spec.Source.VolumeImageID)
 	if err != nil {
-		return fmt.Errorf("failed to open snapshot source: %w", err)
-	}
-	defer func() {
-		if err := rc.Close(); err != nil {
-			log.Error(err, "failed to close snapshot source")
+		if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to fetch image from store: %w", err)
 		}
-	}()
-
-	options := librbd.NewRbdImageOptions()
-	defer options.Destroy()
-
-	//TODO: different pool for OS images?
-	if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
-		return fmt.Errorf("failed to set data pool: %w", err)
+		return err
 	}
-	log.V(2).Info("Configured pool", "pool", r.pool)
-
-	roundedSize := round.OffBytes(snapshotSize)
-	if err = librbd.CreateImage(ioCtx, SnapshotIDToRBDID(snapshot.ID), roundedSize, options); err != nil {
-		return fmt.Errorf("failed to create os rbd image: %w", err)
-	}
-	log.V(2).Info("Created rbd image", "bytes", roundedSize)
-
-	rbdImg, err := librbd.OpenImage(ioCtx, SnapshotIDToRBDID(snapshot.ID), librbd.NoSnapshot)
+	rbdImg, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
 
-	if err := r.prepareSnapshotContent(log, rbdImg, rc); err != nil {
-		if closeErr := rbdImg.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
-		}
-	}
-
-	if err := rbdImg.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
-	}
-
-	snapshot.Status.Digest = digest
-	snapshot.Status.State = providerapi.SnapshotStatePopulated
-
-	if _, err = r.store.Update(ctx, snapshot); err != nil {
-		return fmt.Errorf("failed to update snapshot metadate: %w", err)
-	}
-
-	return nil
-}
-
-func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *librbd.Image, rc io.ReadCloser) error {
-	if err := r.populateImage(log, rbdImg, rc); err != nil {
-		return fmt.Errorf("failed to populate os image: %w", err)
-	}
-	log.V(2).Info("Populated os image on rbd image")
-
-	imgSnap, err := rbdImg.CreateSnapshot(ImageSnapshotVersion)
+	snapshotName := SnapshotIDToRBDID(snapshot.ID)
+	imgSnap, err := rbdImg.CreateSnapshot(snapshotName)
 	if err != nil {
 		return fmt.Errorf("unable to create snapshot: %w", err)
 	}
@@ -366,33 +283,22 @@ func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *lib
 		return fmt.Errorf("unable to protect snapshot: %w", err)
 	}
 
-	return nil
-}
-
-func (r *SnapshotReconciler) populateImage(log logr.Logger, dst io.WriteCloser, src io.Reader) error {
-	throughputReader := rater.NewRater(src)
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-	done := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				log.Info("Populating", "rate", throughputReader.String())
-			case <-done:
-				return
-			}
-		}
-	}()
-	defer func() { close(done) }()
-
-	buffer := make([]byte, r.populatorBufferSize)
-	_, err := io.CopyBuffer(dst, throughputReader, buffer)
-	if err != nil {
-		return fmt.Errorf("failed to populate image: %w", err)
+	if err := rbdImg.SetSnapshot(snapshotName); err != nil {
+		return fmt.Errorf("failed to set snapshot %s for image %s: %v", snapshotName, image.ID, err)
 	}
-	log.Info("Successfully populated image")
+
+	// Get image information (including size of the snapshot)
+	stat, err := rbdImg.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get image stats for snapshot %s: %v", snapshotName, err)
+	}
+
+	snapshot.Status.RestoreSize = int64(round.OffBytes(stat.Size))
+	snapshot.Status.State = providerapi.SnapshotStateReady
+
+	if _, err = r.store.Update(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to update snapshot metadate: %w", err)
+	}
 
 	return nil
 }
