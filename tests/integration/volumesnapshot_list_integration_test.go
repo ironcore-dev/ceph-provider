@@ -34,7 +34,7 @@ var _ = Describe("List VolumeSnapshot", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		volumeId := createVolumeResp.Volume.Metadata.Id
-		By("ensuring the image has been created in ceph cluster")
+		By("ensuring the image has been created in volumes store")
 		image := &api.Image{}
 		Eventually(func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", volumeId, 10)
@@ -65,6 +65,20 @@ var _ = Describe("List VolumeSnapshot", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
+		snapshotID := createVolumeSnapshotResp.VolumeSnapshot.Metadata.Id
+		By("ensuring snapshot has been created in snapshot store")
+		snapshot := &api.Snapshot{}
+		Eventually(ctx, func() *api.Snapshot {
+			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(snapshotID))
+			Expect(json.Unmarshal(oMap[snapshotID], snapshot)).NotTo(HaveOccurred())
+			return snapshot
+		}).Should(SatisfyAll(
+			HaveField("Metadata.ID", Equal(snapshotID)),
+			HaveField("Status.State", Equal(api.SnapshotStateReady)),
+		))
+
 		By("listing volume snapshots with volume snapshot id")
 		Eventually(func() *iriv1alpha1.VolumeSnapshotStatus {
 			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
@@ -85,23 +99,39 @@ var _ = Describe("List VolumeSnapshot", func() {
 			VolumeSnapshotId: createVolumeSnapshotResp.VolumeSnapshot.Metadata.Id,
 		})
 
-		By("listing volume snapshots with label selector")
-		Eventually(func() *iriv1alpha1.VolumeSnapshotStatus {
-			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
-				Filter: &iriv1alpha1.VolumeSnapshotFilter{
-					LabelSelector: map[string]string{"foo": "bar"},
+		By("creating another volume snapshot for volume")
+		createVolumeSnapshotResp, err = volumeClient.CreateVolumeSnapshot(ctx, &iriv1alpha1.CreateVolumeSnapshotRequest{
+			VolumeSnapshot: &iriv1alpha1.VolumeSnapshot{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id:     "foo1",
+					Labels: map[string]string{"foo": "bar"},
 				},
-			})
+				Spec: &iriv1alpha1.VolumeSnapshotSpec{
+					VolumeId: createVolumeResp.Volume.Metadata.Id,
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		snapshotID = createVolumeSnapshotResp.VolumeSnapshot.Metadata.Id
+		By("ensuring snapshot has been created in snapshot store")
+		snapshot1 := &api.Snapshot{}
+		Eventually(ctx, func() *api.Snapshot {
+			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.VolumeSnapshots).NotTo(BeEmpty())
-			Expect(resp.VolumeSnapshots).To(HaveLen(1))
-			return resp.VolumeSnapshots[0].Status
+			Expect(oMap).To(HaveKey(snapshotID))
+			Expect(json.Unmarshal(oMap[snapshotID], snapshot1)).NotTo(HaveOccurred())
+			return snapshot1
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_READY)),
-			HaveField("RestoreSize", Equal(int64(1024*1024*1024))),
+			HaveField("Metadata.ID", Equal(snapshotID)),
+			HaveField("Status.State", Equal(api.SnapshotStateReady)),
 		))
 
-		By("listing volume snapshots with wrong label selector")
+		DeferCleanup(volumeClient.DeleteVolumeSnapshot, &iriv1alpha1.DeleteVolumeSnapshotRequest{
+			VolumeSnapshotId: createVolumeSnapshotResp.VolumeSnapshot.Metadata.Id,
+		})
+
+		By("listing volume snapshots with label selector")
 		Eventually(func() {
 			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
 				Filter: &iriv1alpha1.VolumeSnapshotFilter{
@@ -111,6 +141,18 @@ var _ = Describe("List VolumeSnapshot", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.VolumeSnapshots).NotTo(BeEmpty())
 			Expect(resp.VolumeSnapshots).To(HaveLen(2))
+		})
+
+		By("listing volume snapshots with wrong label selector")
+		Eventually(func() {
+			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
+				Filter: &iriv1alpha1.VolumeSnapshotFilter{
+					LabelSelector: map[string]string{"foo": "foo"},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.VolumeSnapshots).To(BeEmpty())
+			Expect(resp.VolumeSnapshots).To(HaveLen(0))
 		})
 	})
 })

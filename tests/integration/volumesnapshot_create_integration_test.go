@@ -36,7 +36,7 @@ var _ = Describe("Create VolumeSnapshot", func() {
 			VolumeId: createResp.Volume.Metadata.Id,
 		})
 
-		By("ensuring image has been created in ceph cluster image store")
+		By("ensuring image has been created in volumes store")
 		image := &api.Image{}
 		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
@@ -82,7 +82,7 @@ var _ = Describe("Create VolumeSnapshot", func() {
 			VolumeSnapshotId: snapshotID,
 		})
 
-		By("ensuring snapshot has been created in ceph cluster snapshot store")
+		By("ensuring snapshot has been created in snapshot store")
 		snapshot := &api.Snapshot{}
 		Eventually(ctx, func() *api.Snapshot {
 			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)

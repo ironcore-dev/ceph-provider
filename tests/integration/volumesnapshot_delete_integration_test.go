@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("Delete VolumeSnapshot", func() {
+var _ = Describe("Delete VolumeSnapshot", func() {
 	It("should delete a volume snapshot", func(ctx SpecContext) {
 		By("creating a volume")
 		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
@@ -36,7 +36,7 @@ var _ = FDescribe("Delete VolumeSnapshot", func() {
 			VolumeId: createResp.Volume.Metadata.Id,
 		})
 
-		By("ensuring image has been created in ceph cluster image store")
+		By("ensuring image has been created in volumes store")
 		image := &api.Image{}
 		Eventually(ctx, func() *api.Image {
 			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
@@ -82,7 +82,7 @@ var _ = FDescribe("Delete VolumeSnapshot", func() {
 			VolumeSnapshotId: snapshotID,
 		})
 
-		By("ensuring snapshot has been created in ceph cluster snapshot store")
+		By("ensuring snapshot has been created in snapshot store")
 		snapshot := &api.Snapshot{}
 		Eventually(ctx, func() *api.Snapshot {
 			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
@@ -107,17 +107,19 @@ var _ = FDescribe("Delete VolumeSnapshot", func() {
 			Expect(resp.VolumeSnapshots).To(HaveLen(1))
 			return resp.VolumeSnapshots[0].Status
 		}).Should(SatisfyAll(
-			HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_PENDING)),
+			HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_READY)),
 			HaveField("RestoreSize", Equal(int64(1024*1024*1024))),
 		))
 
-		By("deleting volume snapshot")
-		_, err = volumeClient.DeleteVolumeSnapshot(ctx, &iriv1alpha1.DeleteVolumeSnapshotRequest{
-			VolumeSnapshotId: snapshotID,
+		By("deleting volume snapshot with snapshot Id")
+		Eventually(func() {
+			_, err = volumeClient.DeleteVolumeSnapshot(ctx, &iriv1alpha1.DeleteVolumeSnapshotRequest{
+				VolumeSnapshotId: snapshotID,
+			})
+			Expect(err).NotTo(HaveOccurred())
 		})
-		Expect(err).NotTo(HaveOccurred())
 
-		By("listing volume snapshot with snapshot ID to check volume snapshot is deleted")
+		By("listing volume snapshot with snapshot ID to check snapshot is deleted")
 		Eventually(func() {
 			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
 				Filter: &iriv1alpha1.VolumeSnapshotFilter{
@@ -128,7 +130,7 @@ var _ = FDescribe("Delete VolumeSnapshot", func() {
 			Expect(resp.VolumeSnapshots).To(BeEmpty())
 		})
 
-		By("ensuring the image has been deleted inside the ceph cluster")
+		By("ensuring the image has been deleted from snapshot store")
 		Eventually(func() {
 			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
 			Expect(err).NotTo(HaveOccurred())
