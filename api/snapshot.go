@@ -28,8 +28,8 @@ const (
 )
 
 type SnapshotStatus struct {
-	State       SnapshotState `json:"state"`
-	RestoreSize int64         `json:"restoreSize"`
+	State SnapshotState `json:"state"`
+	Size  int64         `json:"size"`
 }
 
 type SnapshotSource struct {

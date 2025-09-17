@@ -165,17 +165,16 @@ func (r *SnapshotReconciler) cleanupSnapshotResources(log logr.Logger, img *libr
 	log.V(2).Info("Start to delete snapshot", "name", snapshotName)
 
 	snap := img.GetSnapshot(snapshotName)
-	//TODO: IsProtected call is failing need to check
-	// isProtected, err := snap.IsProtected()
-	// if err != nil {
-	// 	return fmt.Errorf("unable to chek if snapshot %s is protected: %w", snapshotName, err)
-	// }
-
-	// if isProtected {
-	if err := snap.Unprotect(); err != nil {
-		return fmt.Errorf("unable to unprotect snapshot: %w", err)
+	isProtected, err := snap.IsProtected()
+	if err != nil {
+		return fmt.Errorf("unable to chek if snapshot %s is protected: %w", snapshotName, err)
 	}
-	// }
+
+	if isProtected {
+		if err := snap.Unprotect(); err != nil {
+			return fmt.Errorf("unable to unprotect snapshot: %w", err)
+		}
+	}
 
 	if err := snap.Remove(); err != nil {
 		return fmt.Errorf("unable to remove snapshot snapshot: %w", err)
@@ -293,7 +292,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return fmt.Errorf("failed to get image stats for snapshot %s: %v", snapshotName, err)
 	}
 
-	snapshot.Status.RestoreSize = int64(round.OffBytes(stat.Size))
+	snapshot.Status.Size = int64(round.OffBytes(stat.Size))
 	snapshot.Status.State = providerapi.SnapshotStateReady
 
 	if _, err = r.store.Update(ctx, snapshot); err != nil {

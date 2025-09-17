@@ -92,7 +92,7 @@ var _ = Describe("List VolumeSnapshot", func() {
 			return resp.VolumeSnapshots[0].Status
 		}).Should(SatisfyAll(
 			HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_READY)),
-			HaveField("RestoreSize", Equal(int64(1024*1024*1024))),
+			HaveField("Size", Equal(int64(1024*1024*1024))),
 		))
 
 		DeferCleanup(volumeClient.DeleteVolumeSnapshot, &iriv1alpha1.DeleteVolumeSnapshotRequest{

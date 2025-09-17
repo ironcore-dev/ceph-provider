@@ -30,8 +30,8 @@ func (s *Server) convertSnapshotToIriVolumeSnapshot(snapshot *api.Snapshot) (*ir
 		Metadata: metadata,
 		Spec:     spec,
 		Status: &iri.VolumeSnapshotStatus{
-			State:       state,
-			RestoreSize: snapshot.Status.RestoreSize,
+			State: state,
+			Size:  snapshot.Status.Size,
 		},
 	}, nil
 }
