@@ -4,15 +4,29 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "k8s.io/*"
+      - dependency-name: "sigs.k8s.io/*"
+      - dependency-name: "github.com/ironcore-dev/ironcore"
+      - dependency-name: "github.com/ironcore-dev/controller-utils"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    groups:
+      gh-actions-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
