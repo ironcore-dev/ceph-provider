@@ -1,5 +1,16 @@
 # Build the manager binary
-FROM golang:1.25.0-bookworm AS builder
+FROM ubuntu:jammy AS builder
+
+ENV GO_VERSION=1.22.3
+
+# Install dependencies
+RUN apt-get update && apt-get install -y wget ca-certificates && \
+    wget https://go.dev/dl/go${GO_VERSION}.linux-arm64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-arm64.tar.gz && \
+    rm go${GO_VERSION}.linux-arm64.tar.gz
+
+# Set up Go environment
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -30,7 +41,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM builder AS ceph-volume-provider-builder
 # Install necessary dependencies
 
-RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
+RUN apt update && apt install -y curl gnupg lsb-release && \
+    curl -fsSL https://download.ceph.com/keys/release.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/ceph.gpg && \
+    echo "deb https://download.ceph.com/debian-reef $(lsb_release -sc) main"   > /etc/apt/sources.list.d/ceph.list && apt update && \
+    apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
 
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
