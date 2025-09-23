@@ -71,15 +71,15 @@ COPY --from=busybox /bin/mkdir /bin/mkdir
 COPY --from=ceph-volume-provider-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.2 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/librbd.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libc.so.6 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libfmt.so.9 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libfmt.so.10 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libstdc++.so.6 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libgcc_s.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libssl.so.3 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libcryptsetup.so.12 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libcrypto.so.3 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libresolv.so.2 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_thread.so.1.74.0 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_iostreams.so.1.74.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_thread.so.1.83.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_iostreams.so.1.83.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libblkid.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libudev.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libibverbs.so.1 \
@@ -87,16 +87,15 @@ COPY --from=ceph-volume-provider-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librad
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libm.so.6 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libuuid.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libdevmapper.so.1.02.1 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libargon2.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libjson-c.so.5 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libz.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libzstd.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libbz2.so.1.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/liblzma.so.5 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libzstd.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libcap.so.2 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libnl-route-3.so.200 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libnl-3.so.200 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libselinux.so.1 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libpthread.so.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu/
 RUN mkdir -p /lib64
 COPY --from=ceph-volume-provider-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
