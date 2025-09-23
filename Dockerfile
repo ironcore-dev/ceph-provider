@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.25.1-bookworm AS builder
+FROM golang:1.25.1-trixie AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -50,7 +50,7 @@ ENTRYPOINT ["/manager"]
 
 
 # Since we're leveraging apt to pull in dependencies, we use `gcr.io/distroless/base` because it includes glibc.
-FROM gcr.io/distroless/base-debian11 AS distroless-base
+FROM gcr.io/distroless/base-debian12 AS distroless-base
 
 # The distroless amd64 image has a target triplet of x86_64
 FROM distroless-base AS distroless-amd64
