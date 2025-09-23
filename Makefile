@@ -6,15 +6,18 @@ CEPH_BUCKET_PROVIDER_IMG ?= ceph-bucket-provider:latest
 # Docker image name for the mkdocs based local development setup
 MKDOCS_IMG=ironcore-dev/ceph-provider-docs
 
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.28.0
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
 else
 GOBIN=$(shell go env GOBIN)
 endif
+
+# CONTAINER_TOOL defines the container tool to be used for building images.
+# Be aware that the target commands are only tested with Docker which is
+# scaffolded by default. However, you might want to replace it to use other
+# tools. (i.e. podman)
+CONTAINER_TOOL ?= docker
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
@@ -86,12 +89,12 @@ check: manifests generate check-license lint test
 
 .PHONY: start-docs
 start-docs: ## Start the local mkdocs based development environment.
-	docker build -t ${MKDOCS_IMG} -f docs/Dockerfile .
-	docker run -p 8000:8000 -v `pwd`/:/docs ${MKDOCS_IMG}
+	$(CONTAINER_TOOL) build -t ${MKDOCS_IMG} -f docs/Dockerfile .
+	$(CONTAINER_TOOL) run -p 8000:8000 -v `pwd`/:/docs ${MKDOCS_IMG}
 
 .PHONY: clean-docs
 clean-docs: ## Remove all local mkdocs Docker images (cleanup).
-	docker container prune --force --filter "label=project=ceph-provider_documentation"
+	$(CONTAINER_TOOL) container prune --force --filter "label=project=ceph-provider_documentation"
 
 ##@ Build
 
@@ -113,13 +116,13 @@ run-bucket: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
-	docker build --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
+	$(CONTAINER_TOOL) build --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
+	$(CONTAINER_TOOL) build --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${CEPH_VOLUME_PROVIDER_IMG}
-	docker push ${CEPH_BUCKET_PROVIDER_IMG}
+	$(CONTAINER_TOOL) push ${CEPH_VOLUME_PROVIDER_IMG}
+	$(CONTAINER_TOOL) push ${CEPH_BUCKET_PROVIDER_IMG}
 
 ##@ Deployment
 
@@ -143,33 +146,52 @@ ADDLICENSE ?= $(LOCALBIN)/addlicense
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.1.1
-CONTROLLER_TOOLS_VERSION ?= v0.17.2
-ADDLICENSE_VERSION ?= v1.1.1
-GOLANGCI_LINT_VERSION ?= v2.1
+KUSTOMIZE_VERSION ?= v5.7.1
+CONTROLLER_TOOLS_VERSION ?= v0.17.3
+ADDLICENSE_VERSION ?= v1.2.0
+GOLANGCI_LINT_VERSION ?= v2.5
+#ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
+ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+#ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
+ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d.%d",$$3, $$2}')
 
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 .PHONY: addlicense
 addlicense: $(ADDLICENSE) ## Download addlicense locally if necessary.
 $(ADDLICENSE): $(LOCALBIN)
-	test -s $(LOCALBIN)/addlicense || GOBIN=$(LOCALBIN) go install github.com/google/addlicense@$(ADDLICENSE_VERSION)
+	$(call go-install-tool,$(ADDLICENSE),github.com/google/addlicense,$(ADDLICENSE_VERSION))
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	test -s $(LOCALBIN)/golangci-lint || GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] && [ "$$(readlink -- "$(1)" 2>/dev/null)" = "$(1)-$(3)" ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+rm -f $(1) ;\
+GOBIN=$(LOCALBIN) go install $${package} ;\
+mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $$(realpath $(1)-$(3)) $(1)
+endef
