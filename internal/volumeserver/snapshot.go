@@ -37,7 +37,7 @@ func (s *Server) convertSnapshotToIriVolumeSnapshot(snapshot *api.Snapshot) (*ir
 }
 
 func (s *Server) getIriVolumeSnapshotSource(snapshot *api.Snapshot) (*iri.VolumeSnapshotSpec, error) {
-	volumeID := snapshot.Source.IronCoreVolumeImageID
+	volumeID := snapshot.Source.VolumeImageID
 
 	spec := &iri.VolumeSnapshotSpec{
 		VolumeId: volumeID,
@@ -48,8 +48,6 @@ func (s *Server) getIriVolumeSnapshotSource(snapshot *api.Snapshot) (*iri.Volume
 
 func (s *Server) getIriSnapshotState(state api.SnapshotState) (iri.VolumeSnapshotState, error) {
 	switch state {
-	case api.SnapshotStatePopulated:
-		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_READY, nil
 	case api.SnapshotStateReady:
 		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_READY, nil
 	case api.SnapshotStatePending:

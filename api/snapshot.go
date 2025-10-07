@@ -18,10 +18,9 @@ type Snapshot struct {
 type SnapshotState string
 
 const (
-	SnapshotStatePending   SnapshotState = "Pending"
-	SnapshotStatePopulated SnapshotState = "Populated"
-	SnapshotStateReady     SnapshotState = "Ready"
-	SnapshotStateFailed    SnapshotState = "Failed"
+	SnapshotStatePending SnapshotState = "Pending"
+	SnapshotStateReady   SnapshotState = "Ready"
+	SnapshotStateFailed  SnapshotState = "Failed"
 )
 
 type SnapshotStatus struct {
@@ -31,6 +30,6 @@ type SnapshotStatus struct {
 }
 
 type SnapshotSource struct {
-	IronCoreOSImage       string `json:"ironcoreOSImage"`
-	IronCoreVolumeImageID string `json:"ironcoreVolumeImageId"`
+	IronCoreOSImage string `json:"ironcoreOSImage"`
+	VolumeImageID   string `json:"volumeImageId"`
 }

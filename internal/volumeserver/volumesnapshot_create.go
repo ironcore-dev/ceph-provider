@@ -24,7 +24,7 @@ func (s *Server) createVolumeSnapshot(ctx context.Context, log logr.Logger, volu
 			ID: s.idGen.Generate(),
 		},
 		Source: api.SnapshotSource{
-			IronCoreVolumeImageID: volumeSnapshot.Spec.VolumeId,
+			VolumeImageID: volumeSnapshot.Spec.VolumeId,
 		},
 	}
 

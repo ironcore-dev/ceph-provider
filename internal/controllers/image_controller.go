@@ -150,8 +150,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	}()
 
 	snapEventReg, err := r.snapshotEvents.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(evt event.Event[*providerapi.Snapshot]) {
-		if evt.Type != event.TypeUpdated || (evt.Object.Status.State != providerapi.SnapshotStatePopulated &&
-			evt.Object.Status.State != providerapi.SnapshotStateReady) {
+		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.SnapshotStateReady {
 			return
 		}
 
@@ -601,7 +600,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	if snapshot.Status.State != providerapi.SnapshotStatePopulated && snapshot.Status.State != providerapi.SnapshotStateReady {
+	if snapshot.Status.State != providerapi.SnapshotStateReady {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
 	}
