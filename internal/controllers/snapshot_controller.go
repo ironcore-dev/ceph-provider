@@ -96,28 +96,33 @@ type SnapshotReconciler struct {
 	populatorBufferSize int64
 }
 
-func (r *SnapshotReconciler) openOSImageSource(ctx context.Context, ioCtx *rados.IOContext, imageReference string) (io.ReadCloser, uint64, string, error) {
-	img, err := r.registry.Resolve(ctx, imageReference)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
-	}
+func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
+	switch {
+	case imageReference != "":
+		img, err := r.registry.Resolve(ctx, imageReference)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
+		}
 
-	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
-	}
+		ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
+		}
 
-	rootFS := ironcoreImage.RootFS
-	if rootFS == nil {
-		return nil, 0, "", fmt.Errorf("image has no root fs")
-	}
+		rootFS := ironcoreImage.RootFS
+		if rootFS == nil {
+			return nil, 0, "", fmt.Errorf("image has no root fs")
+		}
 
-	content, err := rootFS.Content(ctx)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
-	}
+		content, err := rootFS.Content(ctx)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
+		}
 
-	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
+		return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
+	default:
+		return nil, 0, "", fmt.Errorf("unrecognized image source %s", imageReference)
+	}
 }
 
 func (r *SnapshotReconciler) Start(ctx context.Context) error {
@@ -225,10 +230,20 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return nil
 	}
 
-	img, err := librbd.OpenImage(ioCtx, SnapshotIDToRBDID(snapshot.ID), librbd.NoSnapshot)
+	var rbdID string
+	switch {
+	case snapshot.Source.IronCoreOSImage != "":
+		rbdID = SnapshotIDToRBDID(snapshot.ID)
+	case snapshot.Source.IronCoreVolumeImageID != "":
+		rbdID = ImageIDToRBDID(snapshot.Source.IronCoreVolumeImageID)
+	default:
+		return fmt.Errorf("unrecognized image source %#v", snapshot.Source)
+	}
+
+	img, err := librbd.OpenImage(ioCtx, rbdID, librbd.NoSnapshot)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to fetch snapshot: %w", err)
+			return fmt.Errorf("failed to open image: %w", err)
 		}
 
 		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
@@ -252,11 +267,13 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
 
-	log.V(2).Info("Remove snapshot")
-	if err := img.Remove(); err != nil {
-		return fmt.Errorf("unable to remove snapshot: %w", err)
+	if snapshot.Source.IronCoreOSImage != "" {
+		log.V(2).Info("Remove snapshot")
+		if err := img.Remove(); err != nil {
+			return fmt.Errorf("unable to remove snapshot: %w", err)
+		}
+		log.V(2).Info("Snapshot deleted")
 	}
-	log.V(2).Info("Snapshot deleted")
 
 	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
 	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
@@ -290,7 +307,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		}
 	}
 
-	if snapshot.Status.State == providerapi.SnapshotStateReady {
+	if snapshot.Status.State == providerapi.SnapshotStatePopulated || snapshot.Status.State == providerapi.SnapshotStateReady {
 		log.V(1).Info("Snapshot already populated")
 		return nil
 	}
@@ -304,8 +321,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 
 	var roundedSize uint64
 	switch {
-	case snapshot.Spec.Source.IronCoreOSImage != "":
-		rc, snapshotSize, digest, err := r.openOSImageSource(ctx, ioCtx, snapshot.Spec.Source.IronCoreOSImage)
+	case snapshot.Source.IronCoreOSImage != "":
+		rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreOSImage)
 		if err != nil {
 			return fmt.Errorf("failed to open snapshot source: %w", err)
 		}
@@ -346,19 +363,22 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		}
 
 		snapshot.Status.Digest = digest
+		snapshot.Status.State = providerapi.SnapshotStatePopulated
 
-	case snapshot.Spec.Source.IronCoreVolumeImage != "":
-		image, err := r.images.Get(ctx, snapshot.Spec.Source.IronCoreVolumeImage)
+	case snapshot.Source.IronCoreVolumeImageID != "":
+		image, err := r.images.Get(ctx, snapshot.Source.IronCoreVolumeImageID)
 		if err != nil {
 			if !errors.Is(err, store.ErrNotFound) {
 				return fmt.Errorf("failed to fetch image from store: %w", err)
 			}
 			return nil
 		}
+
 		rbdImg, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 		if err != nil {
 			return fmt.Errorf("failed to open rbd image: %w", err)
 		}
+
 		snapshotName := SnapshotIDToRBDID(snapshot.ID)
 		imgSnap, err := rbdImg.CreateSnapshot(snapshotName)
 		if err != nil {
@@ -373,20 +393,24 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 			return fmt.Errorf("failed to set snapshot %s for image %s: %v", snapshotName, image.ID, err)
 		}
 
-		// Get image information (including size of the snapshot)
-		stat, err := rbdImg.Stat()
+		// Get image size
+		size, err := rbdImg.GetSize()
 		if err != nil {
-			return fmt.Errorf("failed to get image stats for snapshot %s: %v", snapshotName, err)
+			return fmt.Errorf("failed to get snapshot image size %s: %v", snapshotName, err)
 		}
-		roundedSize = round.OffBytes(stat.Size)
+		roundedSize = round.OffBytes(size)
+
+		if err := rbdImg.Close(); err != nil {
+			return fmt.Errorf("unable to close snapshot: %w", err)
+		}
+
+		snapshot.Status.Size = int64(roundedSize)
+		snapshot.Status.State = providerapi.SnapshotStateReady
 
 	default:
-		return fmt.Errorf("unrecognized image source %#v", snapshot.Spec.Source)
+		return fmt.Errorf("unrecognized image source %#v", snapshot.Source)
 
 	}
-
-	snapshot.Status.RestoreSize = int64(roundedSize)
-	snapshot.Status.State = providerapi.SnapshotStateReady
 
 	if _, err = r.store.Update(ctx, snapshot); err != nil {
 		return fmt.Errorf("failed to update snapshot metadate: %w", err)
@@ -405,10 +429,12 @@ func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *lib
 	if err != nil {
 		return fmt.Errorf("unable to create snapshot: %w", err)
 	}
+	log.V(2).Info("Created snapshot")
 
 	if err := imgSnap.Protect(); err != nil {
 		return fmt.Errorf("unable to protect snapshot: %w", err)
 	}
+	log.V(2).Info("Protected snapshot")
 
 	return nil
 }

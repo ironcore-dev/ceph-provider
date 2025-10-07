@@ -16,7 +16,7 @@ func (s *Server) convertSnapshotToIriVolumeSnapshot(snapshot *api.Snapshot) (*ir
 		return nil, fmt.Errorf("error getting iri metadata: %w", err)
 	}
 
-	spec, err := s.getIriVolumeSnapshotSpec(snapshot)
+	spec, err := s.getIriVolumeSnapshotSource(snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("error getting iri resources: %w", err)
 	}
@@ -30,14 +30,14 @@ func (s *Server) convertSnapshotToIriVolumeSnapshot(snapshot *api.Snapshot) (*ir
 		Metadata: metadata,
 		Spec:     spec,
 		Status: &iri.VolumeSnapshotStatus{
-			State:       state,
-			RestoreSize: snapshot.Status.RestoreSize,
+			State: state,
+			Size:  snapshot.Status.Size,
 		},
 	}, nil
 }
 
-func (s *Server) getIriVolumeSnapshotSpec(snapshot *api.Snapshot) (*iri.VolumeSnapshotSpec, error) {
-	volumeID := snapshot.Spec.Source.IronCoreVolumeImage
+func (s *Server) getIriVolumeSnapshotSource(snapshot *api.Snapshot) (*iri.VolumeSnapshotSpec, error) {
+	volumeID := snapshot.Source.IronCoreVolumeImageID
 
 	spec := &iri.VolumeSnapshotSpec{
 		VolumeId: volumeID,
@@ -48,6 +48,8 @@ func (s *Server) getIriVolumeSnapshotSpec(snapshot *api.Snapshot) (*iri.VolumeSn
 
 func (s *Server) getIriSnapshotState(state api.SnapshotState) (iri.VolumeSnapshotState, error) {
 	switch state {
+	case api.SnapshotStatePopulated:
+		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_READY, nil
 	case api.SnapshotStateReady:
 		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_READY, nil
 	case api.SnapshotStatePending:

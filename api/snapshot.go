@@ -10,30 +10,27 @@ import (
 type Snapshot struct {
 	apiutils.Metadata `json:"metadata,omitempty"`
 
-	Spec SnapshotSpec `json:"spec"`
+	Source SnapshotSource `json:"source"`
 
 	Status SnapshotStatus `json:"status"`
-}
-
-type SnapshotSpec struct {
-	Source SnapshotSource `json:"source"`
 }
 
 type SnapshotState string
 
 const (
-	SnapshotStatePending SnapshotState = "Pending"
-	SnapshotStateReady   SnapshotState = "Ready"
-	SnapshotStateFailed  SnapshotState = "Failed"
+	SnapshotStatePending   SnapshotState = "Pending"
+	SnapshotStatePopulated SnapshotState = "Populated"
+	SnapshotStateReady     SnapshotState = "Ready"
+	SnapshotStateFailed    SnapshotState = "Failed"
 )
 
 type SnapshotStatus struct {
-	State       SnapshotState `json:"state"`
-	Digest      string        `json:"digest"`
-	RestoreSize int64         `json:"restoreSize"`
+	State  SnapshotState `json:"state"`
+	Digest string        `json:"digest"`
+	Size   int64         `json:"size"`
 }
 
 type SnapshotSource struct {
-	IronCoreOSImage     string `json:"ironcoreImage"`
-	IronCoreVolumeImage string `json:"ironcoreVolume"`
+	IronCoreOSImage       string `json:"ironcoreOSImage"`
+	IronCoreVolumeImageID string `json:"ironcoreVolumeImageId"`
 }

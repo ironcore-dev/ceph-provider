@@ -23,10 +23,8 @@ func (s *Server) createVolumeSnapshot(ctx context.Context, log logr.Logger, volu
 		Metadata: apiutils.Metadata{
 			ID: s.idGen.Generate(),
 		},
-		Spec: api.SnapshotSpec{
-			Source: api.SnapshotSource{
-				IronCoreVolumeImage: volumeSnapshot.Spec.VolumeId,
-			},
+		Source: api.SnapshotSource{
+			IronCoreVolumeImageID: volumeSnapshot.Spec.VolumeId,
 		},
 	}
 
