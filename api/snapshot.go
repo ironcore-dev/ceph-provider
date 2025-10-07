@@ -30,6 +30,6 @@ type SnapshotStatus struct {
 }
 
 type SnapshotSource struct {
-	IronCoreOSImage string `json:"ironcoreOSImage"`
-	VolumeImageID   string `json:"volumeImageId"`
+	IronCoreImage string `json:"ironcoreImage"`
+	VolumeImageID string `json:"volumeImageId"`
 }

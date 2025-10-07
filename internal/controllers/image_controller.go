@@ -298,7 +298,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 					},
 				},
 				Source: providerapi.SnapshotSource{
-					IronCoreOSImage: resolvedImageName,
+					IronCoreImage: resolvedImageName,
 				},
 			})
 			if err != nil {

@@ -96,7 +96,7 @@ type SnapshotReconciler struct {
 	populatorBufferSize int64
 }
 
-func (r *SnapshotReconciler) openIroncoreOSImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
+func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
 	img, err := r.registry.Resolve(ctx, imageReference)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
@@ -227,12 +227,12 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 
 	var rbdID string
 	switch {
-	case snapshot.Source.IronCoreOSImage != "":
+	case snapshot.Source.IronCoreImage != "":
 		rbdID = SnapshotIDToRBDID(snapshot.ID)
 	case snapshot.Source.VolumeImageID != "":
 		rbdID = VolumeSnapshotIDToRBDID(snapshot.ID)
 	default:
-		return fmt.Errorf("unrecognized image source %#v", snapshot.Source)
+		return fmt.Errorf("snapshot source is not present")
 	}
 
 	img, err := librbd.OpenImage(ioCtx, rbdID, librbd.NoSnapshot)
@@ -262,7 +262,7 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
 
-	if snapshot.Source.IronCoreOSImage != "" {
+	if snapshot.Source.IronCoreImage != "" {
 		log.V(2).Info("Remove snapshot")
 		if err := img.Remove(); err != nil {
 			return fmt.Errorf("unable to remove snapshot: %w", err)
@@ -314,12 +314,12 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	switch {
-	case snapshot.Source.IronCoreOSImage != "":
-		err = r.reconcileOSImageSnapshot(ctx, log, ioCtx, snapshot)
+	case snapshot.Source.IronCoreImage != "":
+		err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
 	case snapshot.Source.VolumeImageID != "":
 		err = r.reconcileVolumeImageSnapshot(ctx, ioCtx, snapshot)
 	default:
-		return fmt.Errorf("unrecognized image source %#v", snapshot.Source)
+		return fmt.Errorf("snapshot source not found")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to reconcile snapshot: %w", err)
@@ -332,8 +332,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 
 	return nil
 }
-func (r *SnapshotReconciler) reconcileOSImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
-	rc, snapshotSize, digest, err := r.openIroncoreOSImageSource(ctx, snapshot.Source.IronCoreOSImage)
+func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+	rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage)
 	if err != nil {
 		return fmt.Errorf("failed to open snapshot source: %w", err)
 	}
