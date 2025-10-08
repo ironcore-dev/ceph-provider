@@ -11,7 +11,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.10.0
-	github.com/ironcore-dev/ironcore v0.2.4-0.20250814105144-3581ac04b243
+	github.com/ironcore-dev/ironcore v0.2.5-0.20250923112018-311a2542fc90
 	github.com/ironcore-dev/ironcore-image v0.2.4
 	github.com/ironcore-dev/provider-utils v0.0.0-20250617134512-c47138779fed
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -156,7 +156,6 @@ require (
 
 replace (
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.1
-	github.com/ironcore-dev/ironcore => /home/kajol/go/src/gitlab/ironcore
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.20.4-openstorage-rc3
 )
