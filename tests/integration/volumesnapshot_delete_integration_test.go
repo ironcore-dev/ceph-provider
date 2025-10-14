@@ -78,10 +78,6 @@ var _ = Describe("Delete VolumeSnapshot", func() {
 
 		snapshotID := createSnapshotResp.VolumeSnapshot.Metadata.Id
 
-		DeferCleanup(volumeClient.DeleteVolumeSnapshot, &iriv1alpha1.DeleteVolumeSnapshotRequest{
-			VolumeSnapshotId: snapshotID,
-		})
-
 		By("ensuring snapshot has been created in snapshot store")
 		snapshot := &api.Snapshot{}
 		Eventually(ctx, func() *api.Snapshot {
@@ -112,12 +108,12 @@ var _ = Describe("Delete VolumeSnapshot", func() {
 		))
 
 		By("deleting volume snapshot with snapshot Id")
-		Eventually(func() {
+		Eventually(func() error {
 			_, err = volumeClient.DeleteVolumeSnapshot(ctx, &iriv1alpha1.DeleteVolumeSnapshotRequest{
 				VolumeSnapshotId: snapshotID,
 			})
-			Expect(err).NotTo(HaveOccurred())
-		})
+			return err
+		}).ShouldNot(HaveOccurred())
 
 		By("listing volume snapshot with snapshot ID to check snapshot is deleted")
 		Eventually(func() {

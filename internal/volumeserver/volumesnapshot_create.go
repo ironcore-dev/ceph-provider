@@ -54,7 +54,7 @@ func (s *Server) CreateVolumeSnapshot(ctx context.Context, req *iriv1alpha1.Crea
 		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("unable to create ceph snapshot: %w", err))
 	}
 
-	log = log.WithValues("VolumeSnaphotID", volumeSnapshot.ID, "State", volumeSnapshot.Status.State)
+	log = log.WithValues("VolumeSnapshotID", volumeSnapshot.ID, "State", volumeSnapshot.Status.State)
 
 	log.V(1).Info("Converting volume snapshot to IRI volume snapshot")
 	iriVolumeSnapshot, err := s.convertSnapshotToIriVolumeSnapshot(volumeSnapshot)

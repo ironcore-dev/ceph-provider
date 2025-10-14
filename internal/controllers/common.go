@@ -4,9 +4,8 @@
 package controllers
 
 const (
-	ImageRBDIDPrefix          = "img_"
-	SnapshotRBDIDPrefix       = "snap_"
-	VolumeSnapshotRBDIDPrefix = "volume_snap_"
+	ImageRBDIDPrefix    = "img_"
+	SnapshotRBDIDPrefix = "snap_"
 
 	ImageSnapshotVersion = "v1"
 )
@@ -17,8 +16,4 @@ func ImageIDToRBDID(imageID string) string {
 
 func SnapshotIDToRBDID(snapshotID string) string {
 	return SnapshotRBDIDPrefix + snapshotID
-}
-
-func VolumeSnapshotIDToRBDID(snapshotID string) string {
-	return VolumeSnapshotRBDIDPrefix + snapshotID
 }
