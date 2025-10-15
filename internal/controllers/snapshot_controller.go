@@ -96,30 +96,6 @@ type SnapshotReconciler struct {
 	populatorBufferSize int64
 }
 
-func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
-	img, err := r.registry.Resolve(ctx, imageReference)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
-	}
-
-	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
-	}
-
-	rootFS := ironcoreImage.RootFS
-	if rootFS == nil {
-		return nil, 0, "", fmt.Errorf("image has no root fs")
-	}
-
-	content, err := rootFS.Content(ctx)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
-	}
-
-	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
-}
-
 func (r *SnapshotReconciler) Start(ctx context.Context) error {
 	log := r.log
 
@@ -217,12 +193,14 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		return nil
 	}
 
-	var rbdID string
+	var rbdID, snapshotID string
 	switch {
 	case snapshot.Source.IronCoreImage != "":
 		rbdID = SnapshotIDToRBDID(snapshot.ID)
+		snapshotID = ImageSnapshotVersion
 	case snapshot.Source.VolumeImageID != "":
 		rbdID = ImageIDToRBDID(snapshot.Source.VolumeImageID)
+		snapshotID = snapshot.ID
 	default:
 		return fmt.Errorf("snapshot source is not present")
 	}
@@ -235,7 +213,7 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		return nil
 	}
 
-	if err = r.removeSnapshot(log, snapshot.ID, img); err != nil {
+	if err = r.removeSnapshot(log, snapshotID, img); err != nil {
 		if closeErr := img.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
 		}
@@ -403,6 +381,30 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, i
 
 	snapshot.Status.Size = int64(roundedSize)
 	return nil
+}
+
+func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
+	img, err := r.registry.Resolve(ctx, imageReference)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
+	}
+
+	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
+	}
+
+	rootFS := ironcoreImage.RootFS
+	if rootFS == nil {
+		return nil, 0, "", fmt.Errorf("image has no root fs")
+	}
+
+	content, err := rootFS.Content(ctx)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
+	}
+
+	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
 }
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *librbd.Image, rc io.ReadCloser) error {
