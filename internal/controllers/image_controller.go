@@ -609,13 +609,18 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
+	parentName, snapName, err := GetSnapshotSourceDetails(snapshot)
+	if err != nil {
+		return false, fmt.Errorf("failed to get snapshot source details: %w", err)
+	}
+
 	ioCtx2, err := r.conn.OpenIOContext(r.pool)
 	if err != nil {
 		return false, fmt.Errorf("unable to get io context: %w", err)
 	}
 	defer ioCtx2.Destroy()
 
-	if err = librbd.CloneImage(ioCtx2, SnapshotIDToRBDID(snapshot.ID), ImageSnapshotVersion, ioCtx, ImageIDToRBDID(image.ID), options); err != nil {
+	if err = librbd.CloneImage(ioCtx2, parentName, snapName, ioCtx, ImageIDToRBDID(image.ID), options); err != nil {
 		return false, fmt.Errorf("failed to clone rbd image: %w", err)
 	}
 

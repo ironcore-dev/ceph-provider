@@ -3,6 +3,12 @@
 
 package controllers
 
+import (
+	"fmt"
+
+	providerapi "github.com/ironcore-dev/ceph-provider/api"
+)
+
 const (
 	ImageRBDIDPrefix    = "img_"
 	SnapshotRBDIDPrefix = "snap_"
@@ -16,4 +22,19 @@ func ImageIDToRBDID(imageID string) string {
 
 func SnapshotIDToRBDID(snapshotID string) string {
 	return SnapshotRBDIDPrefix + snapshotID
+}
+
+func GetSnapshotSourceDetails(snapshot *providerapi.Snapshot) (string, string, error) {
+	var parentName, snapName string
+	switch {
+	case snapshot.Source.IronCoreImage != "":
+		parentName = SnapshotIDToRBDID(snapshot.ID)
+		snapName = ImageSnapshotVersion
+	case snapshot.Source.VolumeImageID != "":
+		parentName = ImageIDToRBDID(snapshot.Source.VolumeImageID)
+		snapName = snapshot.ID
+	default:
+		return "", "", fmt.Errorf("snapshot source is not present")
+	}
+	return parentName, snapName, nil
 }

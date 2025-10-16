@@ -15,7 +15,7 @@ func Calculate(iops, tps int64, burstFactor, burstDurationInSeconds int64) api.L
 
 	//IOPS
 	iops = iops * scale
-	limits[api.IOPSlLimit] = iops
+	limits[api.IOPSLimit] = iops
 	limits[api.ReadIOPSLimit] = iops
 	limits[api.WriteIOPSLimit] = iops
 

@@ -193,16 +193,9 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		return nil
 	}
 
-	var rbdID, snapshotID string
-	switch {
-	case snapshot.Source.IronCoreImage != "":
-		rbdID = SnapshotIDToRBDID(snapshot.ID)
-		snapshotID = ImageSnapshotVersion
-	case snapshot.Source.VolumeImageID != "":
-		rbdID = ImageIDToRBDID(snapshot.Source.VolumeImageID)
-		snapshotID = snapshot.ID
-	default:
-		return fmt.Errorf("snapshot source is not present")
+	rbdID, snapshotID, err := GetSnapshotSourceDetails(snapshot)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
 
 	img, err := librbd.OpenImage(ioCtx, rbdID, librbd.NoSnapshot)
