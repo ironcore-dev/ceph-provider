@@ -171,7 +171,7 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 	snapshot := img.GetSnapshot(snapshotID)
 	isProtected, err := snapshot.IsProtected()
 	if err != nil {
-		return fmt.Errorf("unable to chek if snapshot is protected: %w", err)
+		return fmt.Errorf("unable to check if snapshot is protected: %w", err)
 	}
 
 	if isProtected {
@@ -181,7 +181,7 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 	}
 
 	if err := snapshot.Remove(); err != nil {
-		return fmt.Errorf("unable to remove snapshot snapshot: %w", err)
+		return fmt.Errorf("unable to remove snapshot: %w", err)
 	}
 	log.V(2).Info("Snapshot Removed")
 	return nil
