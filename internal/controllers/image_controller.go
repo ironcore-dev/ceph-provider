@@ -223,17 +223,44 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 		return nil
 	}
 
-	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
-		return fmt.Errorf("failed to remove rbd image: %w", err)
-	}
-	log.V(2).Info("Rbd image deleted")
+	pools, imgs, err := listRbdImageChildren(ioCtx, ImageIDToRBDID(image.ID))
+	log.V(2).Info("Volume image references", "pools", pools, "rbd-images", imgs)
 
-	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
-	if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
-		return fmt.Errorf("failed to update image metadata: %w", err)
+	if err != nil {
+		return fmt.Errorf("failed to list volume image children: %w", err)
 	}
-	r.Eventf(image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
-	log.V(2).Info("Removed Finalizers")
+	if pools == 0 && imgs == 0 {
+		if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to remove rbd image: %w", err)
+		}
+		log.V(2).Info("Rbd image deleted")
+
+		snapshotID := *image.Spec.SnapshotRef
+		if image.Spec.Image != "" && snapshotID != "" {
+			pools, imgs, err := listRbdImageChildren(ioCtx, SnapshotIDToRBDID(snapshotID))
+			if err != nil {
+				return fmt.Errorf("failed to list os-image children: %w", err)
+			}
+			log.V(2).Info("Os-image references", "pools", pools, "rbd-images", imgs)
+
+			if pools == 0 && imgs == 0 {
+				log.V(2).Info("Deleting volume os-image")
+				if err := r.snapshots.Delete(ctx, *image.Spec.SnapshotRef); err != nil {
+					if !errors.Is(err, utils.ErrSnapshotNotFound) {
+						return fmt.Errorf("error deleting os-image: %w", err)
+					}
+					return nil
+				}
+			}
+		}
+
+		image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
+		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("failed to update image metadata: %w", err)
+		}
+		r.Eventf(image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
+		log.V(2).Info("Removed Finalizers")
+	}
 
 	return nil
 }
@@ -432,13 +459,13 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	} else {
 		options := librbd.NewRbdImageOptions()
 		defer options.Destroy()
-		if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
+		if err := options.SetString(librbd.ImageOptionDataPool, r.pool); err != nil {
 			return fmt.Errorf("failed to set data pool: %w", err)
 		}
 		log.V(2).Info("Configured pool", "pool", r.pool)
 
 		switch {
-		case img.Spec.Image == "" && img.Spec.SnapshotRef != nil:
+		case img.Spec.SnapshotRef != nil:
 			snapshotRef := img.Spec.SnapshotRef
 			log.V(2).Info("Creating image from snapshot", "snapshotRef", snapshotRef)
 			ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
@@ -599,7 +626,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 			return false, fmt.Errorf("failed to get snapshot: %w", err)
 		}
 
-		log.V(1).Info("snapshot not found", "snapshotID", snapshot.ID)
+		log.V(1).Info("snapshot not found", "snapshotID", snapshotRef)
 
 		return false, nil
 	}
@@ -609,7 +636,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	parentName, snapName, err := GetSnapshotSourceDetails(snapshot)
+	parentName, snapName, err := getSnapshotSourceDetails(snapshot)
 	if err != nil {
 		return false, fmt.Errorf("failed to get snapshot source details: %w", err)
 	}

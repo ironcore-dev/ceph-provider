@@ -184,6 +184,10 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 		return fmt.Errorf("unable to remove snapshot: %w", err)
 	}
 	log.V(2).Info("Snapshot Removed")
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close snapshot: %w", err)
+	}
 	return nil
 }
 
@@ -193,7 +197,7 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		return nil
 	}
 
-	rbdID, snapshotID, err := GetSnapshotSourceDetails(snapshot)
+	rbdID, snapshotID, err := getSnapshotSourceDetails(snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
@@ -210,11 +214,7 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		if closeErr := img.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
 		}
-		return fmt.Errorf("failed to cleanup snapshot resources: %w", err)
-	}
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
+		return fmt.Errorf("failed to remove snapshot: %w", err)
 	}
 
 	if snapshot.Source.IronCoreImage != "" {
@@ -235,6 +235,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 	defer ioCtx.Destroy()
 
+	log.V(2).Info("Get snapshot from store")
 	snapshot, err := r.store.Get(ctx, id)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
@@ -252,6 +253,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 				return fmt.Errorf("failed to update snapshot metadata: %w", err)
 			}
 			log.V(2).Info("Removed snapshot finalizer")
+			return nil
 		}
 	}
 
