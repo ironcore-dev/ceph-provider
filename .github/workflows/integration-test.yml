@@ -64,7 +64,7 @@ jobs:
           echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
           echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
           echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
-          echo "CEPH_DISK_SIZE=1024" >> $GITHUB_ENV
+          echo "CEPH_DISK_SIZE=$(df --output=size -B 1 /mnt | sed -n '2p' | sed 's/[[:blank:]]//g')" >> $GITHUB_ENV
           echo "CEPH_KEYRING_FILENAME=/etc/ceph/ceph.client.admin.keyring" >> $GITHUB_ENV
           echo "CEPH_MONITORS=$(hostname):6789" >> $GITHUB_ENV
           echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV
@@ -77,7 +77,3 @@ jobs:
       - name: Run go tests
         run: |
           make integration-tests 
-      
-      - name: Remove MicroCeph
-        run: |
-          sudo snap remove microceph
