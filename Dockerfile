@@ -1,17 +1,16 @@
 # Build the manager binary
-FROM golang:1.25.1-trixie AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.1-trixie AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+COPY go.mod go.sum ./
+
+# Cache dependencies before copying source code
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     go mod download
 
-# Copy the go source
+# Copy the Go source code
 COPY api/ api/
 COPY internal/ internal/
 COPY cmd/ cmd/
@@ -19,6 +18,8 @@ COPY hack/ hack/
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILDPLATFORM
+ENV BUILDARCH=${BUILDPLATFORM##*/}
 
 FROM builder AS ceph-bucket-provider-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -32,11 +33,39 @@ FROM builder AS ceph-volume-provider-builder
 
 RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
 
+# Install cross-compiler for ARM64 if building for arm64 on an amd64 host
+RUN if [ "$TARGETARCH" = "arm64" ] && [ "$BUILDARCH" = "amd64" ]; then \
+      dpkg --add-architecture arm64 && \
+      apt-get update && apt-get install -y --no-install-recommends \
+      gcc-aarch64-linux-gnu librbd-dev:arm64 librados-dev:arm64 libc6-dev:arm64; \
+    fi
+
+# Install cross-compiler for AMD64 if building for amd64 on an arm64 host
+RUN if [ "$TARGETARCH" = "amd64" ] && [ "$BUILDARCH" = "arm64" ]; then \
+      apt update && apt-get install -y --no-install-recommends \
+      gcc-x86-64-linux-gnu; \
+    fi
+
+# Set compiler and linker flags based on target architecture
+ENV CC=""
+ENV CGO_LDFLAGS=""
+
 # Build
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
-
+    if [ "$TARGETARCH" != "$BUILDARCH" ] && [ "$TARGETARCH" = "arm64" ]; then \
+      export CC="/usr/bin/aarch64-linux-gnu-gcc"; \
+      export CGO_LDFLAGS="-L/usr/lib/aarch64-linux-gnu -Wl,-lrados -Wl,-lrbd"; \
+    elif [ "$TARGETARCH" != "$BUILDARCH" ] && [ "$TARGETARCH" = "amd64" ]; then \
+      export CC="/usr/bin/x86_64-linux-gnu-gcc"; \
+      export CGO_LDFLAGS="-L/usr/lib/x86_64-linux-gnu -Wl,-lrados -Wl,-lrbd"; \
+    else \
+      export CC="/usr/bin/gcc"; \
+      export CGO_LDFLAGS=""; \
+    fi && \
+    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    CC="$CC" CGO_LDFLAGS="$CGO_LDFLAGS" GO111MODULE=on \
+    go build -ldflags="-s -w -linkmode=external" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -56,12 +85,15 @@ FROM gcr.io/distroless/base-debian12 AS distroless-base
 FROM distroless-base AS distroless-amd64
 ENV LIB_DIR_PREFIX=x86_64
 ENV LIB_DIR_PREFIX_MINUS=x86-64
+ENV LIB_DIR_SUFFIX_NUMBER=2
+ENV LIB_DIR=lib64
 
 # The distroless arm64 image has a target triplet of aarch64
 FROM distroless-base AS distroless-arm64
 ENV LIB_DIR_PREFIX=aarch64
 ENV LIB_DIR_PREFIX_MINUS=aarch64
-
+ENV LIB_DIR_SUFFIX_NUMBER=1
+ENV LIB_DIR=lib
 
 FROM busybox:1.37.0-uclibc AS busybox
 FROM distroless-$TARGETARCH AS ceph-volume-provider-image
@@ -97,8 +129,8 @@ COPY --from=ceph-volume-provider-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librad
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libnl-3.so.200 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libselinux.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu/
-RUN mkdir -p /lib64
-COPY --from=ceph-volume-provider-builder /lib64/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.2 /lib64/
+RUN mkdir -p /${LIB_DIR}
+COPY --from=ceph-volume-provider-builder /${LIB_DIR}/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.${LIB_DIR_SUFFIX_NUMBER} /${LIB_DIR}/
 RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
 COPY --from=ceph-volume-provider-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
 

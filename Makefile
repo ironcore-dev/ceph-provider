@@ -115,7 +115,7 @@ run-bucket: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/bucketprovider/main.go
 
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
 	$(CONTAINER_TOOL) build --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
 
