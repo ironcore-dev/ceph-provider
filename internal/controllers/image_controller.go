@@ -150,7 +150,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	}()
 
 	snapEventReg, err := r.snapshotEvents.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(evt event.Event[*providerapi.Snapshot]) {
-		if evt.Type != event.TypeUpdated || evt.Object.Status.State != providerapi.SnapshotStatePopulated {
+		if evt.Type != event.TypeUpdated || (evt.Object.Status.State != providerapi.SnapshotStatePopulated && evt.Object.Status.State != providerapi.SnapshotStateReady) {
 			return
 		}
 
