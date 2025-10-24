@@ -55,12 +55,12 @@ var _ = Describe("Delete Volume", func() {
 		))
 
 		By("deleting a volume")
-		Eventually(func() {
+		Eventually(func() error {
 			_, err = volumeClient.DeleteVolume(ctx, &iriv1alpha1.DeleteVolumeRequest{
 				VolumeId: createResp.Volume.Metadata.Id,
 			})
-			Expect(err).NotTo(HaveOccurred())
-		})
+			return err
+		}).ShouldNot(HaveOccurred())
 
 		By("listing volume with volume ID to check volume deleted")
 		Eventually(func() {

@@ -44,12 +44,24 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		Spec: api.ImageSpec{
 			Size:   imageSize,
 			Limits: calculatedLimits,
-			Image:  volume.Spec.Image,
 			Encryption: api.EncryptionSpec{
 				Type: api.EncryptionTypeUnencrypted,
 			},
 		},
 	}
+
+	log.V(2).Info("getting volume data source")
+	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
+	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
+		switch {
+		case dataSource.SnapshotDataSource != nil:
+			image.Spec.SnapshotRef = &dataSource.SnapshotDataSource.SnapshotId
+			volImage = "" // TODO: Remove this once volume.Spec.Image is deprecated
+		case dataSource.ImageDataSource != nil:
+			volImage = dataSource.ImageDataSource.Image
+		}
+	}
+	image.Spec.Image = volImage
 
 	log.V(2).Info("Checking volume encryption")
 	if encryption := volume.Spec.Encryption; encryption != nil {

@@ -29,8 +29,8 @@ var _ = Describe("Volume Status", func() {
 			HaveField("VolumeClass", Equal(&iriv1alpha1.VolumeClass{
 				Name: "foo",
 				Capabilities: &iriv1alpha1.VolumeClassCapabilities{
-					Tps:  100,
-					Iops: 100,
+					Tps:  262144000,
+					Iops: 15000,
 				},
 			})),
 			// TODO: The pool size depends on the ceph setup in the integration test workflow.
@@ -74,12 +74,12 @@ var _ = Describe("Volume Status", func() {
 			HaveField("Metadata.Labels", HaveKeyWithValue(api.ClassLabel, "foo")),
 			HaveField("Spec.Size", Equal(uint64(1*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
-				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
-				HaveKeyWithValue(api.WriteBPSLimit, int64(100)),
-				HaveKeyWithValue(api.BPSLimit, int64(100)),
-				HaveKeyWithValue(api.ReadIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
+				HaveKeyWithValue(api.ReadBPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.WriteBPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.BPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.ReadIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.WriteIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 		))
 
