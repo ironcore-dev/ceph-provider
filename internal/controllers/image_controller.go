@@ -223,44 +223,50 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 		return nil
 	}
 
-	pools, imgs, err := listRbdImageChildren(ioCtx, ImageIDToRBDID(image.ID))
-	log.V(2).Info("Volume image references", "pools", pools, "rbd-images", imgs)
-
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
-		return fmt.Errorf("failed to list volume image children: %w", err)
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to open image: %w", err)
+		}
+		return nil
 	}
-	if pools == 0 && imgs == 0 {
-		if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to remove rbd image: %w", err)
-		}
-		log.V(2).Info("Rbd image deleted")
 
-		snapshotID := *image.Spec.SnapshotRef
-		if image.Spec.Image != "" && snapshotID != "" {
-			pools, imgs, err := listRbdImageChildren(ioCtx, SnapshotIDToRBDID(snapshotID))
-			if err != nil {
-				return fmt.Errorf("failed to list os-image children: %w", err)
-			}
-			log.V(2).Info("Os-image references", "pools", pools, "rbd-images", imgs)
-
-			if pools == 0 && imgs == 0 {
-				log.V(2).Info("Deleting volume os-image")
-				if err := r.snapshots.Delete(ctx, *image.Spec.SnapshotRef); err != nil {
-					if !errors.Is(err, utils.ErrSnapshotNotFound) {
-						return fmt.Errorf("error deleting os-image: %w", err)
-					}
-					return nil
-				}
-			}
-		}
-
-		image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
-		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to update image metadata: %w", err)
-		}
-		r.Eventf(image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
-		log.V(2).Info("Removed Finalizers")
+	pools, imgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list volume image children: %w", err)
 	}
+	log.V(2).Info("Volume image references", "pools", len(pools), "rbd-images", len(imgs))
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close image: %w", err)
+	}
+
+	if len(pools) != 0 && len(imgs) != 0 {
+		return nil
+	}
+
+	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
+		return fmt.Errorf("failed to remove rbd image: %w", err)
+	}
+	log.V(2).Info("Rbd image deleted")
+
+	snapshotID := *image.Spec.SnapshotRef
+	if image.Spec.Image != "" && snapshotID != "" {
+		log.V(2).Info("Deleting volume os-image")
+		if err := r.snapshots.Delete(ctx, snapshotID); err != nil {
+			if !errors.Is(err, utils.ErrSnapshotNotFound) {
+				return fmt.Errorf("error deleting os-image: %w", err)
+			}
+			return nil
+		}
+	}
+
+	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
+	if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+		return fmt.Errorf("failed to update image metadata: %w", err)
+	}
+	r.Eventf(image.Metadata, corev1.EventTypeNormal, "CompletedDeletion", "Image deletion completed")
+	log.V(2).Info("Removed Finalizers")
 
 	return nil
 }

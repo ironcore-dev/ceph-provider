@@ -278,6 +278,10 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return fmt.Errorf("snapshot source not found")
 	}
 	if err != nil {
+		snapshot.Status.State = providerapi.SnapshotStateFailed
+		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
+			return fmt.Errorf("failed to update snapshot state: %w", updateErr)
+		}
 		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
 
@@ -360,13 +364,13 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, i
 	}
 
 	if err := rbdImg.SetSnapshot(snapshotName); err != nil {
-		return fmt.Errorf("failed to set snapshot %s for image %s: %v", snapshotName, img.ID, err)
+		return fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, img.ID, err)
 	}
 
 	// Get image size
 	size, err := rbdImg.GetSize()
 	if err != nil {
-		return fmt.Errorf("failed to get snapshot image size %s: %v", snapshotName, err)
+		return fmt.Errorf("failed to get snapshot image size %s: %w", snapshotName, err)
 	}
 	roundedSize := round.OffBytes(size)
 

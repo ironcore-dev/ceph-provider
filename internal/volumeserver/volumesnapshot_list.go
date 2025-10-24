@@ -16,12 +16,10 @@ import (
 )
 
 func (s *Server) getIriVolumeSnapshot(ctx context.Context, log logr.Logger, snapshotId string) (*iri.VolumeSnapshot, error) {
+	log.V(2).Info("Get volume snapshot %s", snapshotId)
 	cephSnapshot, err := s.snapshotStore.Get(ctx, snapshotId)
 	if err != nil {
-		if errors.Is(err, utils.ErrSnapshotNotFound) {
-			return nil, fmt.Errorf("failed to get snapshot %s: %w", snapshotId, utils.ErrSnapshotNotFound)
-		}
-		return nil, fmt.Errorf("failed to get snapshot: %w", err)
+		return nil, fmt.Errorf("failed to get snapshot %s: %w", snapshotId, err)
 	}
 
 	if !api.IsObjectManagedBy(cephSnapshot, api.VolumeManager) {
@@ -74,7 +72,7 @@ func (s *Server) listSnapshots(ctx context.Context, log logr.Logger) ([]*iri.Vol
 
 func (s *Server) ListVolumeSnapshots(ctx context.Context, req *iri.ListVolumeSnapshotsRequest) (*iri.ListVolumeSnapshotsResponse, error) {
 	log := s.loggerFrom(ctx)
-	log.V(2).Info("Listing snapshots")
+	log.V(2).Info("Listing volume snapshots")
 
 	if filter := req.Filter; filter != nil && filter.Id != "" {
 		volumeSnapshot, err := s.getIriVolumeSnapshot(ctx, log, filter.Id)
@@ -99,7 +97,7 @@ func (s *Server) ListVolumeSnapshots(ctx context.Context, req *iri.ListVolumeSna
 
 	snapshots = s.filterSnapshot(snapshots, req.Filter)
 
-	log.V(2).Info("Returning snapshot list")
+	log.V(2).Info("Returning volume snapshot list")
 	return &iri.ListVolumeSnapshotsResponse{
 		VolumeSnapshots: snapshots,
 	}, nil
