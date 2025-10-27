@@ -328,6 +328,7 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 		if closeErr := rbdImg.Close(); closeErr != nil {
 			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
 		}
+		return fmt.Errorf("failed to prepare snapshot content: %w", err)
 	}
 
 	if err := rbdImg.Close(); err != nil {
