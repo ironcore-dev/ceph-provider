@@ -250,10 +250,10 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 	log.V(2).Info("Rbd image deleted")
 
-	snapshotID := *image.Spec.SnapshotRef
-	if image.Spec.Image != "" && snapshotID != "" {
+	snapshotID := image.Spec.SnapshotRef
+	if image.Spec.Image != "" && snapshotID != nil && *snapshotID != "" {
 		log.V(2).Info("Deleting volume os-image")
-		if err := r.snapshots.Delete(ctx, snapshotID); err != nil {
+		if err := r.snapshots.Delete(ctx, *snapshotID); err != nil {
 			if !errors.Is(err, utils.ErrSnapshotNotFound) {
 				return fmt.Errorf("error deleting os-image: %w", err)
 			}

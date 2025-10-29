@@ -185,9 +185,6 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 	}
 	log.V(2).Info("Snapshot Removed")
 
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
-	}
 	return nil
 }
 
@@ -215,6 +212,10 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
 		}
 		return fmt.Errorf("failed to remove snapshot: %w", err)
+	}
+
+	if err := img.Close(); err != nil {
+		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
 
 	if snapshot.Source.IronCoreImage != "" {
