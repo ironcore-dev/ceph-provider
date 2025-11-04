@@ -24,62 +24,92 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		return nil, fmt.Errorf("got an empty volume")
 	}
 
+	log.V(2).Info("Getting volume data source")
+	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
+	var snapshotID *string
+	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
+		switch {
+		case dataSource.SnapshotDataSource != nil:
+			snapshotID = &dataSource.SnapshotDataSource.SnapshotId
+			volImage = "" // TODO: Remove this once volume.Spec.Image is deprecated
+		case dataSource.ImageDataSource != nil:
+			volImage = dataSource.ImageDataSource.Image
+		}
+	}
+
+	var snapshotSourceVolume *api.Image
+	if snapshotID != nil {
+		snapshot, err := s.snapshotStore.Get(ctx, *snapshotID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get volume snapshot from store: %w", err)
+		}
+		var snapshotSourceVolumeID string
+		if snapshot.Source.VolumeImageID != "" {
+			snapshotSourceVolumeID = snapshot.Source.VolumeImageID
+		}
+		if snapshotSourceVolumeID != "" {
+			snapshotSourceVolume, err = s.imageStore.Get(ctx, snapshotSourceVolumeID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get snapshot source volume from store: %w", err)
+			}
+		}
+	}
+
+	var imageSize uint64
+	var err error
+	var encryptionType = api.EncryptionTypeUnencrypted
+	var encryptedPassphrase []byte
+	log.V(2).Info("Getting image size and volume encryption")
+	if snapshotSourceVolume != nil {
+		imageSize = snapshotSourceVolume.Status.Size
+		if snapshotSourceVolume.Status.Encryption == api.EncryptionStateHeaderSet {
+			encryptionType = snapshotSourceVolume.Spec.Encryption.Type
+			encryptedPassphrase = snapshotSourceVolume.Spec.Encryption.EncryptedPassphrase
+		}
+	} else {
+		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
+			return nil, err
+		}
+		if encryption := volume.Spec.Encryption; encryption != nil {
+			if encryption.SecretData == nil {
+				return nil, fmt.Errorf("encryption enabled but SecretData missing")
+			}
+			passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
+			if !found {
+				return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
+			}
+
+			encryptedPassphrase, err = s.keyEncryption.Encrypt(passphrase)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+			}
+			encryptionType = api.EncryptionTypeEncrypted
+		}
+	}
+
 	log.V(2).Info("Getting volume class")
 	class, found := s.volumeClasses.Get(volume.Spec.Class)
 	if !found {
 		return nil, fmt.Errorf("volume class '%s' not supported", volume.Spec.Class)
 	}
 
+	log.V(2).Info("Getting volume limits")
 	calculatedLimits := limits.Calculate(class.Capabilities.Iops, class.Capabilities.Tps, s.burstFactor, s.burstDurationInSeconds)
-
-	imageSize, err := utils.Int64ToUint64(volume.Spec.Resources.StorageBytes)
-	if err != nil {
-		return nil, err
-	}
 
 	image := &api.Image{
 		Metadata: apiutils.Metadata{
 			ID: s.idGen.Generate(),
 		},
 		Spec: api.ImageSpec{
-			Size:   imageSize,
-			Limits: calculatedLimits,
+			Size:        imageSize,
+			Limits:      calculatedLimits,
+			Image:       volImage,
+			SnapshotRef: snapshotID,
 			Encryption: api.EncryptionSpec{
-				Type: api.EncryptionTypeUnencrypted,
+				Type:                encryptionType,
+				EncryptedPassphrase: encryptedPassphrase,
 			},
 		},
-	}
-
-	log.V(2).Info("getting volume data source")
-	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
-	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
-		switch {
-		case dataSource.SnapshotDataSource != nil:
-			image.Spec.SnapshotRef = &dataSource.SnapshotDataSource.SnapshotId
-			volImage = "" // TODO: Remove this once volume.Spec.Image is deprecated
-		case dataSource.ImageDataSource != nil:
-			volImage = dataSource.ImageDataSource.Image
-		}
-	}
-	image.Spec.Image = volImage
-
-	log.V(2).Info("Checking volume encryption")
-	if encryption := volume.Spec.Encryption; encryption != nil {
-		if encryption.SecretData == nil {
-			return nil, fmt.Errorf("encryption enabled but SecretData missing")
-		}
-		passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
-		if !found {
-			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
-		}
-
-		encryptedPassphrase, err := s.keyEncryption.Encrypt(passphrase)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
-		}
-
-		image.Spec.Encryption.Type = api.EncryptionTypeEncrypted
-		image.Spec.Encryption.EncryptedPassphrase = encryptedPassphrase
 	}
 
 	log.V(2).Info("Setting volume metadata to image")

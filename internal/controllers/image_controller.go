@@ -242,7 +242,7 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 
 	if len(pools) != 0 && len(imgs) != 0 {
-		return nil
+		return fmt.Errorf("unable to delete volume image: still in use")
 	}
 
 	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
@@ -656,6 +656,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	if err = librbd.CloneImage(ioCtx2, parentName, snapName, ioCtx, ImageIDToRBDID(image.ID), options); err != nil {
 		return false, fmt.Errorf("failed to clone rbd image: %w", err)
 	}
+	log.V(2).Info("Cloned image")
 
 	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
@@ -675,6 +676,5 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	}
 
 	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ClonedImage", "Cloned image from snapshot. bytes:%d", image.Spec.Size)
-	log.V(2).Info("Cloned image")
 	return true, nil
 }
