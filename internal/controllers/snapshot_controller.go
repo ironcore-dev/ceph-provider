@@ -188,7 +188,7 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 	return nil
 }
 
-func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
 		log.V(1).Info("snapshot has no finalizer: done")
 		return nil
@@ -204,18 +204,17 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		if !errors.Is(err, librbd.ErrNotFound) {
 			return fmt.Errorf("failed to open image: %w", err)
 		}
+		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
+		if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("failed to update snapshot metadata: %w", err)
+		}
+		log.V(2).Info("Removed snapshot finalizer")
 		return nil
 	}
+	defer closeImage(log, img)
 
 	if err = r.removeSnapshot(log, snapshotID, img); err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
-		}
 		return fmt.Errorf("failed to remove snapshot: %w", err)
-	}
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
 
 	if snapshot.Source.IronCoreImage != "" {
@@ -225,6 +224,12 @@ func (r *SnapshotReconciler) deleteSnapshot(log logr.Logger, ioCtx *rados.IOCont
 		}
 		log.V(2).Info("Ironcore os-image removed")
 	}
+
+	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
+	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+		return fmt.Errorf("failed to update snapshot metadata: %w", err)
+	}
+	log.V(2).Info("Removed snapshot finalizer")
 	return nil
 }
 
@@ -246,15 +251,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	if snapshot.DeletedAt != nil {
-		if err := r.deleteSnapshot(log, ioCtx, snapshot); err != nil {
+		if err := r.deleteSnapshot(ctx, log, ioCtx, snapshot); err != nil {
 			return fmt.Errorf("failed to delete snapshot: %w", err)
-		} else if slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
-			snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-			if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-				return fmt.Errorf("failed to update snapshot metadata: %w", err)
-			}
-			log.V(2).Info("Removed snapshot finalizer")
-			return nil
 		}
 	}
 
@@ -274,14 +272,14 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	case snapshot.Source.IronCoreImage != "":
 		err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
 	case snapshot.Source.VolumeImageID != "":
-		err = r.reconcileVolumeImageSnapshot(ctx, ioCtx, snapshot)
+		err = r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot)
 	default:
 		return fmt.Errorf("snapshot source not found")
 	}
 	if err != nil {
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
-			return fmt.Errorf("failed to update snapshot state: %w", updateErr)
+			return errors.Join(err, fmt.Errorf("failed to update snapshot state: %w", updateErr))
 		}
 		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
@@ -324,16 +322,10 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, rbdImg)
 
 	if err := r.prepareSnapshotContent(log, rbdImg, rc); err != nil {
-		if closeErr := rbdImg.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close snapshot: %w", closeErr))
-		}
 		return fmt.Errorf("failed to prepare snapshot content: %w", err)
-	}
-
-	if err := rbdImg.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
 	}
 
 	snapshot.Status.Digest = digest
@@ -341,7 +333,7 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	return nil
 }
 
-func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
 	img, err := r.images.Get(ctx, snapshot.Source.VolumeImageID)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
@@ -354,6 +346,7 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, i
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, rbdImg)
 
 	snapshotName := snapshot.ID
 	imgSnap, err := rbdImg.CreateSnapshot(snapshotName)
@@ -368,6 +361,7 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, i
 	if err := rbdImg.SetSnapshot(snapshotName); err != nil {
 		return fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, img.ID, err)
 	}
+	log.V(2).Info("Created volume image snapshot", "ImageID", rbdImg.GetName())
 
 	// Get image size
 	size, err := rbdImg.GetSize()
@@ -375,10 +369,6 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, i
 		return fmt.Errorf("failed to get snapshot image size %s: %w", snapshotName, err)
 	}
 	roundedSize := round.OffBytes(size)
-
-	if err := rbdImg.Close(); err != nil {
-		return fmt.Errorf("unable to close snapshot: %w", err)
-	}
 
 	snapshot.Status.Size = int64(roundedSize)
 	return nil

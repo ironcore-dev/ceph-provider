@@ -230,16 +230,13 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 		}
 		return nil
 	}
+	defer closeImage(log, img)
 
 	pools, imgs, err := img.ListChildren()
 	if err != nil {
 		return fmt.Errorf("unable to list volume image children: %w", err)
 	}
 	log.V(2).Info("Volume image references", "pools", len(pools), "rbd-images", len(imgs))
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("unable to close image: %w", err)
-	}
 
 	if len(pools) != 0 && len(imgs) != 0 {
 		return fmt.Errorf("unable to delete volume image: still in use")
@@ -378,11 +375,7 @@ func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCt
 	if err != nil {
 		return fmt.Errorf("failed to open image: %w", err)
 	}
-	defer func() {
-		if err = img.Close(); err != nil {
-			log.Error(err, "failed to close image source")
-		}
-	}()
+	defer closeImage(log, img)
 
 	currentImageSize, err := img.GetSize()
 	if err != nil {
@@ -535,20 +528,14 @@ func (r *ImageReconciler) setImageLimits(log logr.Logger, ioCtx *rados.IOContext
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, img)
 
 	for limit, value := range image.Spec.Limits {
 		if err := img.SetMetadata(fmt.Sprintf("%s%s", LimitMetadataPrefix, limit), strconv.FormatInt(value, 10)); err != nil {
-			if closeErr := img.Close(); closeErr != nil {
-				return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-			}
 			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
 		}
 		r.Eventf(image.Metadata, corev1.EventTypeNormal, "SetImageLimit", "Image limit set. limit: %s value: %d", limit, value)
 		log.V(3).Info("Set image limit", "limit", limit, "value", value)
-	}
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("failed to close rbd image: %w", err)
 	}
 
 	return nil
@@ -560,18 +547,12 @@ func (r *ImageReconciler) setWWN(log logr.Logger, ioCtx *rados.IOContext, image 
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, img)
 
 	if err := img.SetMetadata(WWNKey, image.Spec.WWN); err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-		}
 		return fmt.Errorf("failed to set wwn (%s): %w", image.Spec.WWN, err)
 	}
 	log.V(3).Info("Set image wwn", "wwn", image.Spec.WWN)
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("failed to close rbd image: %w", err)
-	}
 
 	return nil
 }
@@ -591,19 +572,13 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 	if err != nil {
 		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, img)
 
 	if err := img.EncryptionFormat(librbd.EncryptionOptionsLUKS2{
 		Alg:        librbd.EncryptionAlgorithmAES256,
 		Passphrase: passphrase,
 	}); err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-		}
 		return fmt.Errorf("failed to set encryption format: %w", err)
-	}
-
-	if err := img.Close(); err != nil {
-		return fmt.Errorf("failed to close rbd image: %w", err)
 	}
 
 	image.Status.Encryption = providerapi.EncryptionStateHeaderSet
@@ -662,18 +637,12 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	if err != nil {
 		return false, fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, img)
 
 	if err := img.Resize(round.OffBytes(image.Spec.Size)); err != nil {
-		if closeErr := img.Close(); closeErr != nil {
-			return false, errors.Join(err, fmt.Errorf("unable to close image: %w", closeErr))
-		}
 		return false, fmt.Errorf("failed to resize rbd image: %w", err)
 	}
 	log.V(2).Info("Resized cloned image", "bytes", image.Spec.Size)
-
-	if err := img.Close(); err != nil {
-		return false, fmt.Errorf("failed to close rbd image: %w", err)
-	}
 
 	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ClonedImage", "Cloned image from snapshot. bytes:%d", image.Spec.Size)
 	return true, nil

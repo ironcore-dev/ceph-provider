@@ -6,6 +6,8 @@ package controllers
 import (
 	"fmt"
 
+	librbd "github.com/ceph/go-ceph/rbd"
+	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 )
 
@@ -36,4 +38,10 @@ func getSnapshotSourceDetails(snapshot *providerapi.Snapshot) (parentName string
 		return "", "", fmt.Errorf("snapshot source is not present")
 	}
 	return parentName, snapName, nil
+}
+
+func closeImage(log logr.Logger, img *librbd.Image) {
+	if closeErr := img.Close(); closeErr != nil {
+		log.Error(closeErr, "failed to close image")
+	}
 }
