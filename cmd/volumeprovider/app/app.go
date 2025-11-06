@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
@@ -27,6 +27,7 @@ import (
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -174,8 +175,6 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	var wg sync.WaitGroup
-
 	cleanup, err := configureCephAuth(&opts.Ceph)
 	if err != nil {
 		return fmt.Errorf("failed to configure ceph auth: %w", err)
@@ -274,14 +273,16 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize image reconciler: %w", err)
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
 		setupLog.Info("Starting image reconciler")
 		if err := imageReconciler.Start(ctx); err != nil {
-			log.Error(err, "failed to start image reconciler")
+			setupLog.Error(err, "failed to start image reconciler")
+			return err
 		}
-	}()
+		return nil
+	})
 
 	snapshotReconciler, err := controllers.NewSnapshotReconciler(
 		log.WithName("snapshot-reconciler"),
@@ -300,40 +301,38 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize snapshot reconciler: %w", err)
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		setupLog.Info("Starting snapshot reconciler")
 		if err := snapshotReconciler.Start(ctx); err != nil {
-			log.Error(err, "failed to start snapshot reconciler")
+			setupLog.Error(err, "failed to start snapshot reconciler")
+			return err
 		}
+		return nil
+	})
 
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		setupLog.Info("Starting image events")
 		if err := imageEvents.Start(ctx); err != nil {
-			log.Error(err, "failed to start image events")
+			setupLog.Error(err, "failed to start image events")
+			return err
 		}
-	}()
+		return nil
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		setupLog.Info("Starting snapshot events")
 		if err := snapshotEvents.Start(ctx); err != nil {
-			log.Error(err, "failed to start snapshot events")
+			setupLog.Error(err, "failed to start snapshot events")
+			return err
 		}
-	}()
+		return nil
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		setupLog.Info("Starting volume events garbage collector")
 		volumeEventStore.Start(ctx)
-	}()
+		return nil
+	})
 
 	supportedClasses, err := vcr.LoadVolumeClassesFile(opts.PathSupportedVolumeClasses)
 	if err != nil {
@@ -366,19 +365,31 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("error creating server: %w", err)
 	}
 
-	log.V(1).Info("Cleaning up any previous socket")
+	g.Go(func() error {
+		setupLog.Info("Starting grpc server")
+		if err := runGRPCServer(ctx, setupLog, log, srv, opts); err != nil {
+			setupLog.Error(err, "failed to start grpc server")
+			return err
+		}
+		return nil
+	})
+	return g.Wait()
+}
+
+func runGRPCServer(ctx context.Context, setupLog logr.Logger, log logr.Logger, srv *volumeserver.Server, opts Options) error {
+	setupLog.V(1).Info("Cleaning up any previous socket")
 	if err := common.CleanupSocketIfExists(opts.Address); err != nil {
 		return fmt.Errorf("error cleaning up socket: %w", err)
 	}
 
-	log.V(1).Info("Start listening on unix socket", "Address", opts.Address)
+	setupLog.V(1).Info("Start listening on unix socket", "Address", opts.Address)
 	l, err := net.Listen("unix", opts.Address)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			log.Error(err, "Error closing socket")
+			setupLog.Error(err, "failed to close listener")
 		}
 	}()
 
@@ -396,18 +407,15 @@ func Run(ctx context.Context, opts Options) error {
 	)
 	iriv1alpha1.RegisterVolumeRuntimeServer(grpcSrv, srv)
 
-	setupLog.Info("Starting server", "Address", l.Addr().String())
+	setupLog.Info("Starting grpc server", "Address", l.Addr().String())
 	go func() {
-		defer func() {
-			setupLog.Info("Shutting down server")
-			grpcSrv.Stop()
-			setupLog.Info("Shut down server")
-		}()
 		<-ctx.Done()
+		setupLog.Info("Shutting down grpc server")
+		grpcSrv.GracefulStop()
+		setupLog.Info("Shut down grpc server")
 	}()
 	if err := grpcSrv.Serve(l); err != nil {
-		return fmt.Errorf("error serving: %w", err)
+		return fmt.Errorf("error serving grpc: %w", err)
 	}
-	wg.Wait()
 	return nil
 }
