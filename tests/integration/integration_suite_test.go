@@ -69,8 +69,8 @@ var _ = BeforeSuite(func() {
 	volumeClasses := []iriv1alpha1.VolumeClass{{
 		Name: "foo",
 		Capabilities: &iriv1alpha1.VolumeClassCapabilities{
-			Tps:  100,
-			Iops: 100,
+			Tps:  262144000,
+			Iops: 15000,
 		},
 	}}
 	volumeClassesData, err := json.Marshal(volumeClasses)

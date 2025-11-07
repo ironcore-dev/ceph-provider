@@ -65,13 +65,13 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
-				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
-				HaveKeyWithValue(api.BPSLimit, int64(100)),
-				HaveKeyWithValue(api.ReadIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.WriteBPSLimit, int64(100)),
+				HaveKeyWithValue(api.WriteIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.ReadBPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.BPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.ReadIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.WriteBPSLimit, int64(262144000)),
 				HaveKeyWithValue(api.BPSBurstDurationLimit, int64(15)),
-				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
+				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
 			HaveField("Spec.Encryption.Type", api.EncryptionTypeUnencrypted),
@@ -165,13 +165,13 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Spec.Size", Equal(uint64(1024*1024*1024))),
 			HaveField("Spec.Limits", SatisfyAll(
 				HaveKeyWithValue(api.IOPSBurstDurationLimit, int64(15)),
-				HaveKeyWithValue(api.WriteIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.ReadBPSLimit, int64(100)),
-				HaveKeyWithValue(api.BPSLimit, int64(100)),
-				HaveKeyWithValue(api.ReadIOPSLimit, int64(100)),
-				HaveKeyWithValue(api.WriteBPSLimit, int64(100)),
+				HaveKeyWithValue(api.WriteIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.ReadBPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.BPSLimit, int64(262144000)),
+				HaveKeyWithValue(api.ReadIOPSLimit, int64(15000)),
+				HaveKeyWithValue(api.WriteBPSLimit, int64(262144000)),
 				HaveKeyWithValue(api.BPSBurstDurationLimit, int64(15)),
-				HaveKeyWithValue(api.IOPSlLimit, int64(100)),
+				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
 			HaveField("Spec.Encryption.Type", api.EncryptionTypeEncrypted),
@@ -210,6 +210,155 @@ var _ = Describe("Create Volume", func() {
 					HaveKeyWithValue("userKey", []byte(image.Status.Access.UserKey)),
 				)),
 			)),
+		))
+	})
+
+	It("should create a volume with snapshot data source", func(ctx SpecContext) {
+		By("creating a volume with image data source")
+		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo",
+				},
+				Spec: &iriv1alpha1.VolumeSpec{
+					Class: "foo",
+					Resources: &iriv1alpha1.VolumeResources{
+						StorageBytes: 1024 * 1024 * 1024,
+					},
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
+			VolumeId: createResp.Volume.Metadata.Id,
+		})
+
+		By("ensuring image has been created inside the ceph cluster")
+		image := &api.Image{}
+		Eventually(ctx, func() *api.Image {
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
+			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
+			return image
+		}).Should(SatisfyAll(
+			HaveField("Metadata.ID", Equal(createResp.Volume.Metadata.Id)),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+		))
+
+		By("ensuring volume is in available state")
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
+					Id: createResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(SatisfyAll(
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
+		))
+
+		By("creating a volume snapshot")
+		createSnapshotResp, err := volumeClient.CreateVolumeSnapshot(ctx, &iriv1alpha1.CreateVolumeSnapshotRequest{
+			VolumeSnapshot: &iriv1alpha1.VolumeSnapshot{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo-snap",
+				},
+				Spec: &iriv1alpha1.VolumeSnapshotSpec{
+					VolumeId: createResp.Volume.Metadata.Id,
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		snapshotID := createSnapshotResp.VolumeSnapshot.Metadata.Id
+
+		DeferCleanup(volumeClient.DeleteVolumeSnapshot, &iriv1alpha1.DeleteVolumeSnapshotRequest{
+			VolumeSnapshotId: snapshotID,
+		})
+
+		By("ensuring snapshot has been created in snapshot store")
+		snapshot := &api.Snapshot{}
+		Eventually(ctx, func() *api.Snapshot {
+			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(snapshotID))
+			Expect(json.Unmarshal(oMap[snapshotID], snapshot)).NotTo(HaveOccurred())
+			return snapshot
+		}).Should(SatisfyAll(
+			HaveField("Metadata.ID", Equal(snapshotID)),
+			HaveField("Status.State", Equal(api.SnapshotStateReady)),
+		))
+
+		By("ensuring volume snapshot is in available state and restore size have been updated")
+		Eventually(func() *iriv1alpha1.VolumeSnapshotStatus {
+			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
+				Filter: &iriv1alpha1.VolumeSnapshotFilter{
+					Id: snapshotID,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.VolumeSnapshots).NotTo(BeEmpty())
+			Expect(resp.VolumeSnapshots).To(HaveLen(1))
+			return resp.VolumeSnapshots[0].Status
+		}).Should(SatisfyAll(
+			HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_READY)),
+			HaveField("Size", Equal(int64(1024*1024*1024))),
+		))
+
+		By("creating a volume with image data source")
+		volCreateResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo",
+				},
+				Spec: &iriv1alpha1.VolumeSpec{
+					Class: "foo",
+					Resources: &iriv1alpha1.VolumeResources{
+						StorageBytes: 1024 * 1024 * 1024,
+					},
+					VolumeDataSource: &iriv1alpha1.VolumeDataSource{
+						SnapshotDataSource: &iriv1alpha1.SnapshotDataSource{
+							SnapshotId: snapshotID,
+						},
+					},
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
+			VolumeId: volCreateResp.Volume.Metadata.Id,
+		})
+
+		By("ensuring image has been created inside the ceph cluster")
+		volImage := &api.Image{}
+		Eventually(ctx, func() *api.Image {
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", volCreateResp.Volume.Metadata.Id, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(volCreateResp.Volume.Metadata.Id))
+			Expect(json.Unmarshal(oMap[volCreateResp.Volume.Metadata.Id], volImage)).NotTo(HaveOccurred())
+			return volImage
+		}).Should(SatisfyAll(
+			HaveField("Metadata.ID", Equal(volCreateResp.Volume.Metadata.Id)),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+		))
+
+		By("ensuring volume is in available state")
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
+					Id: volCreateResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(SatisfyAll(
+			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 		))
 	})
 })

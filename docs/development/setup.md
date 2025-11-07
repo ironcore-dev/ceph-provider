@@ -118,7 +118,7 @@ Sample `supported-volume-classes.json` file:
 ```json
 [
   {
-    "name": "experimental",
+    "name": "volumeclass-sample",
     "capabilities": {
       "tps": 262144000,
       "iops": 15000
@@ -160,14 +160,14 @@ go run ./cmd/bucketprovider/main.go \
 ```shell
 irictl-volume --address=unix:./iri-volume.sock get volumeclass
 Name           TPS         IOPS
-experimental   262144000   15000
+volumeclass-sample   262144000   15000
 ```
 
 ### Listing supported `VolumeClass`
 ```shell
 irictl-volume --address=unix:./iri-volume.sock get volumeclass
 Name           TPS         IOPS
-experimental   262144000   15000
+volumeclass-sample   262144000   15000
 ```
 
 ### Creating a  `Volume`
@@ -186,7 +186,7 @@ Sample volume.json
     }
   },
   "spec": {
-    "class":  "experimental",
+    "class":  "volumeclass-sample",
     "resources":  {
       "storage_bytes": 10070703360
     }
@@ -198,7 +198,7 @@ Sample volume.json
 ```shell
 irictl-volume --address=unix:./iri-volume.sock get  volume
 ID                                                                Class          Image   State              Age
-796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2   experimental           VOLUME_AVAILABLE   2s
+796264618065bb31024ec509d4ed8a87ed098ee8e89b370c06b0522ba4bf1e2   volumeclass-sample           VOLUME_AVAILABLE   2s
 ```
 
 ### Deleting a `Volume`s
