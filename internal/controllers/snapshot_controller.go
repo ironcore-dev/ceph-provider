@@ -29,6 +29,7 @@ import (
 type SnapshotReconcilerOptions struct {
 	Pool                string
 	PopulatorBufferSize int64
+	WorkerSize          int
 }
 
 func NewSnapshotReconciler(
@@ -68,6 +69,10 @@ func NewSnapshotReconciler(
 		opts.PopulatorBufferSize = 5 * 1024 * 1024
 	}
 
+	if opts.WorkerSize == 0 {
+		opts.WorkerSize = 15
+	}
+
 	return &SnapshotReconciler{
 		log:                 log,
 		conn:                conn,
@@ -78,6 +83,7 @@ func NewSnapshotReconciler(
 		events:              events,
 		pool:                opts.Pool,
 		populatorBufferSize: opts.PopulatorBufferSize,
+		workerSize:          opts.WorkerSize,
 	}, nil
 }
 
@@ -94,13 +100,12 @@ type SnapshotReconciler struct {
 
 	pool                string
 	populatorBufferSize int64
+
+	workerSize int
 }
 
 func (r *SnapshotReconciler) Start(ctx context.Context) error {
 	log := r.log
-
-	//todo make configurable
-	workerSize := 15
 
 	reg, err := r.events.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(event event.Event[*providerapi.Snapshot]) {
 		r.queue.Add(event.Object.ID)
@@ -118,7 +123,7 @@ func (r *SnapshotReconciler) Start(ctx context.Context) error {
 	}()
 
 	var wg sync.WaitGroup
-	for i := 0; i < workerSize; i++ {
+	for i := 0; i < r.workerSize; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
