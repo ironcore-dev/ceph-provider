@@ -58,6 +58,8 @@ type CephOptions struct {
 	KeyEncryptionKeyPath string
 
 	VolumeEventStoreOptions eventrecorder.EventStoreOptions
+
+	WorkerSize int
 }
 
 func (o *Options) Defaults() {
@@ -65,6 +67,7 @@ func (o *Options) Defaults() {
 	o.Ceph.BurstFactor = 10
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
+	o.Ceph.WorkerSize = 15
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -88,6 +91,8 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&o.Ceph.VolumeEventStoreOptions.MaxEvents, "volume-event-max-events", 100, "Maximum number of volume events that can be stored.")
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.TTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.ResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
+
+	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Defines the factor to calculate the burst limits.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -162,6 +167,13 @@ func configureCephAuth(opts *CephOptions) (func() error, error) {
 func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
+
+	if opts.Ceph.WorkerSize <= 1 {
+		err := fmt.Errorf("invalid configuration: worker-size must be greater than 1, but got %d", opts.Ceph.WorkerSize)
+		setupLog.Error(err, "Worker size validation failed")
+		return err
+	}
+
 	var wg sync.WaitGroup
 
 	cleanup, err := configureCephAuth(&opts.Ceph)
@@ -252,9 +264,10 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
-			Monitors: opts.Ceph.Monitors,
-			Client:   opts.Ceph.Client,
-			Pool:     opts.Ceph.Pool,
+			Monitors:   opts.Ceph.Monitors,
+			Client:     opts.Ceph.Client,
+			Pool:       opts.Ceph.Pool,
+			WorkerSize: opts.Ceph.WorkerSize,
 		},
 	)
 	if err != nil {
@@ -280,6 +293,7 @@ func Run(ctx context.Context, opts Options) error {
 		controllers.SnapshotReconcilerOptions{
 			Pool:                opts.Ceph.Pool,
 			PopulatorBufferSize: opts.Ceph.PopulatorBufferSize,
+			WorkerSize:          opts.Ceph.WorkerSize,
 		},
 	)
 	if err != nil {

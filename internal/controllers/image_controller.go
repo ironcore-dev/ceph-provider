@@ -38,9 +38,10 @@ const (
 )
 
 type ImageReconcilerOptions struct {
-	Monitors string
-	Client   string
-	Pool     string
+	Monitors   string
+	Client     string
+	Pool       string
+	WorkerSize int
 }
 
 func NewImageReconciler(
@@ -95,6 +96,10 @@ func NewImageReconciler(
 		return nil, fmt.Errorf("must specify ceph client")
 	}
 
+	if opts.WorkerSize == 0 {
+		opts.WorkerSize = 15
+	}
+
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
@@ -109,6 +114,7 @@ func NewImageReconciler(
 		client:         opts.Client,
 		pool:           opts.Pool,
 		keyEncryption:  keyEncryption,
+		workerSize:     opts.WorkerSize,
 	}, nil
 }
 
@@ -131,13 +137,12 @@ type ImageReconciler struct {
 	pool     string
 
 	keyEncryption encryption.Encryptor
+
+	workerSize int
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
 	log := r.log
-
-	//todo make configurable
-	workerSize := 15
 
 	imgEventReg, err := r.imageEvents.AddHandler(event.HandlerFunc[*providerapi.Image](func(evt event.Event[*providerapi.Image]) {
 		r.queue.Add(evt.Object.ID)
@@ -180,7 +185,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	}()
 
 	var wg sync.WaitGroup
-	for i := 0; i < workerSize; i++ {
+	for i := 0; i < r.workerSize; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
