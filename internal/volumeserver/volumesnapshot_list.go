@@ -48,7 +48,7 @@ func (s *Server) filterSnapshot(snapshots []*iri.VolumeSnapshot, filter *iri.Vol
 	return res
 }
 
-func (s *Server) listSnapshots(ctx context.Context, log logr.Logger) ([]*iri.VolumeSnapshot, error) {
+func (s *Server) listSnapshots(ctx context.Context) ([]*iri.VolumeSnapshot, error) {
 	cephSnapshots, err := s.snapshotStore.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error listing snapshots: %w", err)
@@ -90,7 +90,7 @@ func (s *Server) ListVolumeSnapshots(ctx context.Context, req *iri.ListVolumeSna
 		}, nil
 	}
 
-	snapshots, err := s.listSnapshots(ctx, log)
+	snapshots, err := s.listSnapshots(ctx)
 	if err != nil {
 		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}

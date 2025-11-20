@@ -228,23 +228,10 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 		return nil
 	}
 
-	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
-	if err != nil {
-		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to open image: %w", err)
-		}
+	if ok, err := r.checkIfImageHasSnapshots(log, ioCtx, image.ID); err != nil {
+		return fmt.Errorf("failed to check if rbd image has snapshots: %w", err)
+	} else if !ok {
 		return nil
-	}
-	defer closeImage(log, img)
-
-	pools, imgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list volume image children: %w", err)
-	}
-	log.V(2).Info("Volume image references", "pools", len(pools), "rbd-images", len(imgs))
-
-	if len(pools) != 0 && len(imgs) != 0 {
-		return fmt.Errorf("unable to delete volume image: still in use")
 	}
 
 	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
@@ -252,16 +239,8 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 	log.V(2).Info("Rbd image deleted")
 
-	snapshotID := image.Spec.SnapshotRef
-	if image.Spec.Image != "" && snapshotID != nil && *snapshotID != "" {
-		log.V(2).Info("Deleting volume os-image")
-		if err := r.snapshots.Delete(ctx, *snapshotID); err != nil {
-			if !errors.Is(err, utils.ErrSnapshotNotFound) {
-				r.Eventf(image.Metadata, corev1.EventTypeWarning, "ImageDeletionFailed", "Error deleting image: %s", err)
-				return fmt.Errorf("error deleting os-image: %w", err)
-			}
-			return nil
-		}
+	if err := r.deleteOsImageIfNotUsed(ctx, log, ioCtx, image); err != nil {
+		return fmt.Errorf("failed to delete os-image: %w", err)
 	}
 
 	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
@@ -271,6 +250,64 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ImageDeletionSucceeded", "Deleted image")
 	log.V(2).Info("Removed Finalizers")
 
+	return nil
+}
+
+func (r *ImageReconciler) checkIfImageHasSnapshots(log logr.Logger, ioCtx *rados.IOContext, imageID string) (bool, error) {
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(imageID), librbd.NoSnapshot)
+	if err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return false, fmt.Errorf("failed to open image: %w", err)
+		}
+		log.V(2).Info("Rbd image not found, it was probably already deleted")
+		return false, nil
+	}
+	defer closeImage(log, img)
+
+	snaps, err := img.GetSnapshotNames()
+	if err != nil {
+		return false, fmt.Errorf("unable to list snapshots: %w", err)
+	}
+
+	if len(snaps) != 0 {
+		log.V(2).Info("Rbd image can't be deleted as it has snapshots", "count", len(snaps))
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (r *ImageReconciler) deleteOsImageIfNotUsed(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
+	snapshotID := image.Spec.SnapshotRef
+	if image.Spec.Image == "" || snapshotID == nil || *snapshotID == "" {
+		return nil
+	}
+
+	img, err := librbd.OpenImage(ioCtx, SnapshotIDToRBDID(*snapshotID), librbd.NoSnapshot)
+	if err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to open os-image: %w", err)
+		}
+		return nil
+	}
+	defer closeImage(log, img)
+
+	pools, imgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list os-image children: %w", err)
+	}
+
+	if len(pools) != 0 || len(imgs) != 0 {
+		log.V(2).Info("Os-image can't be deleted as it has cloned images", "pools", len(pools), "rbd-images", len(imgs))
+		return nil
+	}
+
+	log.V(2).Info("Deleting os-image")
+	if err := r.snapshots.Delete(ctx, *snapshotID); err != nil {
+		if !errors.Is(err, utils.ErrSnapshotNotFound) {
+			r.Eventf(image.Metadata, corev1.EventTypeWarning, "ImageDeletionFailed", "Error deleting image: %s", err)
+		}
+	}
 	return nil
 }
 
@@ -636,6 +673,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	}
 	defer ioCtx2.Destroy()
 
+	log.V(1).Info("Cloning Image", "ParentName", parentName, "SnapName", snapName, "ImageID", image.ID)
 	if err = librbd.CloneImage(ioCtx2, parentName, snapName, ioCtx, ImageIDToRBDID(image.ID), options); err != nil {
 		r.Eventf(image.Metadata, corev1.EventTypeWarning, "CreateImageFromSnapshotFailed", "Failed to clone rbd image: %s", err)
 		return false, fmt.Errorf("failed to clone rbd image: %w", err)
