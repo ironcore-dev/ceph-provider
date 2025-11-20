@@ -160,7 +160,7 @@ const (
 	SnapshotFinalizer = "snapshot"
 )
 
-func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, img *librbd.Image) error {
+func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, ioCtx *rados.IOContext, snapshotID string, img *librbd.Image) error {
 	log.V(2).Info("Remove snapshot")
 
 	pools, imgs, err := img.ListChildren()
@@ -169,8 +169,22 @@ func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, 
 	}
 	log.V(2).Info("Snapshot references", "pools", len(pools), "rbd-images", len(imgs))
 
-	if len(pools) != 0 || len(imgs) != 0 {
-		return fmt.Errorf("unable to delete snapshot: still in use")
+	for _, clonedImgName := range imgs {
+		log.V(2).Info("Open cloned image to flatten", "ClonedImageID", clonedImgName)
+		img, err := librbd.OpenImage(ioCtx, clonedImgName, librbd.NoSnapshot)
+		if err != nil {
+			if !errors.Is(err, librbd.ErrNotFound) {
+				return fmt.Errorf("failed to open cloned image: %w", err)
+			}
+			continue
+		}
+		defer closeImage(log, img)
+
+		log.V(2).Info("Flatten cloned image", "ClonedImageID", clonedImgName)
+		if err := img.Flatten(); err != nil {
+			return fmt.Errorf("failed to flatten cloned image: %w", err)
+		}
+		log.V(2).Info("Flattened cloned image", "ClonedImageID", clonedImgName)
 	}
 
 	snapshot := img.GetSnapshot(snapshotID)
@@ -218,12 +232,16 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	}
 	defer closeImage(log, img)
 
-	if err = r.removeSnapshot(log, snapshotID, img); err != nil {
+	if err = r.removeSnapshot(log, ioCtx, snapshotID, img); err != nil {
 		return fmt.Errorf("failed to remove snapshot: %w", err)
 	}
 
 	if snapshot.Source.IronCoreImage != "" {
 		log.V(2).Info("Remove ironcore os-image")
+		if err := img.Close(); err != nil {
+			return fmt.Errorf("unable to close snapshot: %w", err)
+		}
+
 		if err := img.Remove(); err != nil {
 			return fmt.Errorf("unable to remove snapshot: %w", err)
 		}
@@ -259,6 +277,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		if err := r.deleteSnapshot(ctx, log, ioCtx, snapshot); err != nil {
 			return fmt.Errorf("failed to delete snapshot: %w", err)
 		}
+		log.V(1).Info("Successfully deleted snapshot")
+		return nil
 	}
 
 	if snapshot.Status.State == providerapi.SnapshotStateReady {
