@@ -41,7 +41,7 @@ func getSnapshotSourceDetails(snapshot *providerapi.Snapshot) (parentName string
 }
 
 func closeImage(log logr.Logger, img *librbd.Image) {
-	if closeErr := img.Close(); closeErr != nil {
+	if closeErr := img.Close(); closeErr != nil && closeErr != librbd.ErrImageNotOpen {
 		log.Error(closeErr, "failed to close image")
 	}
 }
