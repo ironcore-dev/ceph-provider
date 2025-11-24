@@ -236,7 +236,7 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to remove snapshot: %w", err)
 	}
 
-	if snapshot.Source.IronCoreImage != "" {
+	if snapshot.Source.IronCoreImage != "" || rbdID == snapshotID {
 		log.V(2).Info("Remove ironcore os-image")
 		if err := img.Close(); err != nil {
 			return fmt.Errorf("unable to close snapshot: %w", err)
