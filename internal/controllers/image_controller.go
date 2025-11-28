@@ -280,7 +280,7 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		}
 
 		log.V(2).Info("Create snapshot clone", "SnapshotId", snapName)
-		if err := r.cloneImageFromSnapshot(ctx, ioCtx, snapName, image); err != nil {
+		if err := r.cloneImageFromSnapshot(ctx, log, ioCtx, snapName, image); err != nil {
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
 		log.V(2).Info("Created snapshot clone", "SnapshotId", snapName)
@@ -293,21 +293,11 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 	return nil
 }
 
-func (r *ImageReconciler) cloneImageFromSnapshot(ctx context.Context, ioCtx *rados.IOContext, clonedImageName string, image *providerapi.Image) error {
-	ioCtx2, err := r.conn.OpenIOContext(r.pool)
-	if err != nil {
-		return fmt.Errorf("unable to get io context: %w", err)
-	}
-	defer ioCtx2.Destroy()
-
+func (r *ImageReconciler) cloneImageFromSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, clonedImageName string, image *providerapi.Image) error {
 	options := librbd.NewRbdImageOptions()
 	defer options.Destroy()
 	if err := options.SetString(librbd.ImageOptionDataPool, r.pool); err != nil {
 		return fmt.Errorf("failed to set data pool: %w", err)
-	}
-
-	if err = librbd.CloneImage(ioCtx2, ImageIDToRBDID(image.ID), clonedImageName, ioCtx, ImageIDToRBDID(clonedImageName), options); err != nil {
-		return fmt.Errorf("failed to clone rbd image: %w", err)
 	}
 
 	clonedImage := &providerapi.Image{
@@ -320,6 +310,12 @@ func (r *ImageReconciler) cloneImageFromSnapshot(ctx context.Context, ioCtx *rad
 			SnapshotRef: &clonedImageName,
 			Encryption:  image.Spec.Encryption,
 		},
+	}
+
+	log.V(2).Info("Creating image from snapshot", "snapshotID", clonedImageName)
+	_, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, clonedImageName, options)
+	if err != nil {
+		return fmt.Errorf("failed to create image from snapshot: %w", err)
 	}
 
 	providerapi.SetManagerLabel(image, providerapi.VolumeManager)
