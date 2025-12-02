@@ -275,15 +275,15 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			return fmt.Errorf("snapshot value is nil for %s", snapName)
 		}
 
-		if err := flattenClildImagesIfAny(log, ioCtx, ImageIDToRBDID(image.ID)); err != nil {
-			return fmt.Errorf("failed to flatten snapshot child images")
+		if err := flattenChildImagesIfAny(log, ioCtx, img); err != nil {
+			return fmt.Errorf("failed to flatten snapshot child images: %w", err)
 		}
 
-		log.V(2).Info("Create snapshot clone", "SnapshotId", snapName)
+		log.V(2).Info("Create snapshot clone", "snapshotId", snapName)
 		if err := r.cloneImageFromSnapshot(ctx, log, ioCtx, snapName, image); err != nil {
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
-		log.V(2).Info("Created snapshot clone", "SnapshotId", snapName)
+		log.V(2).Info("Created snapshot clone", "snapshotId", snapName)
 
 		if err := r.deleteImageSnapshot(ctx, log, ioCtx, snapName, snap); err != nil {
 			return fmt.Errorf("failed to delete image snapshot: %w", err)
@@ -312,7 +312,7 @@ func (r *ImageReconciler) cloneImageFromSnapshot(ctx context.Context, log logr.L
 		},
 	}
 
-	log.V(2).Info("Creating image from snapshot", "snapshotID", clonedImageName)
+	log.V(2).Info("Creating image from snapshot", "snapshotId", clonedImageName)
 	_, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, clonedImageName, options)
 	if err != nil {
 		return fmt.Errorf("failed to create image from snapshot: %w", err)
@@ -340,7 +340,7 @@ func (r *ImageReconciler) deleteImageSnapshot(ctx context.Context, log logr.Logg
 		return err
 	}
 
-	log.V(2).Info("Create snapshot of cloned image", "ClonedImagetId", snapName)
+	log.V(2).Info("Create snapshot of cloned image", "clonedImageId", snapName)
 	if err := createSnapshot(log, ioCtx, snapName, ImageIDToRBDID(snapName)); err != nil {
 		return fmt.Errorf("failed to create snapshot of cloned image: %w", err)
 	}
@@ -362,7 +362,7 @@ func (r *ImageReconciler) deleteImageSnapshot(ctx context.Context, log logr.Logg
 		}
 	}()
 
-	log.V(2).Info("Remove snapshot", "SnapshotId", snapName)
+	log.V(2).Info("Remove snapshot", "snapshotId", snapName)
 	if err := removeSnapshot(snap); err != nil {
 		return err
 	}

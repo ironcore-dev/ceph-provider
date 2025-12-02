@@ -60,7 +60,7 @@ func openImage(ioCtx *rados.IOContext, imageName string) (*librbd.Image, error) 
 }
 
 func flattenImage(log logr.Logger, ioCtx *rados.IOContext, imageName string) error {
-	log.V(2).Info("Flatten cloned image", "ImageID", imageName)
+	log.V(2).Info("Flatten cloned image", "clonedImageId", imageName)
 	img, err := openImage(ioCtx, imageName)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func flattenImage(log logr.Logger, ioCtx *rados.IOContext, imageName string) err
 	if err := img.Flatten(); err != nil {
 		return fmt.Errorf("failed to flatten cloned image: %w", err)
 	}
-	log.V(2).Info("Flattened cloned image", "ImageID", imageName)
+	log.V(2).Info("Flattened cloned image", "clonedImageId", imageName)
 	return nil
 }
 
@@ -100,7 +100,7 @@ func createSnapshot(log logr.Logger, ioCtx *rados.IOContext, snapshotName string
 func removeSnapshot(snapshot *librbd.Snapshot) error {
 	isProtected, err := snapshot.IsProtected()
 	if err != nil {
-		return fmt.Errorf("unable to chek if snapshot is protected: %w", err)
+		return fmt.Errorf("unable to check if snapshot is protected: %w", err)
 	}
 
 	if isProtected {
@@ -115,13 +115,7 @@ func removeSnapshot(snapshot *librbd.Snapshot) error {
 	return nil
 }
 
-func flattenClildImagesIfAny(log logr.Logger, ioCtx *rados.IOContext, imageName string) error {
-	img, err := openImage(ioCtx, imageName)
-	if err != nil {
-		return err
-	}
-	defer closeImage(log, img)
-
+func flattenChildImagesIfAny(log logr.Logger, ioCtx *rados.IOContext, img *librbd.Image) error {
 	pools, childImgs, err := img.ListChildren()
 	if err != nil {
 		return fmt.Errorf("unable to list children: %w", err)
