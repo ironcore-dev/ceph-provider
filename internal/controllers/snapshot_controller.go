@@ -185,8 +185,8 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	}
 	defer closeImage(log, img)
 
-	if err := flattenClildImagesIfAny(log, ioCtx, img.GetName()); err != nil {
-		return fmt.Errorf("failed to flatten snapshot child images")
+	if err := flattenChildImagesIfAny(log, ioCtx, img); err != nil {
+		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
 	}
 
 	rbdSnapshot := img.GetSnapshot(snapshotID)
