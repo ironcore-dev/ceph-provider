@@ -6,6 +6,15 @@ CEPH_BUCKET_PROVIDER_IMG ?= ceph-bucket-provider:latest
 # Docker image name for the mkdocs based local development setup
 MKDOCS_IMG=ironcore-dev/ceph-provider-docs
 
+# LDFLAGS for the build targets
+LDFLAGS ?= -s -w
+VERSION=$(shell git describe --tags --abbrev=0)
+COMMIT=$(shell git log -n1 --format="%h")
+CEPH_BUCKET_PROVIDR_VERSION=github.com/ironcore-dev/ceph-provider/internal/bucketserver/version.Version
+CEPH_BUCKET_PROVIDER_COMMIT=github.com/ironcore-dev/ceph-provider/internal/bucketserver/version.Commit
+CEPH_VOLUME_PROVIDR_VERSION=github.com/ironcore-dev/ceph-provider/internal/volumeserver/version.Version
+CEPH_VOLUME_PROVIDER_COMMIT=github.com/ironcore-dev/ceph-provider/internal/volumeserver/version.Commit
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -116,8 +125,8 @@ run-bucket: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
-	$(CONTAINER_TOOL) build --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
+	$(CONTAINER_TOOL) build --build-arg LDFLAGS="${LDFLAGS} -X $(CEPH_VOLUME_PROVIDR_VERSION)=$(VERSION) -X $(CEPH_VOLUME_PROVIDER_COMMIT)=$(COMMIT)" --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
+	$(CONTAINER_TOOL) build --build-arg LDFLAGS="${LDFLAGS} -X $(CEPH_BUCKET_PROVIDR_VERSION)=$(VERSION) -X $(CEPH_BUCKET_PROVIDER_COMMIT)=$(COMMIT)" --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

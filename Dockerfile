@@ -19,12 +19,13 @@ COPY hack/ hack/
 ARG TARGETOS
 ARG TARGETARCH
 ARG BUILDPLATFORM
+ARG LDFLAGS
 ENV BUILDARCH=${BUILDPLATFORM##*/}
 
 FROM builder AS ceph-bucket-provider-builder
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="${LDFLAGS}" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
 
 
 # Start from Kubernetes Debian base.
@@ -65,7 +66,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     fi && \
     CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     CC="$CC" CGO_LDFLAGS="$CGO_LDFLAGS" GO111MODULE=on \
-    go build -ldflags="-s -w -linkmode=external" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
+    go build -ldflags="${LDFLAGS} -linkmode=external" -a -o bin/ceph-volume-provider ./cmd/volumeprovider/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
