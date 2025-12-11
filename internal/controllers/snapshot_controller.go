@@ -171,10 +171,10 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
 
-	img, err := openImage(ioCtx, rbdID)
+	img, err := librbd.OpenImage(ioCtx, rbdID, snapshotID)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return err
+			return fmt.Errorf("failed to open rbd image: %w", err)
 		}
 		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
 		if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
@@ -185,10 +185,11 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	}
 	defer closeImage(log, img)
 
-	if err := flattenChildImagesIfAny(log, ioCtx, img); err != nil {
+	if err := flattenChildImages(log, r.conn, img); err != nil {
 		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
 	}
 
+	log.V(2).Info("Remove snapshot")
 	rbdSnapshot := img.GetSnapshot(snapshotID)
 	if err := removeSnapshot(rbdSnapshot); err != nil {
 		return fmt.Errorf("failed to remove snapshot: %w", err)
