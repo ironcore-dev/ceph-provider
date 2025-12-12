@@ -195,6 +195,12 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to remove snapshot: %w", err)
 	}
 
+	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
+	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+		return fmt.Errorf("failed to update snapshot metadata: %w", err)
+	}
+	log.V(2).Info("Removed snapshot finalizer")
+
 	// deletes os-image if not referenced by any volume
 	if snapshot.Source.IronCoreImage != "" {
 		log.V(2).Info("Remove ironcore os-image")
@@ -217,12 +223,6 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		}
 		log.V(2).Info("Removed parent rbd image")
 	}
-
-	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-		return fmt.Errorf("failed to update snapshot metadata: %w", err)
-	}
-	log.V(2).Info("Removed snapshot finalizer")
 	return nil
 }
 
