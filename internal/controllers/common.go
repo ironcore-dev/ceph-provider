@@ -43,7 +43,7 @@ func getSnapshotSourceDetails(snapshot *providerapi.Snapshot) (parentName string
 }
 
 func closeImage(log logr.Logger, img *librbd.Image) {
-	if closeErr := img.Close(); closeErr != nil && closeErr != librbd.ErrImageNotOpen {
+	if closeErr := img.Close(); closeErr != nil && errors.Is(closeErr, librbd.ErrImageNotOpen) {
 		log.Error(closeErr, "failed to close image")
 	}
 }
@@ -137,7 +137,7 @@ func flattenChildImages(log logr.Logger, conn *rados.Conn, img *librbd.Image) er
 	return nil
 }
 
-func isSnapshotExist(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) bool {
+func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) bool {
 	img, err := openImage(ioCtx, imageName)
 	if err != nil {
 		return false

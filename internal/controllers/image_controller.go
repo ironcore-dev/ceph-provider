@@ -237,10 +237,6 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 	log.V(2).Info("Rbd image deleted")
 
-	if err := r.deleteOsImageIfNotUsed(ctx, log, ioCtx, image); err != nil {
-		return fmt.Errorf("failed to delete os-image: %w", err)
-	}
-
 	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
 	if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
 		return fmt.Errorf("failed to update image metadata: %w", err)
@@ -280,7 +276,7 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
 
-		if isSnapshotExist := isSnapshotExist(log, ioCtx, ImageIDToRBDID(snapName), snapName); isSnapshotExist {
+		if isSnapshotExist := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); isSnapshotExist {
 			log.V(2).Info("Snapshot of cloned image is already created")
 			continue
 		}
@@ -359,37 +355,6 @@ func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, io
 		return fmt.Errorf("failed to create image: %w", err)
 	}
 
-	return nil
-}
-
-func (r *ImageReconciler) deleteOsImageIfNotUsed(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
-	snapshotID := image.Spec.SnapshotRef
-	if image.Spec.Image == "" || snapshotID == nil || *snapshotID == "" || *snapshotID == image.ID {
-		return nil
-	}
-
-	img, err := openImage(ioCtx, SnapshotIDToRBDID(*snapshotID))
-	if err != nil {
-		return err
-	}
-	defer closeImage(log, img)
-
-	pools, imgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list os-image children: %w", err)
-	}
-
-	if len(pools) != 0 || len(imgs) != 0 {
-		log.V(2).Info("Os-image can't be deleted as it has cloned images", "pools", len(pools), "rbd-images", len(imgs))
-		return nil
-	}
-
-	log.V(2).Info("Deleting os-image")
-	if err := r.snapshots.Delete(ctx, *snapshotID); err != nil {
-		if !errors.Is(err, utils.ErrSnapshotNotFound) {
-			r.Eventf(image.Metadata, corev1.EventTypeWarning, "ImageDeletionFailed", "Error deleting image: %s", err)
-		}
-	}
 	return nil
 }
 
