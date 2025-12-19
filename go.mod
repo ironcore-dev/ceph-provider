@@ -21,6 +21,7 @@ require (
 	github.com/rook/rook/pkg/apis v0.0.0-20250716205136-e4da184ce30a
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
+	golang.org/x/sync v0.17.0
 	google.golang.org/grpc v1.75.1
 	k8s.io/api v0.33.4
 	k8s.io/apimachinery v0.33.4
@@ -128,7 +129,6 @@ require (
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
