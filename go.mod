@@ -7,7 +7,7 @@ toolchain go1.24.1
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ceph/go-ceph v0.35.0
-	github.com/containerd/containerd v1.7.28
+	github.com/containerd/containerd v1.7.29
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.10.0
