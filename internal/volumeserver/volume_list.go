@@ -8,14 +8,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-func (s *Server) getIriVolume(ctx context.Context, log logr.Logger, imageId string) (*iri.Volume, error) {
+func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume, error) {
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
 		if errors.Is(err, utils.ErrVolumeNotFound) {
@@ -50,7 +49,7 @@ func (s *Server) filterVolumes(volumes []*iri.Volume, filter *iri.VolumeFilter) 
 	return res
 }
 
-func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*iri.Volume, error) {
+func (s *Server) listVolumes(ctx context.Context) ([]*iri.Volume, error) {
 	cephImages, err := s.imageStore.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error listing volumes: %w", err)
@@ -77,7 +76,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 	log.V(2).Info("Listing volumes")
 
 	if filter := req.Filter; filter != nil && filter.Id != "" {
-		volume, err := s.getIriVolume(ctx, log, filter.Id)
+		volume, err := s.getIriVolume(ctx, filter.Id)
 		if err != nil {
 			if !errors.Is(err, utils.ErrVolumeNotFound) && !errors.Is(err, utils.ErrVolumeIsntManaged) {
 				return nil, utils.ConvertInternalErrorToGRPC(err)
@@ -92,7 +91,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 		}, nil
 	}
 
-	volumes, err := s.listVolumes(ctx, log)
+	volumes, err := s.listVolumes(ctx)
 	if err != nil {
 		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
