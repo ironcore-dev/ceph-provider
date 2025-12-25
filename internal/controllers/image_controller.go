@@ -229,7 +229,7 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 
 	if err := r.deleteImageSnapshots(ctx, log, ioCtx, image); err != nil {
-		return fmt.Errorf("failed to check if rbd image has snapshots: %w", err)
+		return fmt.Errorf("failed to delete image snapshots: %w", err)
 	}
 
 	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
@@ -249,7 +249,7 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 
 // since ceph does not allow deletion of rbd image if it has snapshots, we will follow below steps to achieve it
 // 1. Clone each snapshot into separate rbd image and create snapshot of that cloned rbd image with same name as snapshot.
-// 2. Flatten all child images(cloned images from step 1 and rbd images which are restored using this snapshot) of each snpashot.
+// 2. Flatten all child images(cloned images from step 1 and rbd images which are restored using this snapshot) of each snapshot.
 // 3. Remove all snapshots of rbd image and update each snapshot source in store to cloned rbd image id
 func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
 	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
@@ -276,7 +276,11 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
 
-		if isSnapshotExist := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); isSnapshotExist {
+		isSnapshotExist, err := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName)
+		if err != nil {
+			return fmt.Errorf("failed to check if snapshot exists: %w", err)
+		}
+		if isSnapshotExist {
 			log.V(2).Info("Snapshot of cloned image is already created")
 			continue
 		}
@@ -306,7 +310,8 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			if !errors.Is(err, store.ErrNotFound) {
 				return fmt.Errorf("failed to get snapshot %s: %w", snapName, err)
 			}
-			return nil
+			log.V(2).Info("Snapshot not found in store, skipping update", "snapshotId", snapName)
+			continue
 		}
 
 		log.V(2).Info("Update snapshot source in store")
@@ -350,7 +355,7 @@ func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, io
 		return fmt.Errorf("failed to create image from snapshot: %w", err)
 	}
 
-	providerapi.SetManagerLabel(image, providerapi.VolumeManager)
+	providerapi.SetManagerLabel(clonedImage, providerapi.VolumeManager)
 	if _, err := r.images.Create(ctx, clonedImage); err != nil {
 		return fmt.Errorf("failed to create image: %w", err)
 	}
@@ -649,7 +654,7 @@ func (r *ImageReconciler) setWWN(log logr.Logger, ioCtx *rados.IOContext, image 
 }
 
 func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
-	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == providerapi.EncryptionTypeUnencrypted || image.Status.Encryption == providerapi.EncryptionStateHeaderSet {
+	if image.Spec.Encryption == nil || image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == providerapi.EncryptionTypeUnencrypted || image.Status.Encryption == providerapi.EncryptionStateHeaderSet {
 		return nil
 	}
 
