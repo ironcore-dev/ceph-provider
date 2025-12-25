@@ -24,13 +24,36 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		return nil, fmt.Errorf("got an empty volume")
 	}
 
+	var err error
+	var imageSize uint64
+	var encryptionType = api.EncryptionTypeUnencrypted
+	var encryptedPassphrase []byte
+	log.V(2).Info("Getting image size and encryption from IRI volume")
+	if volume.Spec.Resources != nil {
+		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
+			return nil, fmt.Errorf("failed to get image size: %w", err)
+		}
+	}
+
+	if encryption := volume.Spec.Encryption; encryption != nil {
+		if encryption.SecretData == nil {
+			return nil, fmt.Errorf("encryption enabled but SecretData missing")
+		}
+		passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
+		if !found {
+			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
+		}
+
+		if encryptedPassphrase, err = s.keyEncryption.Encrypt(passphrase); err != nil {
+			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+		}
+		encryptionType = api.EncryptionTypeEncrypted
+	}
+
 	log.V(2).Info("Getting volume data source")
 	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
 
 	var snapshotID *string
-	var imageSize uint64
-	var encryptionType = api.EncryptionTypeUnencrypted
-	var encryptedPassphrase []byte
 	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
 		switch {
 		case dataSource.SnapshotDataSource != nil:
@@ -44,7 +67,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			}
 
 			if snapshot.Source.VolumeImageID == "" {
-				return nil, fmt.Errorf("snapshot don't have source volume ID")
+				return nil, fmt.Errorf("snapshot doesn't have source volume ID")
 			}
 
 			var snapshotSourceVolume *api.Image
@@ -67,31 +90,8 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			}
 
 		default:
-			return nil, fmt.Errorf("volume data source is not provided")
+			return nil, fmt.Errorf("unsupported or incomplete volume data source type")
 		}
-	}
-
-	var err error
-	log.V(2).Info("Getting image size and encryption from IRI volume")
-	if volume.Spec.Resources != nil {
-		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
-			return nil, fmt.Errorf("failed to get image size: %w", err)
-		}
-	}
-
-	if encryption := volume.Spec.Encryption; encryption != nil {
-		if encryption.SecretData == nil {
-			return nil, fmt.Errorf("encryption enabled but SecretData missing")
-		}
-		passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
-		if !found {
-			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
-		}
-
-		if encryptedPassphrase, err = s.keyEncryption.Encrypt(passphrase); err != nil {
-			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
-		}
-		encryptionType = api.EncryptionTypeEncrypted
 	}
 
 	log.V(2).Info("Getting volume class")

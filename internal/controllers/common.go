@@ -43,7 +43,7 @@ func getSnapshotSourceDetails(snapshot *providerapi.Snapshot) (parentName string
 }
 
 func closeImage(log logr.Logger, img *librbd.Image) {
-	if closeErr := img.Close(); closeErr != nil && errors.Is(closeErr, librbd.ErrImageNotOpen) {
+	if closeErr := img.Close(); closeErr != nil && !errors.Is(closeErr, librbd.ErrImageNotOpen) {
 		log.Error(closeErr, "failed to close image")
 	}
 }
@@ -52,7 +52,7 @@ func openImage(ioCtx *rados.IOContext, imageName string) (*librbd.Image, error) 
 	img, err := librbd.OpenImage(ioCtx, imageName, librbd.NoSnapshot)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return nil, fmt.Errorf("failed to open cloned image: %w", err)
+			return nil, fmt.Errorf("failed to open image: %w", err)
 		}
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func createSnapshot(log logr.Logger, ioCtx *rados.IOContext, snapshotName string
 	}
 
 	if err := img.SetSnapshot(snapshotName); err != nil {
-		return fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, img.GetName(), err)
+		return fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, imageName, err)
 	}
 	return nil
 }
@@ -137,15 +137,18 @@ func flattenChildImages(log logr.Logger, conn *rados.Conn, img *librbd.Image) er
 	return nil
 }
 
-func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) bool {
+func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) (bool, error) {
 	img, err := openImage(ioCtx, imageName)
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer closeImage(log, img)
 
-	if _, err := img.GetSnapID(snapshotName); err == nil {
-		return true
+	if _, err = img.GetSnapID(snapshotName); err != nil {
+		if errors.Is(err, librbd.ErrNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get snapshot ID: %w", err)
 	}
-	return false
+	return true, nil
 }

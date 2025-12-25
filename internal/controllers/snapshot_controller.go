@@ -183,7 +183,12 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		log.V(2).Info("Removed snapshot finalizer")
 		return nil
 	}
-	defer closeImage(log, img)
+	shouldClose := true
+	defer func() {
+		if shouldClose {
+			closeImage(log, img)
+		}
+	}()
 
 	if err := flattenChildImages(log, r.conn, img); err != nil {
 		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
@@ -204,11 +209,12 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	// deletes os-image if not referenced by any volume
 	if snapshot.Source.IronCoreImage != "" {
 		log.V(2).Info("Remove ironcore os-image")
+		shouldClose = false
 		if err := img.Close(); err != nil {
 			return fmt.Errorf("unable to close ironcore os-image: %w", err)
 		}
 
-		if err := img.Remove(); err != nil {
+		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil {
 			return fmt.Errorf("unable to remove ironcore os-image: %w", err)
 		}
 		log.V(2).Info("Ironcore os-image removed")
@@ -218,7 +224,7 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	// and has no any other reference except snapshot
 	if rbdID == ImageIDToRBDID(snapshotID) {
 		log.V(2).Info("Remove parent rbd image")
-		if err := r.images.Delete(ctx, snapshotID); err != nil {
+		if err := r.images.Delete(ctx, snapshotID); store.IgnoreErrNotFound(err) != nil {
 			return fmt.Errorf("unable to remove parent rbd image: %w", err)
 		}
 		log.V(2).Info("Removed parent rbd image")
