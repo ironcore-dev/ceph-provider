@@ -16,7 +16,7 @@ import (
 )
 
 func (s *Server) getIriVolumeSnapshot(ctx context.Context, log logr.Logger, snapshotId string) (*iri.VolumeSnapshot, error) {
-	log.V(2).Info("Get volume snapshot %s", snapshotId)
+	log.V(2).Info("Get volume snapshot", "snapshotId", snapshotId)
 	cephSnapshot, err := s.snapshotStore.Get(ctx, snapshotId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get snapshot %s: %w", snapshotId, err)

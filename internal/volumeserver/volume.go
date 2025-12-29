@@ -96,7 +96,7 @@ func (s *Server) getIriVolumeSpec(image *api.Image) (*iri.VolumeSpec, error) {
 
 	class, ok := api.GetClassLabelFromObject(image)
 	if !ok {
-		return nil, fmt.Errorf("failed to get volume class")
+		return nil, fmt.Errorf("failed to get volume class for image: %s", image.ID)
 	}
 	spec.Class = class
 

@@ -338,7 +338,7 @@ func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, io
 		Spec: providerapi.ImageSpec{
 			Size:        image.Spec.Size,
 			Limits:      image.Spec.Limits,
-			SnapshotRef: &snapName,
+			SnapshotRef: ptr.To(snapName),
 			Encryption:  image.Spec.Encryption,
 		},
 	}
@@ -350,10 +350,27 @@ func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, io
 	}
 
 	log.V(2).Info("Creating image from snapshot", "snapshotId", snapName)
-	_, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, snapName, options)
-	if err != nil {
+	if ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, snapName, options); err != nil {
 		return fmt.Errorf("failed to create image from snapshot: %w", err)
+	} else if !ok {
+		return nil
 	}
+
+	log.V(2).Info("Setting parent image metadata to cloned image")
+	metadata, err := providerapi.GetObjectMetadataFromObjectID(image.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to get metadata from image: %w", err)
+	}
+	if err := providerapi.SetObjectMetadataFromMetadata(clonedImage, metadata); err != nil {
+		return fmt.Errorf("failed to set metadata: %w", err)
+	}
+
+	log.V(2).Info("Setting class label to cloned image")
+	class, found := providerapi.GetClassLabelFromObject(image)
+	if !found {
+		return fmt.Errorf("class label not found on image")
+	}
+	providerapi.SetClassLabelForObject(clonedImage, class)
 
 	providerapi.SetManagerLabel(clonedImage, providerapi.VolumeManager)
 	if _, err := r.images.Create(ctx, clonedImage); err != nil {

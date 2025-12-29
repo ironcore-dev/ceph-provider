@@ -26,8 +26,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 
 	var err error
 	var imageSize uint64
-	var encryptionType = api.EncryptionTypeUnencrypted
-	var encryptedPassphrase []byte
+	var encryptionSpec *api.EncryptionSpec
 	log.V(2).Info("Getting image size and encryption from IRI volume")
 	if volume.Spec.Resources != nil {
 		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
@@ -44,10 +43,14 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
 		}
 
-		if encryptedPassphrase, err = s.keyEncryption.Encrypt(passphrase); err != nil {
+		encryptedPassphrase, err := s.keyEncryption.Encrypt(passphrase)
+		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
 		}
-		encryptionType = api.EncryptionTypeEncrypted
+		encryptionSpec = &api.EncryptionSpec{
+			Type:                api.EncryptionTypeEncrypted,
+			EncryptedPassphrase: encryptedPassphrase,
+		}
 	}
 
 	log.V(2).Info("Getting volume data source")
@@ -78,8 +81,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			log.V(2).Info("Getting image size and encryption from snapshot source volume", "snapshotSourceVolumeID", snapshotSourceVolume.ID)
 			imageSize = snapshotSourceVolume.Spec.Size
 			if snapshotSourceVolume.Spec.Encryption != nil {
-				encryptionType = snapshotSourceVolume.Spec.Encryption.Type
-				encryptedPassphrase = snapshotSourceVolume.Spec.Encryption.EncryptedPassphrase
+				encryptionSpec = snapshotSourceVolume.Spec.Encryption
 			}
 
 		case dataSource.ImageDataSource != nil:
@@ -112,10 +114,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			Limits:      calculatedLimits,
 			Image:       volImage,
 			SnapshotRef: snapshotID,
-			Encryption: &api.EncryptionSpec{
-				Type:                encryptionType,
-				EncryptedPassphrase: encryptedPassphrase,
-			},
+			Encryption:  encryptionSpec,
 		},
 	}
 

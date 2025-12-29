@@ -74,8 +74,7 @@ var _ = Describe("Create Volume", func() {
 				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
-			HaveField("Spec.Encryption.Type", api.EncryptionTypeUnencrypted),
-			HaveField("Spec.Encryption.EncryptedPassphrase", BeEmpty()),
+			HaveField("Spec.Encryption", BeNil()),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
 				HaveField("Monitors", cephMonitors),
