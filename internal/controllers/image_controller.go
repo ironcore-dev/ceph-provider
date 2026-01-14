@@ -15,26 +15,21 @@ import (
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
-	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
-	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
-	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/utils/ptr"
 )
 
 const (
 	LimitMetadataPrefix = "conf_"
 	WWNKey              = "wwn"
-	imageDigestLabel    = "image-digest"
 )
 
 type ImageReconcilerOptions struct {
@@ -166,8 +161,8 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 		}
 
 		for _, img := range imageList {
-			if snapshotRef := img.Spec.SnapshotRef; snapshotRef != nil && *snapshotRef == evt.Object.ID {
-				r.Eventf(img.Metadata, corev1.EventTypeNormal, "ImagePullSucceeded", "Pulled image %s", *img.Spec.SnapshotRef)
+			if snapshotRef := img.Spec.SnapshotSource; snapshotRef != nil && *snapshotRef == evt.Object.ID {
+				r.Eventf(img.Metadata, corev1.EventTypeNormal, "ImagePullSucceeded", "Pulled image %s", *img.Spec.SnapshotSource)
 				r.queue.Add(img.ID)
 			}
 		}
@@ -223,53 +218,6 @@ const (
 )
 
 func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
-	if !slices.Contains(image.Finalizers, ImageFinalizer) {
-		log.V(1).Info("image has no finalizer: done")
-		return nil
-	}
-
-	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
-	if err != nil {
-		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to open image: %w", err)
-		}
-		return nil
-	}
-	defer closeImage(log, img)
-
-	pools, imgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list volume image children: %w", err)
-	}
-	log.V(2).Info("Volume image references", "pools", len(pools), "rbd-images", len(imgs))
-
-	if len(pools) != 0 && len(imgs) != 0 {
-		return fmt.Errorf("unable to delete volume image: still in use")
-	}
-
-	if err := librbd.RemoveImage(ioCtx, ImageIDToRBDID(image.ID)); err != nil && !errors.Is(err, librbd.ErrNotFound) {
-		return fmt.Errorf("failed to remove rbd image: %w", err)
-	}
-	log.V(2).Info("Rbd image deleted")
-
-	snapshotID := image.Spec.SnapshotRef
-	if image.Spec.Image != "" && snapshotID != nil && *snapshotID != "" {
-		log.V(2).Info("Deleting volume os-image")
-		if err := r.snapshots.Delete(ctx, *snapshotID); err != nil {
-			if !errors.Is(err, utils.ErrSnapshotNotFound) {
-				r.Eventf(image.Metadata, corev1.EventTypeWarning, "ImageDeletionFailed", "Error deleting image: %s", err)
-				return fmt.Errorf("error deleting os-image: %w", err)
-			}
-			return nil
-		}
-	}
-
-	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, ImageFinalizer)
-	if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
-		return fmt.Errorf("failed to update image metadata: %w", err)
-	}
-	r.Eventf(image.Metadata, corev1.EventTypeNormal, "ImageDeletionSucceeded", "Deleted image")
-	log.V(2).Info("Removed Finalizers")
 
 	return nil
 }
@@ -278,6 +226,7 @@ type fetchAuthResponse struct {
 	Key string `json:"key"`
 }
 
+// TODO unique credentials per image
 func (r *ImageReconciler) fetchAuth(log logr.Logger) (string, string, error) {
 	cmd1, err := json.Marshal(map[string]string{
 		"prefix": "auth get-key",
@@ -300,63 +249,6 @@ func (r *ImageReconciler) fetchAuth(log logr.Logger) (string, string, error) {
 	}
 
 	return strings.TrimPrefix(r.client, "client."), response.Key, nil
-}
-
-func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger, img *providerapi.Image) error {
-	if img.Spec.Image == "" || img.Spec.SnapshotRef != nil {
-		return nil
-	}
-
-	log.V(2).Info("Parse image reference", "Image", img.Spec.Image)
-	spec, err := reference.Parse(img.Spec.Image)
-	if err != nil {
-		return fmt.Errorf("failed to parse image reference: %w", err)
-	}
-
-	log.V(2).Info("Resolve image reference")
-	resolvedImg, err := r.registry.Resolve(ctx, img.Spec.Image)
-	if err != nil {
-		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
-	}
-
-	snapshotDigest := resolvedImg.Descriptor().Digest.String()
-	resolvedImageName := fmt.Sprintf("%s@%s", spec.Locator, snapshotDigest)
-
-	//TODO select later by label
-	snap, err := r.snapshots.Get(ctx, snapshotDigest)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			log.V(2).Info("Create image snapshot", "SnapshotID", snapshotDigest)
-			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
-				Metadata: apiutils.Metadata{
-					ID: snapshotDigest,
-					Labels: map[string]string{
-						imageDigestLabel: snapshotDigest,
-					},
-				},
-				Source: providerapi.SnapshotSource{
-					IronCoreImage: resolvedImageName,
-				},
-			})
-			if err != nil {
-				r.Eventf(img.Metadata, corev1.EventTypeWarning, "CreateImageSnapshotFailed", "Failed to create image snapshot: %s", err)
-				return fmt.Errorf("failed to create snapshot: %w", err)
-			}
-			r.Eventf(img.Metadata, corev1.EventTypeNormal, "CreateImageSnapshotSucceeded", "Created image snapshot")
-		default:
-			return fmt.Errorf("failed to get snapshot: %w", err)
-		}
-	}
-
-	img.Spec.SnapshotRef = ptr.To(snap.ID)
-
-	log.V(2).Info("Update snapshot reference in image store")
-	if _, err := r.images.Update(ctx, img); err != nil {
-		return fmt.Errorf("failed to update image snapshot ref: %w", err)
-	}
-
-	return nil
 }
 
 func (r *ImageReconciler) isImageExisting(ioCtx *rados.IOContext, image *providerapi.Image) (bool, error) {
@@ -444,10 +336,6 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		return nil
 	}
 
-	if err := r.reconcileSnapshot(ctx, log, img); err != nil {
-		return fmt.Errorf("failed to reconcile snapshot: %w", err)
-	}
-
 	imageExists, err := r.isImageExisting(ioCtx, img)
 	if err != nil {
 		return fmt.Errorf("failed to check image existence: %w", err)
@@ -470,8 +358,8 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		log.V(2).Info("Configured pool", "pool", r.pool)
 
 		switch {
-		case img.Spec.SnapshotRef != nil:
-			snapshotRef := img.Spec.SnapshotRef
+		case img.Spec.SnapshotSource != nil:
+			snapshotRef := img.Spec.SnapshotSource
 			log.V(2).Info("Creating image from snapshot", "snapshotRef", snapshotRef)
 			ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
 			if err != nil {
