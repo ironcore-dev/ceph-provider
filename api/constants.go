@@ -10,4 +10,6 @@ const (
 	ManagerLabel          = "ceph-provider.ironcore.dev/manager"
 	BucketManager         = "ceph-bucket-provider"
 	VolumeManager         = "ceph-volume-provider"
+
+	MachineArchitectureLabel = "common.ironcore.dev/architecture"
 )

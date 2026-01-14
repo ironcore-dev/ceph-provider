@@ -20,7 +20,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
 	"github.com/ironcore-dev/ceph-provider/internal/volumeserver"
-	"github.com/ironcore-dev/ironcore-image/oci/remote"
 	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
@@ -246,17 +245,11 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize snapshot events: %w", err)
 	}
 
-	reg, err := remote.DockerRegistry(nil)
-	if err != nil {
-		return fmt.Errorf("failed to initialize docker registry: %w", err)
-	}
-
 	volumeEventStore := eventrecorder.NewEventStore(log, opts.Ceph.VolumeEventStoreOptions)
 
 	imageReconciler, err := controllers.NewImageReconciler(
 		log.WithName("image-reconciler"),
 		conn,
-		reg,
 		imageStore, snapshotStore,
 		volumeEventStore,
 		imageEvents,
@@ -287,7 +280,6 @@ func Run(ctx context.Context, opts Options) error {
 	snapshotReconciler, err := controllers.NewSnapshotReconciler(
 		log.WithName("snapshot-reconciler"),
 		conn,
-		reg,
 		snapshotStore,
 		imageStore,
 		snapshotEvents,

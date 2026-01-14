@@ -9,6 +9,10 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ironcore-image/oci/image"
+	"github.com/ironcore-dev/ironcore-image/oci/remote"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -43,5 +47,24 @@ func getSnapshotSourceDetails(snapshot *providerapi.Snapshot) (parentName string
 func closeImage(log logr.Logger, img *librbd.Image) {
 	if closeErr := img.Close(); closeErr != nil {
 		log.Error(closeErr, "failed to close image")
+	}
+}
+
+func createOsImageSource(platform *ocispec.Platform) (image.Source, error) {
+	if platform == nil {
+		return remote.DockerRegistry(nil)
+	}
+
+	return remote.DockerRegistryWithPlatform(nil, platform)
+}
+
+func toPlatform(arch *string) *ocispec.Platform {
+	if arch == nil {
+		return nil
+	}
+
+	return &ocispec.Platform{
+		Architecture: ptr.Deref(arch, ""),
+		OS:           "linux",
 	}
 }
