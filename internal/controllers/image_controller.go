@@ -17,7 +17,6 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
-	"github.com/ironcore-dev/ceph-provider/api"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
@@ -308,6 +307,10 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 
 	log.V(2).Info("Resolve image reference")
 	osImgSrc, err := createOsImageSource(toPlatform(img.Spec.ImageArchitecture))
+	if err != nil {
+		return fmt.Errorf("failed to create os image source: %w", err)
+	}
+
 	resolvedImg, err := osImgSrc.Resolve(ctx, img.Spec.Image)
 	if err != nil {
 		return fmt.Errorf("failed to resolve image ref in osImgSrc: %w", err)
@@ -327,7 +330,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 			}
 
 			if img.Spec.ImageArchitecture != nil {
-				snapshotLabels[api.MachineArchitectureLabel] = *img.Spec.ImageArchitecture
+				snapshotLabels[providerapi.MachineArchitectureLabel] = *img.Spec.ImageArchitecture
 			}
 
 			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
