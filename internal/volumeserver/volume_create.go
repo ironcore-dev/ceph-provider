@@ -21,7 +21,7 @@ const (
 )
 
 func getArchitectureFromVolume(volume *iriv1alpha1.Volume) *string {
-	if volume != nil || volume.Metadata != nil {
+	if volume != nil && volume.Metadata != nil {
 		if arch, found := volume.Metadata.Labels[api.MachineArchitectureLabel]; found {
 			return ptr.To(arch)
 		}

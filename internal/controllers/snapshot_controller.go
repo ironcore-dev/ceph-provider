@@ -383,12 +383,12 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
 	osImgSrc, err := createOsImageSource(platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to create docker registry: %w", err)
+		return nil, 0, "", fmt.Errorf("failed to create os image source: %w", err)
 	}
 
 	img, err := osImgSrc.Resolve(ctx, imageReference)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
+		return nil, 0, "", fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
 	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
