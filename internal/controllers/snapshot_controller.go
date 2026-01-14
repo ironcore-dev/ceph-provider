@@ -20,9 +20,9 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
-	"github.com/ironcore-dev/ironcore-image/oci/image"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"k8s.io/client-go/util/workqueue"
 )
 
@@ -35,7 +35,6 @@ type SnapshotReconcilerOptions struct {
 func NewSnapshotReconciler(
 	log logr.Logger,
 	conn *rados.Conn,
-	registry image.Source,
 	store store.Store[*providerapi.Snapshot],
 	images store.Store[*providerapi.Image],
 	events event.Source[*providerapi.Snapshot],
@@ -43,10 +42,6 @@ func NewSnapshotReconciler(
 ) (*SnapshotReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
-	}
-
-	if registry == nil {
-		return nil, fmt.Errorf("must specify registry")
 	}
 
 	if store == nil {
@@ -76,7 +71,6 @@ func NewSnapshotReconciler(
 	return &SnapshotReconciler{
 		log:                 log,
 		conn:                conn,
-		registry:            registry,
 		queue:               workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		store:               store,
 		images:              images,
@@ -88,11 +82,9 @@ func NewSnapshotReconciler(
 }
 
 type SnapshotReconciler struct {
-	log  logr.Logger
-	conn *rados.Conn
-
-	registry image.Source
-	queue    workqueue.TypedRateLimitingInterface[string]
+	log   logr.Logger
+	conn  *rados.Conn
+	queue workqueue.TypedRateLimitingInterface[string]
 
 	store  store.Store[*providerapi.Snapshot]
 	images store.Store[*providerapi.Image]
@@ -297,7 +289,16 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	return nil
 }
 func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
-	rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage)
+	var platform *ocispec.Platform
+
+	if snapshot.Labels != nil {
+		if arch, found := snapshot.Labels[providerapi.MachineArchitectureLabel]; found {
+			log.V(2).Info("Snapshot architecture", "architecture", arch)
+			platform = toPlatform(&arch)
+		}
+	}
+
+	rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
 	if err != nil {
 		return fmt.Errorf("failed to open snapshot source: %w", err)
 	}
@@ -379,8 +380,13 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 	return nil
 }
 
-func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string) (io.ReadCloser, uint64, string, error) {
-	img, err := r.registry.Resolve(ctx, imageReference)
+func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
+	osImgSrc, err := createOsImageSource(platform)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to create docker registry: %w", err)
+	}
+
+	img, err := osImgSrc.Resolve(ctx, imageReference)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("failed to resolve image ref in registry: %w", err)
 	}
