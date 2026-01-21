@@ -325,9 +325,20 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 }
 
 func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapName string, image *providerapi.Image) error {
-	if imageExists, err := r.isImageExisting(ioCtx, snapName); err != nil {
-		return fmt.Errorf("failed to check image existence: %w", err)
-	} else if imageExists {
+	rbdExists, err := r.isImageExisting(ioCtx, snapName)
+	if err != nil {
+		return fmt.Errorf("failed to check rbd image existence: %w", err)
+	}
+
+	storeExists := true
+	if _, err := r.images.Get(ctx, snapName); err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to check image in store: %w", err)
+		}
+		storeExists = false
+	}
+
+	if rbdExists && storeExists {
 		log.V(2).Info("Snapshot clone is already created")
 		return nil
 	}

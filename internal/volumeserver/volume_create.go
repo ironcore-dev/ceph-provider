@@ -89,6 +89,9 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 				return nil, fmt.Errorf("requested size (%d bytes) must not be smaller than snapshot restore size (%d bytes)", imageSize, snapshotSize)
 			}
 			if snapshotSourceVolume.Spec.Encryption != nil {
+				if encryptionSpec != nil {
+					log.V(2).Info("Overriding user-provided encryption with snapshot source encryption")
+				}
 				encryptionSpec = snapshotSourceVolume.Spec.Encryption
 			}
 
@@ -97,6 +100,9 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			log.V(2).Info("Getting image data source", "imageID", volImage)
 			if volImage == "" {
 				return nil, fmt.Errorf("must specify image url in image data source")
+			}
+			if imageSize == 0 {
+				return nil, fmt.Errorf("must specify size when creating volume from image data source")
 			}
 
 		default:
