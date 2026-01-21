@@ -272,6 +272,7 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 	for _, snapInfo := range snaps {
 		snapName := snapInfo.Name
 		log.V(2).Info("Create snapshot clone", "snapshotId", snapName)
+		// cloned image name will be same as snapshot name
 		if err := r.cloneSnapshot(ctx, log, ioCtx, snapName, image); err != nil {
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
@@ -290,7 +291,7 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		}
 	}
 
-	// flatten all child images of snapshot
+	// flatten all child images of the original image's snapshots
 	if err := flattenChildImages(log, r.conn, img); err != nil {
 		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
 	}

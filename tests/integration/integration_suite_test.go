@@ -57,8 +57,10 @@ func TestIntegration_GRPCServer(t *testing.T) {
 	RunSpecs(t, "GRPC Server Suite", Label("integration"))
 }
 
+const verboseTestLogLevel = zapcore.Level(-2)
+
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.Level(zapcore.Level(-2)), zap.UseDevMode(true)))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.Level(verboseTestLogLevel), zap.UseDevMode(true)))
 
 	keyEncryptionKeyFile, err := os.CreateTemp(GinkgoT().TempDir(), "keyencryption")
 	Expect(err).NotTo(HaveOccurred())

@@ -79,7 +79,15 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			}
 
 			log.V(2).Info("Getting image size and encryption from snapshot source volume", "snapshotSourceVolumeID", snapshotSourceVolume.ID)
-			imageSize = snapshotSourceVolume.Spec.Size
+			snapshotSize := snapshotSourceVolume.Spec.Size
+			// Validate and determine final size
+			if imageSize == 0 {
+				// No size specified by user, use snapshot size
+				imageSize = snapshotSize
+			} else if imageSize < snapshotSize {
+				// User specified size is too small
+				return nil, fmt.Errorf("requested size (%d bytes) must not be smaller than snapshot restore size (%d bytes)", imageSize, snapshotSize)
+			}
 			if snapshotSourceVolume.Spec.Encryption != nil {
 				encryptionSpec = snapshotSourceVolume.Spec.Encryption
 			}
