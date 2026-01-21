@@ -355,17 +355,21 @@ func (r *ImageReconciler) cloneSnapshot(ctx context.Context, log logr.Logger, io
 		},
 	}
 
-	options := librbd.NewRbdImageOptions()
-	defer options.Destroy()
-	if err := options.SetString(librbd.ImageOptionDataPool, r.pool); err != nil {
-		return fmt.Errorf("failed to set data pool: %w", err)
-	}
+	if !rbdExists {
+		options := librbd.NewRbdImageOptions()
+		defer options.Destroy()
+		if err := options.SetString(librbd.ImageOptionDataPool, r.pool); err != nil {
+			return fmt.Errorf("failed to set data pool: %w", err)
+		}
 
-	log.V(2).Info("Creating image from snapshot", "snapshotId", snapName)
-	if ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, snapName, options); err != nil {
-		return fmt.Errorf("failed to create image from snapshot: %w", err)
-	} else if !ok {
-		return nil
+		log.V(2).Info("Creating image from snapshot", "snapshotId", snapName)
+		if ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, clonedImage, snapName, options); err != nil {
+			return fmt.Errorf("failed to create image from snapshot: %w", err)
+		} else if !ok {
+			return nil
+		}
+	} else {
+		log.V(2).Info("Rbd image for snapshot clone already exists")
 	}
 
 	log.V(2).Info("Setting parent image metadata to cloned image")
