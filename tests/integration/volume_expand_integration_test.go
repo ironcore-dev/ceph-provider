@@ -73,9 +73,7 @@ var _ = Describe("Expand Volume", func() {
 				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
-			HaveField("Spec.Encryption", SatisfyAll(
-				HaveField("Type", api.EncryptionTypeUnencrypted),
-			)),
+			HaveField("Spec.Encryption", BeNil()),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
 				HaveField("Monitors", cephMonitors),
@@ -145,9 +143,7 @@ var _ = Describe("Expand Volume", func() {
 				HaveKeyWithValue(api.IOPSLimit, int64(15000)),
 			)),
 			HaveField("Spec.SnapshotRef", BeNil()),
-			HaveField("Spec.Encryption", SatisfyAll(
-				HaveField("Type", api.EncryptionTypeUnencrypted),
-			)),
+			HaveField("Spec.Encryption", BeNil()),
 			HaveField("Status.State", Equal(api.ImageStateAvailable)),
 			HaveField("Status.Access", SatisfyAll(
 				HaveField("Monitors", cephMonitors),

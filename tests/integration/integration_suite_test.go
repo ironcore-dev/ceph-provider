@@ -18,6 +18,7 @@ import (
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -56,8 +57,10 @@ func TestIntegration_GRPCServer(t *testing.T) {
 	RunSpecs(t, "GRPC Server Suite", Label("integration"))
 }
 
+const verboseTestLogLevel = zapcore.Level(-2)
+
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.Level(verboseTestLogLevel), zap.UseDevMode(true)))
 
 	keyEncryptionKeyFile, err := os.CreateTemp(GinkgoT().TempDir(), "keyencryption")
 	Expect(err).NotTo(HaveOccurred())

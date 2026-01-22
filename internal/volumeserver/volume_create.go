@@ -24,66 +24,83 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 		return nil, fmt.Errorf("got an empty volume")
 	}
 
+	var err error
+	var imageSize uint64
+	var encryptionSpec *api.EncryptionSpec
+	log.V(2).Info("Getting image size and encryption from IRI volume")
+	if volume.Spec.Resources != nil {
+		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
+			return nil, fmt.Errorf("failed to get image size: %w", err)
+		}
+	}
+
+	if encryption := volume.Spec.Encryption; encryption != nil {
+		if encryption.SecretData == nil {
+			return nil, fmt.Errorf("encryption enabled but SecretData missing")
+		}
+		passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
+		if !found {
+			return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
+		}
+
+		encryptedPassphrase, err := s.keyEncryption.Encrypt(passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+		}
+		encryptionSpec = &api.EncryptionSpec{
+			Type:                api.EncryptionTypeEncrypted,
+			EncryptedPassphrase: encryptedPassphrase,
+		}
+	}
+
 	log.V(2).Info("Getting volume data source")
 	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
+
 	var snapshotID *string
 	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
 		switch {
 		case dataSource.SnapshotDataSource != nil:
-			snapshotID = &dataSource.SnapshotDataSource.SnapshotId
 			volImage = "" // TODO: Remove this once volume.Spec.Image is deprecated
-		case dataSource.ImageDataSource != nil:
-			volImage = dataSource.ImageDataSource.Image
-		}
-	}
 
-	var snapshotSourceVolume *api.Image
-	if snapshotID != nil {
-		snapshot, err := s.snapshotStore.Get(ctx, *snapshotID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get volume snapshot from store: %w", err)
-		}
-		var snapshotSourceVolumeID string
-		if snapshot.Source.VolumeImageID != "" {
-			snapshotSourceVolumeID = snapshot.Source.VolumeImageID
-		}
-		if snapshotSourceVolumeID != "" {
-			snapshotSourceVolume, err = s.imageStore.Get(ctx, snapshotSourceVolumeID)
+			snapshotID = &dataSource.SnapshotDataSource.SnapshotId
+			log.V(2).Info("Getting snapshot data source", "snapshotID", snapshotID)
+			snapshot, err := s.snapshotStore.Get(ctx, *snapshotID)
 			if err != nil {
+				return nil, fmt.Errorf("failed to get volume snapshot from store: %w", err)
+			}
+
+			if snapshot.Source.VolumeImageID == "" {
+				return nil, fmt.Errorf("snapshot doesn't have source volume ID")
+			}
+
+			var snapshotSourceVolume *api.Image
+			if snapshotSourceVolume, err = s.imageStore.Get(ctx, snapshot.Source.VolumeImageID); err != nil {
 				return nil, fmt.Errorf("failed to get snapshot source volume from store: %w", err)
 			}
-		}
-	}
 
-	var imageSize uint64
-	var err error
-	var encryptionType = api.EncryptionTypeUnencrypted
-	var encryptedPassphrase []byte
-	log.V(2).Info("Getting image size and volume encryption")
-	if snapshotSourceVolume != nil {
-		imageSize = snapshotSourceVolume.Status.Size
-		if snapshotSourceVolume.Status.Encryption == api.EncryptionStateHeaderSet {
-			encryptionType = snapshotSourceVolume.Spec.Encryption.Type
-			encryptedPassphrase = snapshotSourceVolume.Spec.Encryption.EncryptedPassphrase
-		}
-	} else {
-		if imageSize, err = utils.Int64ToUint64(volume.Spec.Resources.StorageBytes); err != nil {
-			return nil, err
-		}
-		if encryption := volume.Spec.Encryption; encryption != nil {
-			if encryption.SecretData == nil {
-				return nil, fmt.Errorf("encryption enabled but SecretData missing")
-			}
-			passphrase, found := encryption.SecretData[EncryptionSecretDataPassphraseKey]
-			if !found {
-				return nil, fmt.Errorf("encryption enabled but secret data with key %q missing", EncryptionSecretDataPassphraseKey)
+			snapshotSize := snapshotSourceVolume.Spec.Size
+			// Validate and determine final size
+			if imageSize == 0 {
+				// No size specified by user, use snapshot size
+				log.V(2).Info("Getting image size from snapshot source volume", "snapshotSourceVolumeID", snapshotSourceVolume.ID)
+				imageSize = snapshotSize
+			} else if imageSize < snapshotSize {
+				// User specified size is too small
+				return nil, fmt.Errorf("requested size (%d bytes) must not be smaller than snapshot restore size (%d bytes)", imageSize, snapshotSize)
 			}
 
-			encryptedPassphrase, err = s.keyEncryption.Encrypt(passphrase)
-			if err != nil {
-				return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
+		case dataSource.ImageDataSource != nil:
+			volImage = dataSource.ImageDataSource.Image
+			log.V(2).Info("Getting image data source", "imageID", volImage)
+			if volImage == "" {
+				return nil, fmt.Errorf("must specify image url in image data source")
 			}
-			encryptionType = api.EncryptionTypeEncrypted
+			if imageSize == 0 {
+				return nil, fmt.Errorf("must specify size when creating volume from image data source")
+			}
+
+		default:
+			return nil, fmt.Errorf("unsupported or incomplete volume data source type")
 		}
 	}
 
@@ -105,10 +122,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			Limits:      calculatedLimits,
 			Image:       volImage,
 			SnapshotRef: snapshotID,
-			Encryption: api.EncryptionSpec{
-				Type:                encryptionType,
-				EncryptedPassphrase: encryptedPassphrase,
-			},
+			Encryption:  encryptionSpec,
 		},
 	}
 
