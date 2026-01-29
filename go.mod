@@ -6,7 +6,7 @@ toolchain go1.24.11
 
 require (
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ceph/go-ceph v0.35.0
+	github.com/ceph/go-ceph v0.37.0
 	github.com/containerd/containerd v1.7.30
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
@@ -22,6 +22,7 @@ require (
 	github.com/rook/rook/pkg/apis v0.0.0-20250716205136-e4da184ce30a
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
+	go.uber.org/zap v1.27.1
 	golang.org/x/sync v0.19.0
 	google.golang.org/grpc v1.78.0
 	k8s.io/api v0.34.1
@@ -132,7 +133,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.29.0 // indirect

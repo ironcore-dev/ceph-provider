@@ -34,7 +34,7 @@ type ImageSpec struct {
 	Image             string         `json:"image"`
 	ImageArchitecture *string        `json:"imageArchitecture"`
 	SnapshotRef       *string        `json:"snapshotRef"`
-	Encryption        EncryptionSpec `json:"encryption"`
+	Encryption        *EncryptionSpec `json:"encryption"`
 }
 
 type EncryptionType string

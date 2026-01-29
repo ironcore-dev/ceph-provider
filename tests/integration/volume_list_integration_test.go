@@ -17,7 +17,7 @@ import (
 )
 
 var _ = Describe("List Volume", func() {
-	It("should create a volume", func(ctx SpecContext) {
+	It("should list volumes", func(ctx SpecContext) {
 		By("creating a volume")
 		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
 			Volume: &iriv1alpha1.Volume{

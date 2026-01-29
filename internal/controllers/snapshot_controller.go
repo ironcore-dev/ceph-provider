@@ -152,39 +152,6 @@ const (
 	SnapshotFinalizer = "snapshot"
 )
 
-func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, img *librbd.Image) error {
-	log.V(2).Info("Remove snapshot")
-
-	pools, imgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list children: %w", err)
-	}
-	log.V(2).Info("Snapshot references", "pools", len(pools), "rbd-images", len(imgs))
-
-	if len(pools) != 0 || len(imgs) != 0 {
-		return fmt.Errorf("unable to delete snapshot: still in use")
-	}
-
-	snapshot := img.GetSnapshot(snapshotID)
-	isProtected, err := snapshot.IsProtected()
-	if err != nil {
-		return fmt.Errorf("unable to check if snapshot is protected: %w", err)
-	}
-
-	if isProtected {
-		if err := snapshot.Unprotect(); err != nil {
-			return fmt.Errorf("unable to unprotect snapshot: %w", err)
-		}
-	}
-
-	if err := snapshot.Remove(); err != nil {
-		return fmt.Errorf("unable to remove snapshot: %w", err)
-	}
-	log.V(2).Info("Snapshot Removed")
-
-	return nil
-}
-
 func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
 		log.V(1).Info("snapshot has no finalizer: done")
@@ -196,10 +163,10 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
 
-	img, err := librbd.OpenImage(ioCtx, rbdID, librbd.NoSnapshot)
+	img, err := librbd.OpenImage(ioCtx, rbdID, snapshotID)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to open image: %w", err)
+			return fmt.Errorf("failed to open rbd image: %w", err)
 		}
 		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
 		if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
@@ -208,18 +175,21 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		log.V(2).Info("Removed snapshot finalizer")
 		return nil
 	}
-	defer closeImage(log, img)
+	shouldClose := true
+	defer func() {
+		if shouldClose {
+			closeImage(log, img)
+		}
+	}()
 
-	if err = r.removeSnapshot(log, snapshotID, img); err != nil {
-		return fmt.Errorf("failed to remove snapshot: %w", err)
+	if err := flattenChildImages(log, r.conn, img); err != nil {
+		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
 	}
 
-	if snapshot.Source.IronCoreImage != "" {
-		log.V(2).Info("Remove ironcore os-image")
-		if err := img.Remove(); err != nil {
-			return fmt.Errorf("unable to remove snapshot: %w", err)
-		}
-		log.V(2).Info("Ironcore os-image removed")
+	log.V(2).Info("Remove snapshot")
+	rbdSnapshot := img.GetSnapshot(snapshotID)
+	if err := removeSnapshot(rbdSnapshot); err != nil {
+		return fmt.Errorf("failed to remove snapshot: %w", err)
 	}
 
 	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
@@ -227,6 +197,30 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to update snapshot metadata: %w", err)
 	}
 	log.V(2).Info("Removed snapshot finalizer")
+
+	// deletes os-image if not referenced by any volume
+	if snapshot.Source.IronCoreImage != "" {
+		log.V(2).Info("Remove ironcore os-image")
+		shouldClose = false
+		if err := img.Close(); err != nil {
+			return fmt.Errorf("unable to close ironcore os-image: %w", err)
+		}
+
+		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil {
+			return fmt.Errorf("unable to remove ironcore os-image: %w", err)
+		}
+		log.V(2).Info("Ironcore os-image removed")
+	}
+
+	// deletes parent rbd image of snapshot which is created during source volume deletion
+	// and has no any other reference except snapshot
+	if rbdID == ImageIDToRBDID(snapshotID) {
+		log.V(2).Info("Remove parent rbd image")
+		if err := r.images.Delete(ctx, snapshotID); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("unable to remove parent rbd image: %w", err)
+		}
+		log.V(2).Info("Removed parent rbd image")
+	}
 	return nil
 }
 
@@ -251,6 +245,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		if err := r.deleteSnapshot(ctx, log, ioCtx, snapshot); err != nil {
 			return fmt.Errorf("failed to delete snapshot: %w", err)
 		}
+		log.V(1).Info("Successfully deleted snapshot")
+		return nil
 	}
 
 	if snapshot.Status.State == providerapi.SnapshotStateReady {
@@ -317,21 +313,20 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	}
 	log.V(2).Info("Configured pool", "pool", r.pool)
 
-	snapshotName := SnapshotIDToRBDID(snapshot.ID)
+	imageName := SnapshotIDToRBDID(snapshot.ID)
 	roundedSize := round.OffBytes(snapshotSize)
-	if err = librbd.CreateImage(ioCtx, snapshotName, roundedSize, options); err != nil {
+	if err = librbd.CreateImage(ioCtx, imageName, roundedSize, options); err != nil {
 		return fmt.Errorf("failed to create os rbd image: %w", err)
 	}
 	log.V(2).Info("Created rbd image", "bytes", roundedSize)
 
-	rbdImg, err := librbd.OpenImage(ioCtx, snapshotName, librbd.NoSnapshot)
-	if err != nil {
-		return fmt.Errorf("failed to open rbd image: %w", err)
-	}
-	defer closeImage(log, rbdImg)
-
-	if err := r.prepareSnapshotContent(log, rbdImg, rc); err != nil {
+	if err := r.prepareSnapshotContent(log, ioCtx, imageName, rc); err != nil {
 		return fmt.Errorf("failed to prepare snapshot content: %w", err)
+	}
+
+	log.V(2).Info("Create ironcore image snapshot", "ImageID", imageName)
+	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
+		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
 	}
 
 	snapshot.Status.Digest = digest
@@ -348,35 +343,12 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 		return nil
 	}
 
-	rbdImg, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(img.ID), librbd.NoSnapshot)
-	if err != nil {
-		return fmt.Errorf("failed to open rbd image: %w", err)
-	}
-	defer closeImage(log, rbdImg)
-
-	snapshotName := snapshot.ID
-	imgSnap, err := rbdImg.CreateSnapshot(snapshotName)
-	if err != nil {
-		return fmt.Errorf("unable to create snapshot: %w", err)
+	log.V(2).Info("Create volume image snapshot", "ImageID", img.ID)
+	if err := createSnapshot(log, ioCtx, snapshot.ID, ImageIDToRBDID(img.ID)); err != nil {
+		return fmt.Errorf("failed to create volume image snapshot: %w", err)
 	}
 
-	if err := imgSnap.Protect(); err != nil {
-		return fmt.Errorf("unable to protect snapshot: %w", err)
-	}
-
-	if err := rbdImg.SetSnapshot(snapshotName); err != nil {
-		return fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, img.ID, err)
-	}
-	log.V(2).Info("Created volume image snapshot", "ImageID", rbdImg.GetName())
-
-	// Get image size
-	size, err := rbdImg.GetSize()
-	if err != nil {
-		return fmt.Errorf("failed to get snapshot image size %s: %w", snapshotName, err)
-	}
-	roundedSize := round.OffBytes(size)
-
-	snapshot.Status.Size = int64(roundedSize)
+	snapshot.Status.Size = int64(img.Status.Size)
 	return nil
 }
 
@@ -409,22 +381,17 @@ func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageR
 	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
 }
 
-func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, rbdImg *librbd.Image, rc io.ReadCloser) error {
+func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {
+	rbdImg, err := openImage(ioCtx, imageName)
+	if err != nil {
+		return err
+	}
+	defer closeImage(log, rbdImg)
+
 	if err := r.populateImage(log, rbdImg, rc); err != nil {
 		return fmt.Errorf("failed to populate os image: %w", err)
 	}
 	log.V(2).Info("Populated os image on rbd image")
-
-	imgSnap, err := rbdImg.CreateSnapshot(ImageSnapshotVersion)
-	if err != nil {
-		return fmt.Errorf("unable to create snapshot: %w", err)
-	}
-	log.V(2).Info("Created snapshot")
-
-	if err := imgSnap.Protect(); err != nil {
-		return fmt.Errorf("unable to protect snapshot: %w", err)
-	}
-	log.V(2).Info("Protected snapshot")
 
 	return nil
 }
