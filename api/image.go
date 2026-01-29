@@ -28,12 +28,12 @@ const (
 )
 
 type ImageSpec struct {
-	Size              uint64         `json:"size"`
-	WWN               string         `json:"wwn"`
-	Limits            Limits         `json:"limits"`
-	Image             string         `json:"image"`
-	ImageArchitecture *string        `json:"imageArchitecture"`
-	SnapshotRef       *string        `json:"snapshotRef"`
+	Size              uint64          `json:"size"`
+	WWN               string          `json:"wwn"`
+	Limits            Limits          `json:"limits"`
+	Image             string          `json:"image"`
+	ImageArchitecture *string         `json:"imageArchitecture"`
+	SnapshotRef       *string         `json:"snapshotRef"`
 	Encryption        *EncryptionSpec `json:"encryption"`
 }
 

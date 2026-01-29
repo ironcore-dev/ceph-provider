@@ -134,7 +134,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			Image:             volImage,
 			ImageArchitecture: getArchitectureFromVolume(volume),
 			SnapshotRef:       snapshotID,
-			Encryption:  encryptionSpec,
+			Encryption:        encryptionSpec,
 		},
 	}
 
