@@ -69,6 +69,8 @@ func toPlatform(arch *string) *ocispec.Platform {
 		Architecture: ptr.Deref(arch, ""),
 		OS:           "linux",
 	}
+}
+
 func openImage(ioCtx *rados.IOContext, imageName string) (*librbd.Image, error) {
 	img, err := librbd.OpenImage(ioCtx, imageName, librbd.NoSnapshot)
 	if err != nil {
