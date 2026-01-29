@@ -313,7 +313,7 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 
 	resolvedImg, err := osImgSrc.Resolve(ctx, img.Spec.Image)
 	if err != nil {
-		return fmt.Errorf("failed to resolve image ref in osImgSrc: %w", err)
+		return fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
 	snapshotDigest := resolvedImg.Descriptor().Digest.String()
