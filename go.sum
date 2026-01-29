@@ -606,8 +606,8 @@ github.com/ironcore-dev/controller-utils v0.11.0 h1:vQhZgPxxFwmSi+fSlPEuwCmI5sOP
 github.com/ironcore-dev/controller-utils v0.11.0/go.mod h1:kPIgIjGNMA5zUlwH04rCdDbYnvvDtd79z3Rgav1Yrpg=
 github.com/ironcore-dev/ironcore v0.2.5-0.20260114075630-5ab59ba249c8 h1:3KNX+HPJl3K6+POzHyzo60Jcvm18XHFjurCshDHcpw0=
 github.com/ironcore-dev/ironcore v0.2.5-0.20260114075630-5ab59ba249c8/go.mod h1:39djdgSb71pTVbNB8zYEfmoHy8booQ8rm+iToK0OR4M=
-github.com/ironcore-dev/ironcore-image v0.2.6-0.20260112080529-7a04a103cbec h1:WtN/CP5p68IdhuQPq+CnAKn91nPQnX+n4ffqM60Cyzs=
-github.com/ironcore-dev/ironcore-image v0.2.6-0.20260112080529-7a04a103cbec/go.mod h1:1BpqpIEnbLWGDzviFKezeWZmZsBH0RzamE0KkEh5HB0=
+github.com/ironcore-dev/ironcore-image v0.2.6 h1:/375UvU+VnmIBPR2y+sdNJ+dMzPdgDDnuaxZQgD/ZZ8=
+github.com/ironcore-dev/ironcore-image v0.2.6/go.mod h1:BU85dXapX4q9t57JgzirXl3AujpPLi7WsEADQt1J58A=
 github.com/ironcore-dev/provider-utils v0.0.0-20250617134512-c47138779fed h1:33OI50C0uNUyQf6yaUAMFfdVqUZcwspdZbPPG1l8noc=
 github.com/ironcore-dev/provider-utils v0.0.0-20250617134512-c47138779fed/go.mod h1:eRrTKf37eqHL4ucflPSbskwI/OcgcouYew/byJnIycw=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
