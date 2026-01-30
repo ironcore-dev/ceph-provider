@@ -21,7 +21,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
-	"github.com/ironcore-dev/ironcore-image/oci/image"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
@@ -47,7 +46,6 @@ type ImageReconcilerOptions struct {
 func NewImageReconciler(
 	log logr.Logger,
 	conn *rados.Conn,
-	registry image.Source,
 	images store.Store[*providerapi.Image],
 	snapshots store.Store[*providerapi.Snapshot],
 	eventRecorder eventrecorder.EventRecorder,
@@ -58,10 +56,6 @@ func NewImageReconciler(
 ) (*ImageReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
-	}
-
-	if registry == nil {
-		return nil, fmt.Errorf("must specify registry")
 	}
 
 	if images == nil {
@@ -103,7 +97,6 @@ func NewImageReconciler(
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
-		registry:       registry,
 		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		images:         images,
 		snapshots:      snapshots,
@@ -122,8 +115,7 @@ type ImageReconciler struct {
 	log  logr.Logger
 	conn *rados.Conn
 
-	registry image.Source
-	queue    workqueue.TypedRateLimitingInterface[string]
+	queue workqueue.TypedRateLimitingInterface[string]
 
 	images    store.Store[*providerapi.Image]
 	snapshots store.Store[*providerapi.Snapshot]
@@ -436,9 +428,14 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 	}
 
 	log.V(2).Info("Resolve image reference")
-	resolvedImg, err := r.registry.Resolve(ctx, img.Spec.Image)
+	osImgSrc, err := createOsImageSource(toPlatform(img.Spec.ImageArchitecture))
 	if err != nil {
-		return fmt.Errorf("failed to resolve image ref in registry: %w", err)
+		return fmt.Errorf("failed to create os image source: %w", err)
+	}
+
+	resolvedImg, err := osImgSrc.Resolve(ctx, img.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
 	snapshotDigest := resolvedImg.Descriptor().Digest.String()
@@ -450,17 +447,24 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			log.V(2).Info("Create image snapshot", "SnapshotID", snapshotDigest)
+			snapshotLabels := map[string]string{
+				imageDigestLabel: snapshotDigest,
+			}
+
+			if img.Spec.ImageArchitecture != nil {
+				snapshotLabels[providerapi.MachineArchitectureLabel] = *img.Spec.ImageArchitecture
+			}
+
 			snap, err = r.snapshots.Create(ctx, &providerapi.Snapshot{
 				Metadata: apiutils.Metadata{
-					ID: snapshotDigest,
-					Labels: map[string]string{
-						imageDigestLabel: snapshotDigest,
-					},
+					ID:     snapshotDigest,
+					Labels: snapshotLabels,
 				},
 				Source: providerapi.SnapshotSource{
 					IronCoreImage: resolvedImageName,
 				},
 			})
+
 			if err != nil {
 				r.Eventf(img.Metadata, corev1.EventTypeWarning, "CreateImageSnapshotFailed", "Failed to create image snapshot: %s", err)
 				return fmt.Errorf("failed to create snapshot: %w", err)

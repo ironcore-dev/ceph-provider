@@ -13,11 +13,22 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
+	"k8s.io/utils/ptr"
 )
 
 const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
+
+func getArchitectureFromVolume(volume *iriv1alpha1.Volume) *string {
+	if volume != nil && volume.Metadata != nil {
+		if arch, found := volume.Metadata.Labels[api.MachineArchitectureLabel]; found {
+			return ptr.To(arch)
+		}
+	}
+
+	return nil
+}
 
 func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, volume *iriv1alpha1.Volume) (*api.Image, error) {
 	if volume == nil {
@@ -118,11 +129,12 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			ID: s.idGen.Generate(),
 		},
 		Spec: api.ImageSpec{
-			Size:        imageSize,
-			Limits:      calculatedLimits,
-			Image:       volImage,
-			SnapshotRef: snapshotID,
-			Encryption:  encryptionSpec,
+			Size:              imageSize,
+			Limits:            calculatedLimits,
+			Image:             volImage,
+			ImageArchitecture: getArchitectureFromVolume(volume),
+			SnapshotRef:       snapshotID,
+			Encryption:        encryptionSpec,
 		},
 	}
 
