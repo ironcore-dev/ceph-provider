@@ -249,8 +249,20 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
-	if snapshot.Status.State == providerapi.SnapshotStateReady {
+	// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
+	// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
+	if snapshot.Status.State == providerapi.SnapshotStatePopulated {
 		log.V(1).Info("Snapshot already populated")
+		snapshot.Status.State = providerapi.SnapshotStateReady
+		if _, err = r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to update snapshot: %w", err)
+		}
+
+		return nil
+	}
+
+	if snapshot.Status.State == providerapi.SnapshotStateReady {
+		log.V(1).Info("Snapshot is ready")
 		return nil
 	}
 
