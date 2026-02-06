@@ -315,8 +315,13 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 
 	imageName := SnapshotIDToRBDID(snapshot.ID)
 	roundedSize := round.OffBytes(snapshotSize)
+
 	if err = librbd.CreateImage(ioCtx, imageName, roundedSize, options); err != nil {
-		return fmt.Errorf("failed to create os rbd image: %w", err)
+		if errors.Is(err, librbd.ErrExist) {
+			log.V(2).Info("RBD image already exists, skipping creation", "ImageID", imageName)
+		} else {
+			return fmt.Errorf("failed to create os rbd image: %w", err)
+		}
 	}
 	log.V(2).Info("Created rbd image", "bytes", roundedSize)
 
