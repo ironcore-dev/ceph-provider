@@ -40,7 +40,3 @@ type SnapshotStatus struct {
 	Digest string        `json:"digest"`
 	Size   int64         `json:"size"`
 }
-
-type SnapshotSource struct {
-	IronCoreImage string `json:"ironcoreImage"`
-}
