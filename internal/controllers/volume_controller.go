@@ -332,7 +332,107 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, ctx2 *rados.IOContext, volume *providerapi.Volume) error {
-	//Case 3: Restore volume -> create img with snap ref
+func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+	log.V(1).Info("Reconciling restored volume from snapshot")
+
+	// Check if Image already exists
+	if volume.Status.ImageRef != "" {
+		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get image: %w", err)
+		}
+		if img != nil {
+			switch img.Status.State {
+			case providerapi.ImageStatePending:
+				// If image is not available, retry later
+				log.V(1).Info("Image is pending, requeuing")
+				// TODO: avoid static wait duration.
+				r.queue.AddAfter(volume.ID, time.Second*60)
+				return nil
+			case providerapi.ImageStateAvailable:
+				if volume.Status.State == providerapi.VolumeStateAvailable {
+					// Avoid unnecessary updates if volume is already marked as available
+					return nil
+				}
+				log.V(1).Info("Image is available, updating volume status")
+				volume.Status.State = providerapi.VolumeStateAvailable
+				volume.Status.Size = img.Status.Size
+				if img.Status.Access != nil {
+					volume.Status.Access = &providerapi.VolumeAccess{
+						Monitors: img.Status.Access.Monitors,
+						Handle:   img.Status.Access.Handle,
+						User:     img.Status.Access.User,
+						UserKey:  img.Status.Access.UserKey,
+					}
+				}
+				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+					return fmt.Errorf("failed to update volume status: %w", err)
+				}
+			default:
+				return fmt.Errorf("image %s in unexpected state: %s", img.ID, img.Status.State)
+			}
+			return nil
+		}
+		// Image was deleted, clear the ref and create a new one
+		log.V(1).Info("Referenced image not found, will create new one")
+		volume.Status.ImageRef = ""
+	}
+
+	// Verify snapshot exists
+	if volume.Spec.Source.SnapshotSource == nil {
+		return fmt.Errorf("snapshot source is nil")
+	}
+	snapshotID := *volume.Spec.Source.SnapshotSource
+
+	snapshot, err := r.snapshotStore.Get(ctx, snapshotID)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot %s: %w", snapshotID, err)
+	}
+
+	switch snapshot.Status.State {
+	case providerapi.SnapshotStatePending:
+		log.V(1).Info("Snapshot is pending, waiting", "snapshotID", snapshotID)
+		r.queue.AddAfter(volume.ID, time.Second*60)
+		return nil
+	case providerapi.SnapshotStateReady:
+		log.V(1).Info("Snapshot is ready", "snapshotID", snapshotID)
+	case providerapi.SnapshotStateFailed:
+		// TODO: Do we need a failed state for volumes? or should we trigger recreation of the snapshot?
+		return fmt.Errorf("snapshot %s failed", snapshotID)
+	default:
+		return fmt.Errorf("snapshot %s in unexpected state: %s", snapshotID, snapshot.Status.State)
+	}
+
+	// Create new Image from snapshot
+	log.V(1).Info("Creating image from snapshot", "snapshotID", snapshotID)
+	img := &providerapi.Image{
+		Metadata: apiutils.Metadata{
+			ID: volume.ID,
+		},
+		Spec: providerapi.ImageSpec{
+			Size:   volume.Spec.Size,
+			WWN:    volume.Spec.WWN,
+			Limits: volume.Spec.Limits,
+			Encryption: providerapi.EncryptionSpec{
+				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
+				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
+			},
+			SnapshotSource: &snapshotID,
+		},
+	}
+
+	createdImage, err := r.imageStore.Create(ctx, img)
+	if err != nil {
+		return fmt.Errorf("failed to create image: %w", err)
+	}
+
+	log.V(1).Info("Image created from snapshot", "ImageID", createdImage.ID, "SnapshotID", snapshotID)
+
+	// Update volume status with ImageRef
+	volume.Status.ImageRef = createdImage.ID
+	if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+		return fmt.Errorf("failed to update volume with image ref: %w", err)
+	}
+
 	return nil
 }
