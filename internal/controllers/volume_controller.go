@@ -18,6 +18,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
+	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/client-go/util/workqueue"
@@ -258,8 +259,70 @@ func (r *VolumeReconciler) populateImage(log logr.Logger, dst io.WriteCloser, sr
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, ctx2 *rados.IOContext, volume *providerapi.Volume) error {
-	//Case 1: Empty Volume -> create img
+func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+	log.V(1).Info("Reconciling empty volume")
+
+	// Check if Image already exists
+	if volume.Status.ImageRef != "" {
+		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get image: %w", err)
+		}
+		if img != nil {
+			if img.Status.State == providerapi.ImageStateAvailable {
+				log.V(1).Info("Image is available, updating volume status")
+				volume.Status.State = providerapi.VolumeStateAvailable
+				volume.Status.Size = img.Status.Size
+				if img.Status.Access != nil {
+					volume.Status.Access = &providerapi.VolumeAccess{
+						Monitors: img.Status.Access.Monitors,
+						Handle:   img.Status.Access.Handle,
+						User:     img.Status.Access.User,
+						UserKey:  img.Status.Access.UserKey,
+					}
+				}
+				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+					return fmt.Errorf("failed to update volume status: %w", err)
+				}
+			}
+			return nil
+		}
+		// Image was deleted, clear the ref and create a new one
+		log.V(1).Info("Referenced image not found, will create new one")
+		volume.Status.ImageRef = ""
+	}
+
+	// Create new Image
+	log.V(1).Info("Creating image for empty volume")
+	img := &providerapi.Image{
+		Metadata: apiutils.Metadata{
+			ID: volume.ID,
+		},
+		Spec: providerapi.ImageSpec{
+			Size:   volume.Spec.Size,
+			WWN:    volume.Spec.WWN,
+			Limits: volume.Spec.Limits,
+			Encryption: providerapi.EncryptionSpec{
+				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
+				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
+			},
+			SnapshotSource: nil,
+		},
+	}
+
+	createdImage, err := r.imageStore.Create(ctx, img)
+	if err != nil {
+		return fmt.Errorf("failed to create image: %w", err)
+	}
+
+	log.V(1).Info("Image created", "ImageID", createdImage.ID)
+
+	// Update volume status with ImageRef
+	volume.Status.ImageRef = createdImage.ID
+	if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+		return fmt.Errorf("failed to update volume with image ref: %w", err)
+	}
+
 	return nil
 }
 
