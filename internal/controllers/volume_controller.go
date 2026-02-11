@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-type SnapshoVolumelerOptions struct {
+type VolumeReconcilerOptions struct {
 	Pool                string
 	PopulatorBufferSize int64
 	WorkerSize          int
@@ -37,7 +37,7 @@ func NewVolumeReconciler(
 	imageStore store.Store[*providerapi.Image],
 	volumeStore store.Store[*providerapi.Volume],
 	events event.Source[*providerapi.Volume],
-	opts SnapshoVolumelerOptions,
+	opts VolumeReconcilerOptions,
 ) (*VolumeReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
