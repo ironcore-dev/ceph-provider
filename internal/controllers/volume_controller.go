@@ -36,7 +36,7 @@ func NewVolumeReconciler(
 	snapshotStore store.Store[*providerapi.Snapshot],
 	imageStore store.Store[*providerapi.Image],
 	volumeStore store.Store[*providerapi.Volume],
-	events event.Source[*providerapi.Snapshot],
+	events event.Source[*providerapi.Volume],
 	opts SnapshoVolumelerOptions,
 ) (*VolumeReconciler, error) {
 	if conn == nil {
@@ -101,7 +101,7 @@ type VolumeReconciler struct {
 	imageStore    store.Store[*providerapi.Image]
 	volumeStore   store.Store[*providerapi.Volume]
 
-	events event.Source[*providerapi.Snapshot]
+	events event.Source[*providerapi.Volume]
 
 	pool                string
 	populatorBufferSize int64
@@ -112,7 +112,8 @@ type VolumeReconciler struct {
 func (r *VolumeReconciler) Start(ctx context.Context) error {
 	log := r.log
 
-	reg, err := r.events.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(event event.Event[*providerapi.Snapshot]) {
+	// TODO: Handlers for snapshot and image events needed in cases were reconcile of the volume is needed
+	reg, err := r.events.AddHandler(event.HandlerFunc[*providerapi.Volume](func(event event.Event[*providerapi.Volume]) {
 		r.queue.Add(event.Object.ID)
 	}))
 	if err != nil {
@@ -204,8 +205,9 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 		}
 	}
 
+	// TODO: can this be removed to allow reconcile after volume has become available?
 	if volume.Status.State == providerapi.VolumeStateAvailable {
-		log.V(1).Info("Snapshot already populated")
+		log.V(1).Info("Volume already available")
 		return nil
 	}
 
