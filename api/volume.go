@@ -63,6 +63,7 @@ type VolumeStatus struct {
 	VolumeEncryption VolumeEncryptionState `json:"encryption"`
 	Access           *VolumeAccess         `json:"access"`
 	Size             uint64                `json:"size"`
+	ImageRef         string                `json:"imageRef"`
 }
 
 type VolumeAccess struct {
