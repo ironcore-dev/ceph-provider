@@ -326,9 +326,199 @@ func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Lo
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, ctx2 *rados.IOContext, volume *providerapi.Volume) error {
-	//Case 2: OS Volume -> create img, dump os on img, snapshot, create img with snap ref
-	// r.populateImage
+func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+	log.V(1).Info("Reconciling OS volume")
+
+	// Check if Volume's Image already exists
+	if volume.Status.ImageRef != "" {
+		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get image: %w", err)
+		}
+		if img != nil {
+			switch img.Status.State {
+			case providerapi.ImageStatePending:
+				// If image is not available, retry later
+				log.V(1).Info("Image is pending, requeuing")
+				// TODO: avoid static wait duration.
+				r.queue.AddAfter(volume.ID, time.Second*60)
+				return nil
+			case providerapi.ImageStateAvailable:
+				if volume.Status.State == providerapi.VolumeStateAvailable {
+					// Avoid unnecessary updates if volume is already marked as available
+					return nil
+				}
+				log.V(1).Info("Image is available, updating volume status")
+				volume.Status.State = providerapi.VolumeStateAvailable
+				volume.Status.Size = img.Status.Size
+				if img.Status.Access != nil {
+					volume.Status.Access = &providerapi.VolumeAccess{
+						Monitors: img.Status.Access.Monitors,
+						Handle:   img.Status.Access.Handle,
+						User:     img.Status.Access.User,
+						UserKey:  img.Status.Access.UserKey,
+					}
+				}
+				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+					return fmt.Errorf("failed to update volume status: %w", err)
+				}
+			default:
+				return fmt.Errorf("image %s in unexpected state: %s", img.ID, img.Status.State)
+			}
+		}
+		// Image was deleted, clear the ref and create a new one
+		log.V(1).Info("Referenced image not found, will create new one")
+		volume.Status.ImageRef = ""
+	}
+
+	if volume.Spec.Source.OSVolume == nil {
+		return fmt.Errorf("OSVolume source is nil")
+	}
+	osVolume := volume.Spec.Source.OSVolume
+
+	// Step 1: Resolve OCI image to get digest
+	// TODO: Consider architecture from osVolume.Architecture
+	log.V(1).Info("Resolving OCI image", "imageName", osVolume.Name)
+	ociImage, err := r.registry.Resolve(ctx, osVolume.Name)
+	if err != nil {
+		return fmt.Errorf("failed to resolve OCI image %s: %w", osVolume.Name, err)
+	}
+
+	// Step 2: Get or create base image
+	baseImageID := fmt.Sprintf("os-%s", osVolume.Name)
+	snapshotID := ociImage.Descriptor().Digest.Encoded()
+	log.V(1).Info("Using base image", "baseImageID", baseImageID, "snapshotID", snapshotID)
+	baseImage, err := r.imageStore.Get(ctx, baseImageID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get base image: %w", err)
+		}
+
+		// Create base image
+		log.V(1).Info("Creating base image", "baseImageID", baseImageID)
+		baseImage = &providerapi.Image{
+			Metadata: apiutils.Metadata{
+				ID: baseImageID,
+			},
+			Spec: providerapi.ImageSpec{
+				Size:   volume.Spec.Size, // TODO: Should we get size from OCI manifest?
+				WWN:    "",               // Base image doesn't need WWN
+				Limits: providerapi.Limits{},
+				Encryption: providerapi.EncryptionSpec{
+					Type: providerapi.EncryptionTypeUnencrypted, // Base images are unencrypted
+				},
+				SnapshotSource: nil,
+			},
+		}
+
+		baseImage, err = r.imageStore.Create(ctx, baseImage)
+		if err != nil && !errors.Is(err, store.ErrAlreadyExists) {
+			return fmt.Errorf("failed to create base image: %w", err)
+		}
+		if errors.Is(err, store.ErrAlreadyExists) {
+			// Another controller created it, fetch it
+			log.V(1).Info("Base image already exists, fetching", "baseImageID", baseImageID)
+			baseImage, err = r.imageStore.Get(ctx, baseImageID)
+			if err != nil {
+				return fmt.Errorf("failed to get existing base image: %w", err)
+			}
+		}
+	}
+
+	// Step 3: Check base image state
+	switch baseImage.Status.State {
+	case providerapi.ImageStatePending:
+		log.V(1).Info("Base image is pending, waiting", "baseImageID", baseImageID)
+		// TODO: Populate the base image here or let Image controller handle it?
+		// For now, requeue and wait
+		// TODO: avoid static wait duration.
+		r.queue.AddAfter(volume.ID, time.Second*60)
+		return nil
+	case providerapi.ImageStateAvailable:
+		log.V(1).Info("Base image is available", "baseImageID", baseImageID)
+	default:
+		return fmt.Errorf("base image %s in unexpected state: %s", baseImageID, baseImage.Status.State)
+	}
+
+	// Step 4: Get or create snapshot of base image
+	snapshot, err := r.snapshotStore.Get(ctx, snapshotID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get snapshot: %w", err)
+		}
+
+		// Create snapshot
+		log.V(1).Info("Creating snapshot of base image", "snapshotID", snapshotID, "baseImageID", baseImageID)
+		snapshot = &providerapi.Snapshot{
+			Metadata: apiutils.Metadata{
+				ID: snapshotID,
+			},
+			Spec: providerapi.SnapshotSpec{
+				ImageRef:   baseImageID,
+				Protection: providerapi.SnapshotProtectionProtected, // Protection needed for cloning
+			},
+		}
+
+		snapshot, err = r.snapshotStore.Create(ctx, snapshot)
+		if err != nil && !errors.Is(err, store.ErrAlreadyExists) {
+			return fmt.Errorf("failed to create snapshot: %w", err)
+		}
+		if errors.Is(err, store.ErrAlreadyExists) {
+			// Another controller created it, fetch it
+			log.V(1).Info("Snapshot already exists, fetching", "snapshotID", snapshotID)
+			snapshot, err = r.snapshotStore.Get(ctx, snapshotID)
+			if err != nil {
+				return fmt.Errorf("failed to get existing snapshot: %w", err)
+			}
+		}
+	}
+
+	// Step 5: Check snapshot state
+	switch snapshot.Status.State {
+	case providerapi.SnapshotStatePending:
+		log.V(1).Info("Snapshot is pending, waiting", "snapshotID", snapshotID)
+		r.queue.AddAfter(volume.ID, time.Second*60)
+		return nil
+	case providerapi.SnapshotStateReady:
+		log.V(1).Info("Snapshot is ready", "snapshotID", snapshotID)
+	case providerapi.SnapshotStateFailed:
+		// TODO: Do we need a failed state for volumes? or should we trigger recreation of the snapshot?
+		return fmt.Errorf("snapshot %s failed", snapshotID)
+	default:
+		return fmt.Errorf("snapshot %s in unexpected state: %s", snapshotID, snapshot.Status.State)
+	}
+
+	// Step 6: Create volume's image as clone from snapshot
+	log.V(1).Info("Creating volume image from snapshot", "snapshotID", snapshotID)
+	volumeImage := &providerapi.Image{
+		Metadata: apiutils.Metadata{
+			ID: volume.ID,
+		},
+		Spec: providerapi.ImageSpec{
+			Size:   volume.Spec.Size,
+			WWN:    volume.Spec.WWN,
+			Limits: volume.Spec.Limits,
+			Encryption: providerapi.EncryptionSpec{
+				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
+				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
+			},
+			SnapshotSource: &snapshotID,
+		},
+	}
+
+	createdImage, err := r.imageStore.Create(ctx, volumeImage)
+	if err != nil {
+		return fmt.Errorf("failed to create volume image: %w", err)
+	}
+
+	log.V(1).Info("Volume image created", "ImageID", createdImage.ID, "SnapshotID", snapshotID)
+
+	// Step 7: Update volume status with ImageRef
+	volume.Status.ImageRef = createdImage.ID
+	if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+		return fmt.Errorf("failed to update volume with image ref: %w", err)
+	}
+
 	return nil
 }
 
