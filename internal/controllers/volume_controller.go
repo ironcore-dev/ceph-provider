@@ -165,7 +165,22 @@ func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, vo
 		return nil
 	}
 
-	//TODO implement me
+	// Delete the volume's Image if it exists
+	if volume.Status.ImageRef != "" {
+		log.V(1).Info("Deleting volume's image", "imageRef", volume.Status.ImageRef)
+		if err := r.imageStore.Delete(ctx, volume.Status.ImageRef); err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				return fmt.Errorf("failed to delete image %s: %w", volume.Status.ImageRef, err)
+			}
+			log.V(1).Info("Image already deleted", "imageRef", volume.Status.ImageRef)
+		} else {
+			log.V(1).Info("Successfully deleted image", "imageRef", volume.Status.ImageRef)
+		}
+	}
+
+	// Note: We do NOT delete base images or snapshots for OS volumes
+	// as they may be shared by multiple volumes (golden image pattern).
+	// Clean up of unused base images and snapshots can be added later.
 
 	volume.Finalizers = utils.DeleteSliceElement(volume.Finalizers, VolumeFinalizer)
 	if _, err := r.volumeStore.Update(ctx, volume); store.IgnoreErrNotFound(err) != nil {
