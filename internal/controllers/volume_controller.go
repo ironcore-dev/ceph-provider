@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ceph/go-ceph/rados"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
@@ -32,7 +31,6 @@ type VolumeReconcilerOptions struct {
 
 func NewVolumeReconciler(
 	log logr.Logger,
-	conn *rados.Conn,
 	registry image.Source,
 	snapshotStore store.Store[*providerapi.Snapshot],
 	imageStore store.Store[*providerapi.Image],
@@ -40,10 +38,6 @@ func NewVolumeReconciler(
 	events event.Source[*providerapi.Volume],
 	opts VolumeReconcilerOptions,
 ) (*VolumeReconciler, error) {
-	if conn == nil {
-		return nil, fmt.Errorf("must specify conn")
-	}
-
 	if registry == nil {
 		return nil, fmt.Errorf("must specify registry")
 	}
@@ -78,7 +72,6 @@ func NewVolumeReconciler(
 
 	return &VolumeReconciler{
 		log:                 log,
-		conn:                conn,
 		registry:            registry,
 		queue:               workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		snapshotStore:       snapshotStore,
@@ -92,8 +85,7 @@ func NewVolumeReconciler(
 }
 
 type VolumeReconciler struct {
-	log  logr.Logger
-	conn *rados.Conn
+	log logr.Logger
 
 	registry image.Source
 	queue    workqueue.TypedRateLimitingInterface[string]
@@ -167,7 +159,7 @@ const (
 	VolumeFinalizer = "volume"
 )
 
-func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
 	if !slices.Contains(volume.Finalizers, VolumeFinalizer) {
 		log.V(1).Info("volume has no finalizer: done")
 		return nil
@@ -185,11 +177,6 @@ func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, io
 
 func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error {
 	log := logr.FromContextOrDiscard(ctx)
-	ioCtx, err := r.conn.OpenIOContext(r.pool)
-	if err != nil {
-		return fmt.Errorf("unable to get io context: %w", err)
-	}
-	defer ioCtx.Destroy()
 
 	log.V(2).Info("Get volume from store")
 	volume, err := r.volumeStore.Get(ctx, id)
@@ -201,7 +188,7 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 	}
 
 	if volume.DeletedAt != nil {
-		if err := r.deleteVolume(ctx, log, ioCtx, volume); err != nil {
+		if err := r.deleteVolume(ctx, log, volume); err != nil {
 			return fmt.Errorf("failed to delete volume: %w", err)
 		}
 	}
@@ -269,11 +256,11 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 	// ImageRef is empty, need to create the image based on volume source
 	switch {
 	case volume.Spec.Source.OSVolume == nil && volume.Spec.Source.SnapshotSource == nil:
-		return r.reconcileEmptyVolume(ctx, log, ioCtx, volume)
+		return r.reconcileEmptyVolume(ctx, log, volume)
 	case volume.Spec.Source.OSVolume != nil && volume.Spec.Source.SnapshotSource == nil:
-		return r.reconcileOSVolume(ctx, log, ioCtx, volume)
+		return r.reconcileOSVolume(ctx, log, volume)
 	case volume.Spec.Source.OSVolume == nil && volume.Spec.Source.SnapshotSource != nil:
-		return r.reconcileRestoredVolume(ctx, log, ioCtx, volume)
+		return r.reconcileRestoredVolume(ctx, log, volume)
 	default:
 		return fmt.Errorf("invalid volume specification")
 	}
@@ -307,7 +294,7 @@ func (r *VolumeReconciler) populateImage(log logr.Logger, dst io.WriteCloser, sr
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling empty volume")
 
 	// Create new Image
@@ -344,7 +331,7 @@ func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Lo
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling OS volume")
 
 	if volume.Spec.Source.OSVolume == nil {
@@ -498,7 +485,7 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 	return nil
 }
 
-func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
+func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling restored volume from snapshot")
 
 	// Verify snapshot exists
