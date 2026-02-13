@@ -219,6 +219,54 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 		}
 	}
 
+	// If volume already has an ImageRef, check the referenced image's state
+	if volume.Status.ImageRef != "" {
+		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("failed to get image: %w", err)
+		}
+
+		if img != nil {
+			// Image exists, check its state
+			switch img.Status.State {
+			case providerapi.ImageStatePending:
+				log.V(1).Info("Image is pending, requeuing")
+				r.queue.AddAfter(volume.ID, time.Second*60)
+				return nil
+			case providerapi.ImageStateAvailable:
+				if volume.Status.State == providerapi.VolumeStateAvailable {
+					// Volume already marked as available, no need to update
+					return nil
+				}
+				log.V(1).Info("Image is available, updating volume status")
+				volume.Status.State = providerapi.VolumeStateAvailable
+				volume.Status.Size = img.Status.Size
+				if img.Status.Access != nil {
+					volume.Status.Access = &providerapi.VolumeAccess{
+						Monitors: img.Status.Access.Monitors,
+						Handle:   img.Status.Access.Handle,
+						User:     img.Status.Access.User,
+						UserKey:  img.Status.Access.UserKey,
+					}
+				}
+				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+					return fmt.Errorf("failed to update volume status: %w", err)
+				}
+				return nil
+			default:
+				return fmt.Errorf("image %s in unexpected state: %s", img.ID, img.Status.State)
+			}
+		}
+
+		// Image was deleted, clear the ref and proceed to recreate
+		log.V(1).Info("Referenced image not found, clearing ImageRef")
+		volume.Status.ImageRef = ""
+		if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+			return fmt.Errorf("failed to clear image ref: %w", err)
+		}
+	}
+
+	// ImageRef is empty, need to create the image based on volume source
 	switch {
 	case volume.Spec.Source.OSVolume == nil && volume.Spec.Source.SnapshotSource == nil:
 		return r.reconcileEmptyVolume(ctx, log, ioCtx, volume)
@@ -262,36 +310,6 @@ func (r *VolumeReconciler) populateImage(log logr.Logger, dst io.WriteCloser, sr
 func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling empty volume")
 
-	// Check if Image already exists
-	if volume.Status.ImageRef != "" {
-		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("failed to get image: %w", err)
-		}
-		if img != nil {
-			if img.Status.State == providerapi.ImageStateAvailable {
-				log.V(1).Info("Image is available, updating volume status")
-				volume.Status.State = providerapi.VolumeStateAvailable
-				volume.Status.Size = img.Status.Size
-				if img.Status.Access != nil {
-					volume.Status.Access = &providerapi.VolumeAccess{
-						Monitors: img.Status.Access.Monitors,
-						Handle:   img.Status.Access.Handle,
-						User:     img.Status.Access.User,
-						UserKey:  img.Status.Access.UserKey,
-					}
-				}
-				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-					return fmt.Errorf("failed to update volume status: %w", err)
-				}
-			}
-			return nil
-		}
-		// Image was deleted, clear the ref and create a new one
-		log.V(1).Info("Referenced image not found, will create new one")
-		volume.Status.ImageRef = ""
-	}
-
 	// Create new Image
 	log.V(1).Info("Creating image for empty volume")
 	img := &providerapi.Image{
@@ -328,48 +346,6 @@ func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Lo
 
 func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling OS volume")
-
-	// Check if Volume's Image already exists
-	if volume.Status.ImageRef != "" {
-		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("failed to get image: %w", err)
-		}
-		if img != nil {
-			switch img.Status.State {
-			case providerapi.ImageStatePending:
-				// If image is not available, retry later
-				log.V(1).Info("Image is pending, requeuing")
-				// TODO: avoid static wait duration.
-				r.queue.AddAfter(volume.ID, time.Second*60)
-				return nil
-			case providerapi.ImageStateAvailable:
-				if volume.Status.State == providerapi.VolumeStateAvailable {
-					// Avoid unnecessary updates if volume is already marked as available
-					return nil
-				}
-				log.V(1).Info("Image is available, updating volume status")
-				volume.Status.State = providerapi.VolumeStateAvailable
-				volume.Status.Size = img.Status.Size
-				if img.Status.Access != nil {
-					volume.Status.Access = &providerapi.VolumeAccess{
-						Monitors: img.Status.Access.Monitors,
-						Handle:   img.Status.Access.Handle,
-						User:     img.Status.Access.User,
-						UserKey:  img.Status.Access.UserKey,
-					}
-				}
-				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-					return fmt.Errorf("failed to update volume status: %w", err)
-				}
-			default:
-				return fmt.Errorf("image %s in unexpected state: %s", img.ID, img.Status.State)
-			}
-		}
-		// Image was deleted, clear the ref and create a new one
-		log.V(1).Info("Referenced image not found, will create new one")
-		volume.Status.ImageRef = ""
-	}
 
 	if volume.Spec.Source.OSVolume == nil {
 		return fmt.Errorf("OSVolume source is nil")
@@ -524,49 +500,6 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 
 func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, volume *providerapi.Volume) error {
 	log.V(1).Info("Reconciling restored volume from snapshot")
-
-	// Check if Image already exists
-	if volume.Status.ImageRef != "" {
-		img, err := r.imageStore.Get(ctx, volume.Status.ImageRef)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("failed to get image: %w", err)
-		}
-		if img != nil {
-			switch img.Status.State {
-			case providerapi.ImageStatePending:
-				// If image is not available, retry later
-				log.V(1).Info("Image is pending, requeuing")
-				// TODO: avoid static wait duration.
-				r.queue.AddAfter(volume.ID, time.Second*60)
-				return nil
-			case providerapi.ImageStateAvailable:
-				if volume.Status.State == providerapi.VolumeStateAvailable {
-					// Avoid unnecessary updates if volume is already marked as available
-					return nil
-				}
-				log.V(1).Info("Image is available, updating volume status")
-				volume.Status.State = providerapi.VolumeStateAvailable
-				volume.Status.Size = img.Status.Size
-				if img.Status.Access != nil {
-					volume.Status.Access = &providerapi.VolumeAccess{
-						Monitors: img.Status.Access.Monitors,
-						Handle:   img.Status.Access.Handle,
-						User:     img.Status.Access.User,
-						UserKey:  img.Status.Access.UserKey,
-					}
-				}
-				if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-					return fmt.Errorf("failed to update volume status: %w", err)
-				}
-			default:
-				return fmt.Errorf("image %s in unexpected state: %s", img.ID, img.Status.State)
-			}
-			return nil
-		}
-		// Image was deleted, clear the ref and create a new one
-		log.V(1).Info("Referenced image not found, will create new one")
-		volume.Status.ImageRef = ""
-	}
 
 	// Verify snapshot exists
 	if volume.Spec.Source.SnapshotSource == nil {
