@@ -24,6 +24,7 @@ const (
 	ImageSnapshotVersion = "v1"
 )
 
+// TODO remove/check if needed
 func ImageIDToRBDID(imageID string) string {
 	return ImageRBDIDPrefix + imageID
 }

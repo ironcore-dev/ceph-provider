@@ -10,9 +10,20 @@ import (
 type Snapshot struct {
 	apiutils.Metadata `json:"metadata,omitempty"`
 
-	Source SnapshotSource `json:"source"`
-
+	Spec   SnapshotSpec   `json:"spec"`
 	Status SnapshotStatus `json:"status"`
+}
+
+type SnapshotProtection string
+
+const (
+	SnapshotProtectionNone      SnapshotProtection = "none"
+	SnapshotProtectionProtected SnapshotProtection = "protected"
+)
+
+type SnapshotSpec struct {
+	ImageRef   string             `json:"imageRef"`
+	Protection SnapshotProtection `json:"protection"`
 }
 
 type SnapshotState string
@@ -28,9 +39,4 @@ type SnapshotStatus struct {
 	State  SnapshotState `json:"state"`
 	Digest string        `json:"digest"`
 	Size   int64         `json:"size"`
-}
-
-type SnapshotSource struct {
-	IronCoreImage string `json:"ironcoreImage"`
-	VolumeImageID string `json:"volumeImageId"`
 }
