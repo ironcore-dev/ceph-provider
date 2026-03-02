@@ -249,21 +249,35 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
-	// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
-	// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
-	if snapshot.Status.State == providerapi.SnapshotStatePopulated {
-		log.V(1).Info("Snapshot already populated")
-		snapshot.Status.State = providerapi.SnapshotStateReady
-		if _, err = r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to update snapshot: %w", err)
+	imageExists := false
+	log.V(2).Info("Check if snapshot image already exist")
+	if snapshot.Source.IronCoreImage != "" {
+		imageExists, err = isRbdImageExisting(ioCtx, SnapshotIDToRBDID(snapshot.ID))
+	} else if snapshot.Source.VolumeImageID != "" {
+		imageExists, err = snapshotExists(log, ioCtx, ImageIDToRBDID(snapshot.Source.VolumeImageID), snapshot.ID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to check if snapshot exists: %w", err)
+	}
+	log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
+
+	if imageExists {
+		// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
+		// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
+		if snapshot.Status.State == providerapi.SnapshotStatePopulated {
+			log.V(1).Info("Snapshot already populated")
+			snapshot.Status.State = providerapi.SnapshotStateReady
+			if _, err = r.store.Update(ctx, snapshot); err != nil {
+				return fmt.Errorf("failed to update snapshot: %w", err)
+			}
+
+			return nil
 		}
 
-		return nil
-	}
-
-	if snapshot.Status.State == providerapi.SnapshotStateReady {
-		log.V(1).Info("Snapshot is ready")
-		return nil
+		if snapshot.Status.State == providerapi.SnapshotStateReady {
+			log.V(1).Info("Snapshot is ready")
+			return nil
+		}
 	}
 
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
@@ -325,20 +339,24 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	}
 	log.V(2).Info("Configured pool", "pool", r.pool)
 
-	imageName := SnapshotIDToRBDID(snapshot.ID)
+	rbdImageID := SnapshotIDToRBDID(snapshot.ID)
 	roundedSize := round.OffBytes(snapshotSize)
-	if err = librbd.CreateImage(ioCtx, imageName, roundedSize, options); err != nil {
-		return fmt.Errorf("failed to create os rbd image: %w", err)
-	}
-	log.V(2).Info("Created rbd image", "bytes", roundedSize)
 
-	if err := r.prepareSnapshotContent(log, ioCtx, imageName, rc); err != nil {
+	rbdImg, err := openImage(ioCtx, rbdImageID)
+	if errors.Is(err, librbd.ErrNotFound) {
+		if err = librbd.CreateImage(ioCtx, rbdImageID, roundedSize, options); err != nil {
+			return fmt.Errorf("failed to create os rbd image: %w", err)
+		}
+		log.V(2).Info("Created rbd image", "bytes", roundedSize)
+		rbdImg, err = openImage(ioCtx, rbdImageID)
+	}
+	if err != nil {
+		return err
+	}
+	defer closeImage(log, rbdImg)
+
+	if err := r.prepareSnapshotContent(log, ioCtx, rbdImg, rc); err != nil {
 		return fmt.Errorf("failed to prepare snapshot content: %w", err)
-	}
-
-	log.V(2).Info("Create ironcore image snapshot", "ImageID", imageName)
-	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
-		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
 	}
 
 	snapshot.Status.Digest = digest
@@ -393,17 +411,27 @@ func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageR
 	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
 }
 
-func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {
-	rbdImg, err := openImage(ioCtx, imageName)
-	if err != nil {
-		return err
+func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, rbdImg *librbd.Image, rc io.ReadCloser) error {
+	rbdImageID := rbdImg.GetName()
+	currentSnap := rbdImg.GetSnapshot(ImageSnapshotVersion)
+	if isProtected, err := currentSnap.IsProtected(); err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to check if snapshot %s is protected: %w", ImageSnapshotVersion, err)
+		}
+	} else if isProtected {
+		log.V(2).Info("Snapshot already exists and is protected, skipping creation and protection.", "snapshotName", ImageSnapshotVersion)
+		return nil
 	}
-	defer closeImage(log, rbdImg)
 
 	if err := r.populateImage(log, rbdImg, rc); err != nil {
 		return fmt.Errorf("failed to populate os image: %w", err)
 	}
 	log.V(2).Info("Populated os image on rbd image")
+
+	log.V(2).Info("Create ironcore image snapshot", "ImageID", rbdImageID)
+	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, rbdImageID); err != nil {
+		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
+	}
 
 	return nil
 }

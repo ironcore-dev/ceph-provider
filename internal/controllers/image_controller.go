@@ -742,13 +742,30 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		}
 
 		log.V(1).Info("snapshot not found", "snapshotID", snapshotRef)
-
 		return false, nil
 	}
 
 	if snapshot.Status.State != providerapi.SnapshotStateReady && snapshot.Status.State != providerapi.SnapshotStatePopulated {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
+	}
+
+	if image.Spec.Image != "" {
+		log.V(2).Info("Check if snapshot rbd image already exist")
+		imageExists, err := isRbdImageExisting(ioCtx, SnapshotIDToRBDID(snapshotRef))
+		if err != nil {
+			return false, fmt.Errorf("failed to check snapshot rbd image existence: %w", err)
+		}
+		log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
+
+		if !imageExists && snapshot.Status.State == providerapi.SnapshotStateReady {
+			log.V(1).Info("Snapshot rbd image does not exist. Mark snapshot as failed to trigger rbd image creation in next reconciliation loop")
+			snapshot.Status.State = providerapi.SnapshotStateFailed
+			if _, err := r.snapshots.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+				return false, fmt.Errorf("failed to update snapshot to trigger rbd image creation: %w", err)
+			}
+			return false, nil
+		}
 	}
 
 	parentName, snapName, err := getSnapshotSourceDetails(snapshot)
