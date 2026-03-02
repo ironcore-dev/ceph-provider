@@ -168,11 +168,23 @@ func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, s
 	}
 	defer closeImage(log, img)
 
-	if _, err = img.GetSnapID(snapshotName); err != nil {
-		if errors.Is(err, librbd.ErrNotFound) {
-			return false, nil
+	snapshot := img.GetSnapshot(snapshotName)
+	if isProtected, err := snapshot.IsProtected(); err != nil {
+		if !errors.Is(err, librbd.ErrNotFound) {
+			return false, fmt.Errorf("failed to check if snapshot %s is protected: %w", snapshotName, err)
 		}
-		return false, fmt.Errorf("failed to get snapshot ID: %w", err)
+		return false, nil // Snapshot doesn't exist
+	} else if isProtected {
+		log.V(2).Info("Snapshot already exists and is protected, skipping protection.", "snapshotName", snapshotName)
+	} else {
+		// Snapshot exists but not protected - just protect it
+		log.V(2).Info("Snapshot exists but is not protected, protecting it", "snapshotName", snapshotName)
+		if err := snapshot.Protect(); err != nil {
+			return false, fmt.Errorf("unable to protect existing snapshot %s: %w", snapshotName, err)
+		}
+		if err := img.SetSnapshot(snapshotName); err != nil {
+			return false, fmt.Errorf("failed to set snapshot %s for image %s: %w", snapshotName, imageName, err)
+		}
 	}
 	return true, nil
 }

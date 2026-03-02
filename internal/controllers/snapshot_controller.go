@@ -250,16 +250,16 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	imageExists := false
-	log.V(2).Info("Check if snapshot image already exist")
 	if snapshot.Source.IronCoreImage != "" {
+		log.V(2).Info("Check if snapshot image already exist")
 		imageExists, err = isRbdImageExisting(ioCtx, SnapshotIDToRBDID(snapshot.ID))
+		if err != nil {
+			return fmt.Errorf("failed to check if snapshot exists: %w", err)
+		}
+		log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
 	} else if snapshot.Source.VolumeImageID != "" {
-		imageExists, err = snapshotExists(log, ioCtx, ImageIDToRBDID(snapshot.Source.VolumeImageID), snapshot.ID)
+		imageExists = true
 	}
-	if err != nil {
-		return fmt.Errorf("failed to check if snapshot exists: %w", err)
-	}
-	log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
 
 	if imageExists {
 		// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
@@ -373,6 +373,10 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 		return nil
 	}
 
+	if isSnapshotExist, err := snapshotExists(log, ioCtx, img.GetID(), snapshot.ID); err == nil && isSnapshotExist {
+		return nil
+	}
+
 	log.V(2).Info("Create volume image snapshot", "ImageID", img.ID)
 	if err := createSnapshot(log, ioCtx, snapshot.ID, ImageIDToRBDID(img.ID)); err != nil {
 		return fmt.Errorf("failed to create volume image snapshot: %w", err)
@@ -413,13 +417,7 @@ func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageR
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, rbdImg *librbd.Image, rc io.ReadCloser) error {
 	rbdImageID := rbdImg.GetName()
-	currentSnap := rbdImg.GetSnapshot(ImageSnapshotVersion)
-	if isProtected, err := currentSnap.IsProtected(); err != nil {
-		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to check if snapshot %s is protected: %w", ImageSnapshotVersion, err)
-		}
-	} else if isProtected {
-		log.V(2).Info("Snapshot already exists and is protected, skipping creation and protection.", "snapshotName", ImageSnapshotVersion)
+	if isSnapshotExist, err := snapshotExists(log, ioCtx, rbdImageID, ImageSnapshotVersion); err == nil && isSnapshotExist {
 		return nil
 	}
 
