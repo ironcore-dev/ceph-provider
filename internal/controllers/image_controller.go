@@ -269,7 +269,7 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
 
-		if isSnapshotExist, err := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); err != nil {
+		if isSnapshotExist, err := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); err != nil && !errors.Is(err, librbd.ErrNotFound) {
 			return fmt.Errorf("failed to check if snapshot %s exists: %w", snapName, err)
 		} else if isSnapshotExist {
 			log.V(2).Info("Snapshot of cloned image is already created")
