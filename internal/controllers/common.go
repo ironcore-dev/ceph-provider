@@ -6,7 +6,6 @@ package controllers
 import (
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
@@ -173,9 +172,9 @@ func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, s
 		if !errors.Is(err, librbd.ErrNotFound) {
 			return false, fmt.Errorf("failed to check if snapshot %s is protected: %w", snapshotName, err)
 		}
-		return false, nil // Snapshot doesn't exist
+		return false, err // Snapshot doesn't exist
 	} else if isProtected {
-		log.V(2).Info("Snapshot already exists and is protected, skipping protection.", "snapshotName", snapshotName)
+		log.V(2).Info("Snapshot already exists and is protected", "snapshotName", snapshotName)
 	} else {
 		// Snapshot exists but not protected - just protect it
 		log.V(2).Info("Snapshot exists but is not protected, protecting it", "snapshotName", snapshotName)
@@ -187,17 +186,4 @@ func snapshotExists(log logr.Logger, ioCtx *rados.IOContext, imageName string, s
 		}
 	}
 	return true, nil
-}
-
-func isRbdImageExisting(ioCtx *rados.IOContext, imageID string) (bool, error) {
-	images, err := librbd.GetImageNames(ioCtx)
-	if err != nil {
-		return false, fmt.Errorf("failed to list images: %w", err)
-	}
-
-	if slices.Contains(images, imageID) {
-		return true, nil
-	}
-
-	return false, nil
 }

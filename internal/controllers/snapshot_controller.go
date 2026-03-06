@@ -249,19 +249,29 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
-	imageExists := false
-	if snapshot.Source.IronCoreImage != "" {
-		log.V(2).Info("Check if snapshot image already exist")
-		imageExists, err = isRbdImageExisting(ioCtx, SnapshotIDToRBDID(snapshot.ID))
-		if err != nil {
-			return fmt.Errorf("failed to check if snapshot exists: %w", err)
+	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
+		snapshot.Finalizers = append(snapshot.Finalizers, SnapshotFinalizer)
+		if _, err := r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to set finalizers: %w", err)
 		}
-		log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
-	} else if snapshot.Source.VolumeImageID != "" {
-		imageExists = true
 	}
 
-	if imageExists {
+	rbdID, snapshotID, err := getSnapshotSourceDetails(snapshot)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot source details: %w", err)
+	}
+
+	log.V(2).Info("Check if rbd snapshot exists")
+	isSnapshotExist, err := snapshotExists(log, ioCtx, rbdID, snapshotID)
+	if err != nil && !errors.Is(err, librbd.ErrNotFound) {
+		snapshot.Status.State = providerapi.SnapshotStateFailed
+		if _, err = r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to update snapshot: %w", err)
+		}
+		return fmt.Errorf("failed to check snapshot existence: %w", err)
+	}
+
+	if isSnapshotExist {
 		// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
 		// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
 		if snapshot.Status.State == providerapi.SnapshotStatePopulated {
@@ -270,7 +280,6 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 			if _, err = r.store.Update(ctx, snapshot); err != nil {
 				return fmt.Errorf("failed to update snapshot: %w", err)
 			}
-
 			return nil
 		}
 
@@ -278,29 +287,27 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 			log.V(1).Info("Snapshot is ready")
 			return nil
 		}
-	}
-
-	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
-		snapshot.Finalizers = append(snapshot.Finalizers, SnapshotFinalizer)
-		if _, err := r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to set finalizers: %w", err)
+	} else {
+		log.V(1).Info("Rbd snapshot does not exist, start reconciliation")
+		switch {
+		case snapshot.Source.IronCoreImage != "":
+			err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
+		case snapshot.Source.VolumeImageID != "":
+			if snapshot.Status.State == providerapi.SnapshotStateFailed {
+				log.V(1).Info("Skipping snapshot creation", "reason", "Snapshot is failed after creation due to missing rbd snapshot")
+				return nil
+			}
+			err = r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot)
+		default:
+			return fmt.Errorf("snapshot source not found")
 		}
-	}
-
-	switch {
-	case snapshot.Source.IronCoreImage != "":
-		err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
-	case snapshot.Source.VolumeImageID != "":
-		err = r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot)
-	default:
-		return fmt.Errorf("snapshot source not found")
-	}
-	if err != nil {
-		snapshot.Status.State = providerapi.SnapshotStateFailed
-		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
-			return errors.Join(err, fmt.Errorf("failed to update snapshot state: %w", updateErr))
+		if err != nil {
+			snapshot.Status.State = providerapi.SnapshotStateFailed
+			if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
+				return errors.Join(err, fmt.Errorf("failed to update snapshot state: %w", updateErr))
+			}
+			return fmt.Errorf("failed to reconcile snapshot: %w", err)
 		}
-		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
 
 	snapshot.Status.State = providerapi.SnapshotStateReady
@@ -373,10 +380,6 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 		return nil
 	}
 
-	if isSnapshotExist, err := snapshotExists(log, ioCtx, img.GetID(), snapshot.ID); err == nil && isSnapshotExist {
-		return nil
-	}
-
 	log.V(2).Info("Create volume image snapshot", "ImageID", img.ID)
 	if err := createSnapshot(log, ioCtx, snapshot.ID, ImageIDToRBDID(img.ID)); err != nil {
 		return fmt.Errorf("failed to create volume image snapshot: %w", err)
@@ -417,9 +420,6 @@ func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageR
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, rbdImg *librbd.Image, rc io.ReadCloser) error {
 	rbdImageID := rbdImg.GetName()
-	if isSnapshotExist, err := snapshotExists(log, ioCtx, rbdImageID, ImageSnapshotVersion); err == nil && isSnapshotExist {
-		return nil
-	}
 
 	if err := r.populateImage(log, rbdImg, rc); err != nil {
 		return fmt.Errorf("failed to populate os image: %w", err)

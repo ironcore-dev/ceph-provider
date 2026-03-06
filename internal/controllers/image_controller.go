@@ -269,7 +269,10 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 			return fmt.Errorf("failed to create snapshot clone: %w", err)
 		}
 
-		if isSnapshotExist, err := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); err == nil && isSnapshotExist {
+		if isSnapshotExist, err := snapshotExists(log, ioCtx, ImageIDToRBDID(snapName), snapName); err != nil {
+			return fmt.Errorf("failed to check if snapshot %s exists: %w", snapName, err)
+		} else if isSnapshotExist {
+			log.V(2).Info("Snapshot of cloned image is already created")
 			continue
 		}
 
@@ -746,28 +749,23 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	if image.Spec.Image != "" {
-		log.V(2).Info("Check if snapshot rbd image already exist")
-		imageExists, err := isRbdImageExisting(ioCtx, SnapshotIDToRBDID(snapshotRef))
-		if err != nil {
-			return false, fmt.Errorf("failed to check snapshot rbd image existence: %w", err)
-		}
-		log.V(1).Info("Checked snapshot rbd image existence", "imageExists", imageExists)
-
-		if !imageExists && snapshot.Status.State == providerapi.SnapshotStateReady {
-			log.V(1).Info("Snapshot rbd image does not exist. Mark snapshot as failed to trigger rbd image creation in next reconciliation loop")
-			snapshot.Status.State = providerapi.SnapshotStateFailed
-			if _, err := r.snapshots.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-				return false, fmt.Errorf("failed to update snapshot to trigger rbd image creation: %w", err)
-			}
-			return false, nil
-		}
-	}
-
 	parentName, snapName, err := getSnapshotSourceDetails(snapshot)
 	if err != nil {
 		return false, fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
+
+	log.V(2).Info("Check if rbd snapshot exists")
+	if isSnapshotExist, err := snapshotExists(log, ioCtx, parentName, snapName); err != nil && !errors.Is(err, librbd.ErrNotFound) {
+		return false, fmt.Errorf("failed to check volume image snapshot existence: %w", err)
+	} else if !isSnapshotExist && snapshot.Status.State == providerapi.SnapshotStateReady {
+		log.V(1).Info("Rbd snapshot does not exist. Mark snapshot as failed", "snapshotName", snapName)
+		snapshot.Status.State = providerapi.SnapshotStateFailed
+		if _, err := r.snapshots.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+			return false, fmt.Errorf("failed to update snapshot state: %w", err)
+		}
+		return false, nil
+	}
+	log.V(2).Info("Rbd snapshot exists", "snapshotName", snapName)
 
 	ioCtx2, err := r.conn.OpenIOContext(r.pool)
 	if err != nil {
