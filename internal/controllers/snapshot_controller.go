@@ -288,6 +288,12 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return fmt.Errorf("failed to reconcile snapshot: %w", err)
 	}
 
+	// Return early if ironcore image snapshot is being populated asynchronously. The async populate
+	// worker will transition it to Ready after population completes.
+	if snapshot.Status.State == providerapi.SnapshotStatePopulating {
+		return nil
+	}
+
 	snapshot.Status.State = providerapi.SnapshotStateReady
 	if _, err = r.store.Update(ctx, snapshot); err != nil {
 		return fmt.Errorf("failed to update snapshot: %w", err)
@@ -331,17 +337,10 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	}
 	log.V(2).Info("Created rbd image", "bytes", roundedSize)
 
-	// Set digest and size before enqueuing for population
 	snapshot.Status.Digest = digest
 	snapshot.Status.Size = int64(roundedSize)
 	if _, err := r.store.Update(ctx, snapshot); err != nil {
 		return fmt.Errorf("failed to update snapshot: %w", err)
-	}
-
-	// Create snapshot before population
-	log.V(2).Info("Create ironcore image snapshot", "ImageID", imageName)
-	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
-		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
 	}
 
 	// Enqueue for async population instead of blocking

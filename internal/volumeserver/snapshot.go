@@ -52,6 +52,8 @@ func (s *Server) getIriSnapshotState(state api.SnapshotState) (iri.VolumeSnapsho
 		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_READY, nil
 	case api.SnapshotStatePending:
 		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_PENDING, nil
+	case api.SnapshotStatePopulating, api.SnapshotStateFlattening:
+		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_PENDING, nil
 	case api.SnapshotStateFailed:
 		return iri.VolumeSnapshotState_VOLUME_SNAPSHOT_FAILED, nil
 	default:

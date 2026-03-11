@@ -90,9 +90,6 @@ func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapsh
 	}
 
 	if len(childImgs) == 0 {
-		if err := img.Close(); err != nil {
-			log.Error(err, "Failed to close image")
-		}
 
 		// Remove RBD snapshot
 		cleanupIoCtx, err := r.conn.OpenIOContext(r.pool)
@@ -105,16 +102,20 @@ func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapsh
 
 		cleanupImg, err := librbd.OpenImage(cleanupIoCtx, rbdID, snapshotIDName)
 		if err != nil {
-			if !errors.Is(err, librbd.ErrNotFound) {
+			if errors.Is(err, librbd.ErrNotFound) {
+				// Image already gone, safe to skip cleanup and remove finalizer
+				log.V(2).Info("RBD image not found, already deleted")
+			} else {
+				// Error opening image - retry later, don't remove finalizer yet
 				log.Error(err, "Failed to open image for cleanup")
 				r.flattenQueue.AddRateLimited(snapshotID)
+				return
 			}
 		} else {
-			defer closeImage(log, cleanupImg)
-
 			rbdSnapshot := cleanupImg.GetSnapshot(snapshotIDName)
 			if err := removeSnapshot(rbdSnapshot); err != nil {
 				log.Error(err, "Failed to remove snapshot")
+				closeImage(log, cleanupImg)
 				r.flattenQueue.AddRateLimited(snapshotID)
 				return
 			}
@@ -122,9 +123,7 @@ func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapsh
 
 			if snapshot.Source.IronCoreImage != "" {
 				log.V(2).Info("Remove ironcore os-image")
-				if err := cleanupImg.Close(); err != nil {
-					log.Error(err, "Failed to close image")
-				}
+				closeImage(log, cleanupImg)
 
 				if err := librbd.RemoveImage(cleanupIoCtx, rbdID); err != nil {
 					log.Error(err, "Failed to remove ironcore os-image")
@@ -132,6 +131,8 @@ func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapsh
 					return
 				}
 				log.V(2).Info("Ironcore os-image removed")
+			} else {
+				closeImage(log, cleanupImg)
 			}
 		}
 
@@ -155,15 +156,12 @@ func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapsh
 		return
 	}
 
+	log.V(2).Info("Flattening child image", "child", childImgs[0], "remaining", len(childImgs)-1)
 	err = flattenImage(log, r.conn, pools[0], childImgs[0])
 	if err != nil {
 		log.Error(err, "Failed to flatten child", "child", childImgs[0])
 		r.flattenQueue.AddRateLimited(snapshotID)
 		return
-	}
-
-	if _, err := r.store.Update(ctx, snapshot); err != nil {
-		log.Error(err, "Failed to update snapshot")
 	}
 
 	r.flattenQueue.Add(snapshotID)
@@ -222,6 +220,25 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 	}
 	defer ioCtx.Destroy()
 
+	// If the Ceph snapshot already exists, population completed previously (e.g. controller restart
+	// or status update failure). Skip re-populating and just try to advance status to Ready.
+	imageName := SnapshotIDToRBDID(snapshot.ID)
+	exists, err := snapshotExists(log, ioCtx, imageName, ImageSnapshotVersion)
+	if err != nil {
+		log.Error(err, "Failed to check snapshot existence")
+		r.populateQueue.AddRateLimited(snapshotID)
+		return
+	}
+	if exists {
+		snapshot.Status.State = providerapi.SnapshotStateReady
+		if _, err := r.store.Update(ctx, snapshot); err != nil {
+			log.Error(err, "Failed to update snapshot state to Ready")
+			r.populateQueue.AddRateLimited(snapshotID)
+			return
+		}
+		return
+	}
+
 	rc, err := r.getImageSourceForSnapshot(ctx, snapshot)
 	if err != nil {
 		log.Error(err, "Failed to get image source")
@@ -230,20 +247,36 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 	}
 	defer rc.Close()
 
-	imageName := SnapshotIDToRBDID(snapshot.ID)
 	err = r.prepareSnapshotContent(log, ioCtx, imageName, rc)
 	if err != nil {
 		log.Error(err, "Failed to populate image")
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, err := r.store.Update(ctx, snapshot); err != nil {
 			log.Error(err, "Failed to update snapshot after population failure")
+			r.populateQueue.AddRateLimited(snapshotID)
+			return
 		}
 		return
+	}
+
+	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
+		// Treat "already exists" as success to keep this step idempotent across retries/restarts.
+		exists, existsErr := snapshotExists(log, ioCtx, imageName, ImageSnapshotVersion)
+		if existsErr != nil {
+			log.Error(existsErr, "Failed to check snapshot existence after createSnapshot error")
+		}
+		if !exists {
+			log.Error(err, "Failed to create ironcore image snapshot after population")
+			r.populateQueue.AddRateLimited(snapshotID)
+			return
+		}
 	}
 
 	snapshot.Status.State = providerapi.SnapshotStateReady
 	if _, err := r.store.Update(ctx, snapshot); err != nil {
 		log.Error(err, "Failed to update snapshot")
+		r.populateQueue.AddRateLimited(snapshotID)
+		return
 	}
 }
 
@@ -279,20 +312,19 @@ func (r *SnapshotReconciler) reconcileFlattening(ctx context.Context, log logr.L
 		return fmt.Errorf("unable to list children: %w", err)
 	}
 
-	if len(childImgs) == 0 {
-		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-		if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to update snapshot metadata: %w", err)
-		}
-		log.V(2).Info("Removed snapshot finalizer")
-		return nil
-	}
-
 	if snapshot.Status.State != providerapi.SnapshotStateFlattening {
 		snapshot.Status.State = providerapi.SnapshotStateFlattening
 		if _, err := r.store.Update(ctx, snapshot); err != nil {
 			return fmt.Errorf("failed to update snapshot: %w", err)
 		}
+	}
+
+	if len(childImgs) == 0 {
+		// No children means flattening is already complete. Still, we must run the async
+		// cleanup (remove RBD snapshot / backing image, remove finalizer, etc.).
+		// Delegate to the flatten worker to keep all cleanup logic in one place.
+		r.flattenQueue.Add(snapshot.ID)
+		return nil
 	}
 
 	r.flattenQueue.Add(snapshot.ID)
