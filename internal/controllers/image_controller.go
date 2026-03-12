@@ -771,7 +771,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		}
 	}
 	if !isSnapshotExist {
-		log.V(1).Info("Rbd snapshot does not exist or not protected. Mark snapshot as failed", "snapshotName", snapName)
+		log.V(1).Info("Rbd snapshot does not exist. Mark snapshot as failed", "snapshotName", snapName)
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, err := r.snapshots.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
 			return false, fmt.Errorf("failed to update snapshot state: %w", err)
