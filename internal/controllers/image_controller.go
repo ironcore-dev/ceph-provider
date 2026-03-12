@@ -750,6 +750,11 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
+	if snapshot.Status.Size > int64(image.Spec.Size) {
+		r.Eventf(image.Metadata, corev1.EventTypeWarning, "ImageSizeIsSmallerThanSnapshotSize", "image %s size is smaller than snapshot size: %d < %d", image.ID, image.Spec.Size, snapshot.Status.Size)
+		return false, fmt.Errorf("image %s size is smaller than snapshot size: (%d < %d)", image.ID, image.Spec.Size, snapshot.Status.Size)
+	}
+
 	if snapshot.Status.State != providerapi.SnapshotStateReady && snapshot.Status.State != providerapi.SnapshotStatePopulated {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
