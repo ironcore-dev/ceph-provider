@@ -769,7 +769,6 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		if err := protectSnapshot(log, ioCtx, parentName, snapName); err != nil {
 			return false, fmt.Errorf("failed to protect snapshot %s: %w", snapName, err)
 		}
-		isSnapshotProtected = true
 	}
 	if !isSnapshotExist {
 		log.V(1).Info("Rbd snapshot does not exist or not protected. Mark snapshot as failed", "snapshotName", snapName)
