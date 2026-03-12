@@ -603,7 +603,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		switch {
 		case img.Spec.SnapshotRef != nil:
 			snapshotRef := img.Spec.SnapshotRef
-			log.V(2).Info("Creating image from snapshot", "snapshotId", snapshotRef)
+			log.V(2).Info("Creating image from snapshot", "snapshotId", *snapshotRef)
 			ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
 			if err != nil {
 				return fmt.Errorf("failed to create image from snapshot: %w", err)
@@ -764,7 +764,14 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	isSnapshotExist, isSnapshotProtected, err := snapshotExistsAndProtected(log, ioCtx, parentName, snapName)
 	if err != nil && !errors.Is(err, librbd.ErrNotFound) {
 		return false, fmt.Errorf("failed to check volume image snapshot existence: %w", err)
-	} else if !isSnapshotExist || !isSnapshotProtected {
+	}
+	if isSnapshotExist && !isSnapshotProtected {
+		if err := protectSnapshot(log, ioCtx, parentName, snapName); err != nil {
+			return false, fmt.Errorf("failed to protect snapshot %s: %w", snapName, err)
+		}
+		isSnapshotProtected = true
+	}
+	if !isSnapshotExist {
 		log.V(1).Info("Rbd snapshot does not exist or not protected. Mark snapshot as failed", "snapshotName", snapName)
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, err := r.snapshots.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
