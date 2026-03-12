@@ -262,16 +262,23 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	log.V(2).Info("Check if rbd snapshot exists")
-	isSnapshotExist, err := snapshotExists(log, ioCtx, rbdID, snapshotID)
+	isSnapshotExist, isSnapshotProtected, err := snapshotExistsAndProtected(log, ioCtx, rbdID, snapshotID)
 	if err != nil && !errors.Is(err, librbd.ErrNotFound) {
 		snapshot.Status.State = providerapi.SnapshotStateFailed
-		if _, err = r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to update snapshot: %w", err)
+		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
+			return errors.Join(fmt.Errorf("failed to update snapshot: %w", updateErr))
 		}
 		return fmt.Errorf("failed to check snapshot existence: %w", err)
 	}
 
 	if isSnapshotExist {
+		if !isSnapshotProtected {
+			// Snapshot exists but not protected - just protect it
+			if err := protectSnapshot(log, ioCtx, rbdID, snapshotID); err != nil {
+				return fmt.Errorf("failed to protect snapshot: %w", err)
+			}
+		}
+
 		// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
 		// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
 		if snapshot.Status.State == providerapi.SnapshotStatePopulated {
@@ -294,7 +301,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 			err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
 		case snapshot.Source.VolumeImageID != "":
 			if snapshot.Status.State == providerapi.SnapshotStateFailed {
-				log.V(1).Info("Skipping snapshot creation", "reason", "Snapshot is failed after creation due to missing rbd snapshot")
+				log.V(1).Info("Skipping snapshot creation: source volume RBD image snapshot was deleted, snapshot cannot be recreated")
 				return nil
 			}
 			err = r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot)
