@@ -266,7 +266,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	if err != nil && !errors.Is(err, librbd.ErrNotFound) {
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
-			return errors.Join(fmt.Errorf("failed to update snapshot: %w", updateErr))
+			return errors.Join(err, fmt.Errorf("failed to update snapshot: %w", updateErr))
 		}
 		return fmt.Errorf("failed to check snapshot existence: %w", err)
 	}
