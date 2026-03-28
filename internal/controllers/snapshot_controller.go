@@ -35,6 +35,7 @@ type SnapshotReconcilerOptions struct {
 func NewSnapshotReconciler(
 	log logr.Logger,
 	conn *rados.Conn,
+	registry image.Source,
 	store store.Store[*providerapi.Snapshot],
 	images store.Store[*providerapi.Image],
 	events event.Source[*providerapi.Snapshot],
@@ -42,6 +43,10 @@ func NewSnapshotReconciler(
 ) (*SnapshotReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
+	}
+
+	if registry == nil {
+		return nil, fmt.Errorf("must specify registry")
 	}
 
 	if store == nil {
@@ -71,6 +76,7 @@ func NewSnapshotReconciler(
 	return &SnapshotReconciler{
 		log:                 log,
 		conn:                conn,
+		registry:            registry,
 		queue:               workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		store:               store,
 		images:              images,
@@ -82,9 +88,11 @@ func NewSnapshotReconciler(
 }
 
 type SnapshotReconciler struct {
-	log   logr.Logger
-	conn  *rados.Conn
-	queue workqueue.TypedRateLimitingInterface[string]
+	log  logr.Logger
+	conn *rados.Conn
+
+	registry image.Source
+	queue    workqueue.TypedRateLimitingInterface[string]
 
 	store  store.Store[*providerapi.Snapshot]
 	images store.Store[*providerapi.Image]
@@ -151,6 +159,39 @@ func (r *SnapshotReconciler) processNextWorkItem(ctx context.Context, log logr.L
 const (
 	SnapshotFinalizer = "snapshot"
 )
+
+func (r *SnapshotReconciler) removeSnapshot(log logr.Logger, snapshotID string, img *librbd.Image) error {
+	log.V(2).Info("Remove snapshot")
+
+	pools, imgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list children: %w", err)
+	}
+	log.V(2).Info("Snapshot references", "pools", len(pools), "rbd-images", len(imgs))
+
+	if len(pools) != 0 || len(imgs) != 0 {
+		return fmt.Errorf("unable to delete snapshot: still in use")
+	}
+
+	snapshot := img.GetSnapshot(snapshotID)
+	isProtected, err := snapshot.IsProtected()
+	if err != nil {
+		return fmt.Errorf("unable to check if snapshot is protected: %w", err)
+	}
+
+	if isProtected {
+		if err := snapshot.Unprotect(); err != nil {
+			return fmt.Errorf("unable to unprotect snapshot: %w", err)
+		}
+	}
+
+	if err := snapshot.Remove(); err != nil {
+		return fmt.Errorf("unable to remove snapshot: %w", err)
+	}
+	log.V(2).Info("Snapshot Removed")
+
+	return nil
+}
 
 func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
@@ -367,10 +408,12 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
 	osImgSrc, err := createOsImageSource(platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to create os image source: %w", err)
+		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
+	defer closeImage(log, rbdImg)
 
-	img, err := osImgSrc.Resolve(ctx, imageReference)
+	snapshotName := snapshot.ID
+	imgSnap, err := rbdImg.CreateSnapshot(snapshotName)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
@@ -402,6 +445,9 @@ func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rado
 
 	if err := r.populateImage(log, rbdImg, rc); err != nil {
 		return fmt.Errorf("failed to populate os image: %w", err)
+	snapshot.Status.State = providerapi.SnapshotStateReady
+	if _, err = r.store.Update(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to update snapshot: %w", err)
 	}
 	log.V(2).Info("Populated os image on rbd image")
 

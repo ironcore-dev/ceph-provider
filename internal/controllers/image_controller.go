@@ -46,6 +46,7 @@ type ImageReconcilerOptions struct {
 func NewImageReconciler(
 	log logr.Logger,
 	conn *rados.Conn,
+	registry image.Source,
 	images store.Store[*providerapi.Image],
 	snapshots store.Store[*providerapi.Snapshot],
 	eventRecorder eventrecorder.EventRecorder,
@@ -56,6 +57,10 @@ func NewImageReconciler(
 ) (*ImageReconciler, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
+	}
+
+	if registry == nil {
+		return nil, fmt.Errorf("must specify registry")
 	}
 
 	if images == nil {
@@ -97,6 +102,7 @@ func NewImageReconciler(
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
+		registry:       registry,
 		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		images:         images,
 		snapshots:      snapshots,
@@ -115,7 +121,8 @@ type ImageReconciler struct {
 	log  logr.Logger
 	conn *rados.Conn
 
-	queue workqueue.TypedRateLimitingInterface[string]
+	registry image.Source
+	queue    workqueue.TypedRateLimitingInterface[string]
 
 	images    store.Store[*providerapi.Image]
 	snapshots store.Store[*providerapi.Snapshot]
@@ -492,7 +499,7 @@ func (r *ImageReconciler) isImageExisting(ioCtx *rados.IOContext, imageID string
 	}
 
 	for _, img := range images {
-		if ImageIDToRBDID(imageID) == img {
+		if ImageIDToRBDID(image.ID) == img {
 			return true, nil
 		}
 	}
@@ -502,9 +509,9 @@ func (r *ImageReconciler) isImageExisting(ioCtx *rados.IOContext, imageID string
 
 func (r *ImageReconciler) updateImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) (err error) {
 	log.V(2).Info("Updating image")
-	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open image: %w", err)
 	}
 	defer closeImage(log, img)
 
@@ -596,8 +603,8 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 		log.V(2).Info("Configured pool", "pool", r.pool)
 
 		switch {
-		case img.Spec.SnapshotRef != nil:
-			snapshotRef := img.Spec.SnapshotRef
+		case img.Spec.SnapshotSource != nil:
+			snapshotRef := img.Spec.SnapshotSource
 			log.V(2).Info("Creating image from snapshot", "snapshotRef", snapshotRef)
 			ok, err := r.createImageFromSnapshot(ctx, log, ioCtx, img, *snapshotRef, options)
 			if err != nil {
@@ -676,9 +683,9 @@ func (r *ImageReconciler) setImageLimits(log logr.Logger, ioCtx *rados.IOContext
 
 func (r *ImageReconciler) setWWN(log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
 	log.V(1).Info("Setting WWN")
-	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
 	defer closeImage(log, img)
 
@@ -691,7 +698,7 @@ func (r *ImageReconciler) setWWN(log logr.Logger, ioCtx *rados.IOContext, image 
 }
 
 func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
-	if image.Spec.Encryption == nil || image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == providerapi.EncryptionTypeUnencrypted || image.Status.Encryption == providerapi.EncryptionStateHeaderSet {
+	if image.Spec.Encryption.Type == "" || image.Spec.Encryption.Type == providerapi.EncryptionTypeUnencrypted || image.Status.Encryption == providerapi.EncryptionStateHeaderSet {
 		return nil
 	}
 
@@ -701,9 +708,9 @@ func (r *ImageReconciler) setEncryptionHeader(ctx context.Context, log logr.Logg
 		return fmt.Errorf("failed to decrypt passphrase: %w", err)
 	}
 
-	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open rbd image: %w", err)
 	}
 	defer closeImage(log, img)
 
@@ -746,7 +753,7 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 		return false, nil
 	}
 
-	if snapshot.Status.State != providerapi.SnapshotStateReady && snapshot.Status.State != providerapi.SnapshotStatePopulated {
+	if snapshot.Status.State != providerapi.SnapshotStateReady {
 		log.V(1).Info("snapshot is not populated", "state", snapshot.Status.State)
 		return false, nil
 	}
@@ -762,16 +769,15 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 	}
 	defer ioCtx2.Destroy()
 
-	log.V(1).Info("Cloning Image", "ParentName", parentName, "SnapName", snapName, "ImageID", image.ID)
 	if err = librbd.CloneImage(ioCtx2, parentName, snapName, ioCtx, ImageIDToRBDID(image.ID), options); err != nil {
 		r.Eventf(image.Metadata, corev1.EventTypeWarning, "CreateImageFromSnapshotFailed", "Failed to clone rbd image: %s", err)
 		return false, fmt.Errorf("failed to clone rbd image: %w", err)
 	}
 	log.V(2).Info("Cloned image")
 
-	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
+	img, err := librbd.OpenImage(ioCtx, ImageIDToRBDID(image.ID), librbd.NoSnapshot)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to open rbd image: %w", err)
 	}
 	defer closeImage(log, img)
 
