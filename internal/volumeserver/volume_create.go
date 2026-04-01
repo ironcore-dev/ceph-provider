@@ -119,7 +119,8 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 
 	image := &api.Image{
 		Metadata: apiutils.Metadata{
-			ID: s.idGen.Generate(),
+			ID:     s.idGen.Generate(),
+			Labels: volume.Metadata.Labels,
 		},
 		Spec: api.ImageSpec{
 			Size:              imageSize,
