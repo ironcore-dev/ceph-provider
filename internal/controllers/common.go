@@ -163,6 +163,9 @@ func flattenChildImages(log logr.Logger, conn *rados.Conn, img *librbd.Image) er
 func snapshotExistsAndProtected(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) (bool, bool, error) {
 	img, err := openImage(ioCtx, imageName)
 	if err != nil {
+		if errors.Is(err, librbd.ErrNotFound) {
+			return false, false, nil
+		}
 		return false, false, err
 	}
 	defer closeImage(log, img)

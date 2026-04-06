@@ -767,13 +767,14 @@ func (r *ImageReconciler) createImageFromSnapshot(ctx context.Context, log logr.
 
 	log.V(2).Info("Check if rbd snapshot exists", "snapshotId", snapName)
 	isSnapshotExist, isSnapshotProtected, err := snapshotExistsAndProtected(log, ioCtx, parentName, snapName)
-	if err != nil && !errors.Is(err, librbd.ErrNotFound) {
+	if err != nil {
 		return false, fmt.Errorf("failed to check volume image snapshot existence: %w", err)
 	}
 	if isSnapshotExist && !isSnapshotProtected {
 		if err := protectSnapshot(log, ioCtx, parentName, snapName); err != nil {
 			return false, fmt.Errorf("failed to protect snapshot %s: %w", snapName, err)
 		}
+		isSnapshotExist = true
 	}
 	if !isSnapshotExist {
 		log.V(1).Info("Rbd snapshot does not exist. Mark snapshot as failed", "snapshotName", snapName)
