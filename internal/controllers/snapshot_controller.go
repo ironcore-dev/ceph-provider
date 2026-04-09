@@ -249,6 +249,31 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
+	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
+		snapshot.Finalizers = append(snapshot.Finalizers, SnapshotFinalizer)
+		if _, err := r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to set finalizers: %w", err)
+		}
+	}
+
+	rbdID, snapshotID, err := getSnapshotSourceDetails(snapshot)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot source details: %w", err)
+	}
+
+	log.V(2).Info("Check if rbd snapshot exists")
+	isSnapshotExist, isSnapshotProtected, err := snapshotExistsAndProtected(log, ioCtx, rbdID, snapshotID)
+	if err != nil {
+		return fmt.Errorf("failed to check snapshot existence: %w", err)
+	}
+
+	if isSnapshotExist && !isSnapshotProtected {
+		// Snapshot exists but not protected - just protect it
+		if err := protectSnapshot(log, ioCtx, rbdID, snapshotID); err != nil {
+			return fmt.Errorf("failed to protect snapshot: %w", err)
+		}
+	}
+
 	// SnapshotStatePopulated is no longer actively used. It has been replaced by SnapshotStateReady.
 	// This block will transition any snapshots that are in SnapshotStatePopulated to SnapshotStateReady.
 	if snapshot.Status.State == providerapi.SnapshotStatePopulated {
@@ -257,7 +282,6 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		if _, err = r.store.Update(ctx, snapshot); err != nil {
 			return fmt.Errorf("failed to update snapshot: %w", err)
 		}
-
 		return nil
 	}
 
@@ -266,13 +290,12 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
-	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
-		snapshot.Finalizers = append(snapshot.Finalizers, SnapshotFinalizer)
-		if _, err := r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to set finalizers: %w", err)
-		}
+	if snapshot.Status.State == providerapi.SnapshotStateFailed {
+		log.V(1).Info("Rbd snapshot does not exist, so snapshot in store is marked as failed")
+		return nil
 	}
 
+	log.V(1).Info("Rbd snapshot does not exist, start reconciliation")
 	switch {
 	case snapshot.Source.IronCoreImage != "":
 		err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
@@ -325,19 +348,20 @@ func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context,
 	}
 	log.V(2).Info("Configured pool", "pool", r.pool)
 
-	imageName := SnapshotIDToRBDID(snapshot.ID)
+	rbdImageID := SnapshotIDToRBDID(snapshot.ID)
 	roundedSize := round.OffBytes(snapshotSize)
-	if err = librbd.CreateImage(ioCtx, imageName, roundedSize, options); err != nil {
+
+	if err = librbd.CreateImage(ioCtx, rbdImageID, roundedSize, options); err != nil {
 		return fmt.Errorf("failed to create os rbd image: %w", err)
 	}
 	log.V(2).Info("Created rbd image", "bytes", roundedSize)
 
-	if err := r.prepareSnapshotContent(log, ioCtx, imageName, rc); err != nil {
+	if err := r.prepareSnapshotContent(log, ioCtx, rbdImageID, rc); err != nil {
 		return fmt.Errorf("failed to prepare snapshot content: %w", err)
 	}
 
-	log.V(2).Info("Create ironcore image snapshot", "ImageID", imageName)
-	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
+	log.V(2).Info("Create ironcore image snapshot", "ImageID", rbdImageID)
+	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, rbdImageID); err != nil {
 		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
 	}
 
