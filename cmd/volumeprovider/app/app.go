@@ -208,7 +208,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	setupLog.Info("Configuring image store", "OmapName", omap.NameVolumes)
-	imageStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Image]{
+	imageStore, err := omap.New(conn, opts.Ceph.Pool, log.WithName("image-store"), omap.Options[*providerapi.Image]{
 		OmapName:       omap.NameVolumes,
 		NewFunc:        func() *providerapi.Image { return &providerapi.Image{} },
 		CreateStrategy: strategy.ImageStrategy,
@@ -227,7 +227,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	setupLog.Info("Configuring snapshot store", "OmapName", omap.NameSnapshots)
-	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, omap.Options[*providerapi.Snapshot]{
+	snapshotStore, err := omap.New(conn, opts.Ceph.Pool, log.WithName("snapshot-store"), omap.Options[*providerapi.Snapshot]{
 		OmapName:       omap.NameSnapshots,
 		NewFunc:        func() *providerapi.Snapshot { return &providerapi.Snapshot{} },
 		CreateStrategy: strategy.SnapshotStrategy,
