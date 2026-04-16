@@ -97,6 +97,7 @@ type Store[E apiutils.Object] struct {
 
 	newFunc        func() E
 	createStrategy CreateStrategy[E]
+	labelIndexMu   sync.RWMutex
 	labelIndex     map[string]sets.Set[string] // Add label index field (labelKey=labelValue -> Set[objectID])
 
 	watchesMu sync.RWMutex
@@ -123,6 +124,7 @@ func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[strin
 		newLabelSet.Insert(formatLabel(k, v))
 	}
 
+	s.labelIndexMu.Lock()
 	// Labels to remove objID from
 	for label := range oldLabelSet.Difference(newLabelSet) {
 		if ids, ok := s.labelIndex[label]; ok {
@@ -140,12 +142,14 @@ func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[strin
 		}
 		s.labelIndex[label].Insert(objID)
 	}
+	s.labelIndexMu.Unlock()
 	s.log.V(2).Info("Label index updated", "id", objID)
 }
 
 // removeFromLabelIndex removes an object entirely from the label index.
 func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) {
 	s.log.V(2).Info("Removing object from label index", "id", objID)
+	s.labelIndexMu.Lock()
 	for k, v := range labels {
 		label := formatLabel(k, v)
 		if ids, ok := s.labelIndex[label]; ok {
@@ -155,6 +159,7 @@ func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) 
 			}
 		}
 	}
+	s.labelIndexMu.Unlock()
 	s.log.V(2).Info("Object removed from label index", "id", objID)
 }
 
@@ -597,6 +602,7 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 	labelSelect := make([]sizedLabel, 0, len(labelSelector))
 	var intersection sets.Set[string]
 
+	s.labelIndexMu.RLock()
 	// 1 .Gather label set sizes and check for immediate non-matches.
 	for key, value := range labelSelector {
 		label := formatLabel(key, value)
@@ -611,6 +617,7 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 			size: ids.Len(),
 		})
 	}
+	s.labelIndexMu.RUnlock()
 	if len(labelSelect) > 1 {
 		// 2. Sort the labels by the size of their matching set (smallest first).
 		sort.Slice(labelSelect, func(i, j int) bool {
@@ -645,6 +652,11 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 	for id := range intersection {
 		obj, err := s.Get(ctx, id)
 		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				// Object was deleted after index lookup; skip stale entry
+				s.log.V(1).Info("Object removed between index lookup and Get, skipping", "id", id)
+				continue
+			}
 			s.log.Error(err, "Failed to get object from store during ListByLabels", "id", id)
 			return nil, err
 		}
