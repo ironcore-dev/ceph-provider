@@ -50,11 +50,19 @@ type EncryptionSpec struct {
 }
 
 type ImageStatus struct {
-	State      ImageState      `json:"state"`
-	Encryption EncryptionState `json:"encryption"`
-	Access     *ImageAccess    `json:"access"`
-	Size       uint64          `json:"size"`
+	State         ImageState          `json:"state"`
+	Encryption    EncryptionState     `json:"encryption"`
+	Access        *ImageAccess        `json:"access"`
+	Size          uint64              `json:"size"`
+	DeletionPhase *ImageDeletionPhase `json:"deletionPhase,omitempty"`
 }
+
+// ImageDeletionPhase tracks deletion progress using FlatteningChildren phase.
+type ImageDeletionPhase string
+
+const (
+	ImageDeletionPhaseFlatteningChildren ImageDeletionPhase = "FlatteningChildren"
+)
 
 type ImageAccess struct {
 	Monitors string `json:"monitors"`
