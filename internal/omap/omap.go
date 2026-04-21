@@ -113,7 +113,6 @@ func formatLabel(key, value string) string {
 
 // updateLabelIndex updates the index for a single object based on its labels.
 func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[string]string) {
-	s.log.V(2).Info("Updating label index", "id", objID)
 	oldLabelSet := sets.New[string]()
 	for k, v := range oldLabels {
 		oldLabelSet.Insert(formatLabel(k, v))
@@ -143,12 +142,10 @@ func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[strin
 		s.labelIndex[label].Insert(objID)
 	}
 	s.labelIndexMu.Unlock()
-	s.log.V(2).Info("Label index updated", "id", objID)
 }
 
 // removeFromLabelIndex removes an object entirely from the label index.
 func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) {
-	s.log.V(2).Info("Removing object from label index", "id", objID)
 	s.labelIndexMu.Lock()
 	for k, v := range labels {
 		label := formatLabel(k, v)
@@ -160,7 +157,6 @@ func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) 
 		}
 	}
 	s.labelIndexMu.Unlock()
-	s.log.V(2).Info("Object removed from label index", "id", objID)
 }
 
 func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
@@ -230,9 +226,6 @@ func getOmapValuesByKeys(ioCtx *rados.IOContext, omapName string, keys []string)
 
 func (s *Store[E]) deleteOmapValue(ioCtx *rados.IOContext, omapName, key string) error {
 	if err := ioCtx.RmOmapKeys(omapName, []string{key}); err != nil {
-		if errors.Is(err, rados.ErrNotFound) {
-			return err
-		}
 		return fmt.Errorf("unable to delete mapping omap value: %w", err)
 	}
 	return nil
@@ -295,7 +288,7 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 
 	ioCtx, err := s.conn.OpenIOContext(s.pool)
 	if err != nil {
-		return fmt.Errorf("unable to get io context for delete: %w", err)
+		return fmt.Errorf("unable to get io context: %w", err)
 	}
 	defer ioCtx.Destroy()
 
@@ -332,7 +325,6 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 func (s *Store[E]) delete(ioCtx *rados.IOContext, id string) error {
 	if err := s.deleteOmapValue(ioCtx, s.omapName, id); err != nil {
 		if errors.Is(err, rados.ErrNotFound) {
-			s.log.V(1).Info("Attempted to delete non-existent key from omap", "id", id)
 			return store.ErrNotFound
 		}
 		return fmt.Errorf("failed to delete object from omap: %w", err)
@@ -371,9 +363,7 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 	newLabels := obj.GetLabels()
 
 	if obj.GetDeletedAt() != nil && len(obj.GetFinalizers()) == 0 {
-		s.log.V(1).Info("Update triggers physical deletion", "id", obj.GetID())
 		if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
-			s.log.V(1).Info("ResourceVersion mismatch during update-triggered delete", "id", obj.GetID(), "expected", oldObj.GetResourceVersion(), "got", obj.GetResourceVersion())
 			return utils.Zero[E](), fmt.Errorf("failed to delete object during update: %w", ErrResourceVersionNotLatest)
 		}
 
@@ -381,13 +371,10 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 			if !errors.Is(err, store.ErrNotFound) {
 				return utils.Zero[E](), fmt.Errorf("failed to delete object from omap during update: %w", err)
 			}
-			s.log.V(1).Info("Object already deleted from OMAP during update", "id", obj.GetID())
 		}
 		deleted = true
 	} else {
-		s.log.V(1).Info("Performing standard update", "id", obj.GetID())
 		if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
-			s.log.V(1).Info("ResourceVersion mismatch during update", "id", obj.GetID(), "expected", oldObj.GetResourceVersion(), "got", obj.GetResourceVersion())
 			return utils.Zero[E](), fmt.Errorf("failed to update object: %w", ErrResourceVersionNotLatest)
 		}
 		obj.IncrementResourceVersion()
@@ -396,18 +383,15 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 		if err != nil {
 			return utils.Zero[E](), err
 		}
-		s.log.V(1).Info("Object updated in OMAP", "id", obj.GetID(), "newResourceVersion", obj.GetResourceVersion())
 	}
 
 	var eventType store.WatchEventType
 	if deleted {
 		s.removeFromLabelIndex(obj.GetID(), oldLabels)
 		eventType = store.WatchEventTypeDeleted
-		s.log.V(1).Info("Object removed from label index", "id", obj.GetID())
 	} else {
 		s.updateLabelIndex(obj.GetID(), oldLabels, newLabels)
 		eventType = store.WatchEventTypeUpdated
-		s.log.V(1).Info("Object updated in label index", "id", obj.GetID())
 	}
 
 	s.enqueue(store.WatchEvent[E]{
@@ -592,11 +576,8 @@ type sizedLabel struct {
 
 func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]string) ([]E, error) {
 	if len(labelSelector) == 0 {
-		s.log.V(1).Info("Empty label selector provided, returning all items (like List)")
 		return s.List(ctx)
 	}
-
-	s.log.V(1).Info("Listing objects by labels", "selector", labelSelector)
 
 	// pre-allocate the slice to avoid extra memory allocations
 	labelSelect := make([]sizedLabel, 0, len(labelSelector))
@@ -608,7 +589,6 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		label := formatLabel(key, value)
 		ids, found := s.labelIndex[label]
 		if !found {
-			s.log.V(1).Info("Label not found in index, no objects match the full selector", "label", label, "selector", labelSelector)
 			return []E{}, nil
 		}
 
@@ -633,17 +613,13 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		if isFirstLabel {
 			// Use the smallest set to initialize the intersection (copy to avoid modifying the index set).
 			intersection = ids.Clone()
-			s.log.V(1).Info("Initialized intersection set with label", "initial_count", intersection.Len())
 			isFirstLabel = false
 		} else {
 			// Intersect the current result with the next smallest set.
-			prevCount := intersection.Len()
 			intersection = intersection.Intersection(ids)
-			s.log.V(1).Info("Computed intersection", "previous_count", prevCount, "new_count", intersection.Len())
 		}
 
 		if intersection.Len() == 0 {
-			s.log.V(1).Info("Intersection of label matches became empty, returning empty list", "selector", labelSelector)
 			return []E{}, nil
 		}
 	}
@@ -654,15 +630,12 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				// Object was deleted after index lookup; skip stale entry
-				s.log.V(1).Info("Object removed between index lookup and Get, skipping", "id", id)
 				continue
 			}
-			s.log.Error(err, "Failed to get object from store during ListByLabels", "id", id)
 			return nil, err
 		}
 		objs = append(objs, obj)
 	}
 
-	s.log.V(1).Info("Successfully retrieved objects matching label selector", "count", len(objs), "selector", labelSelector)
 	return objs, nil
 }
