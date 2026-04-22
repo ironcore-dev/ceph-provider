@@ -54,10 +54,10 @@ func closeImage(log logr.Logger, img *librbd.Image) {
 
 func createOsImageSource(platform *ocispec.Platform) (image.Source, error) {
 	if platform == nil {
-		return remote.DockerRegistry(nil)
+		return remote.DockerRegistry()
 	}
 
-	return remote.DockerRegistryWithPlatform(nil, platform)
+	return remote.DockerRegistryWithPlatform(platform)
 }
 
 func toPlatform(arch *string) *ocispec.Platform {
