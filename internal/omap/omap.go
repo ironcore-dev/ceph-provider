@@ -238,7 +238,11 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 	}
 
 	if len(obj.GetFinalizers()) == 0 {
-		return s.delete(ioCtx, id)
+		if err := s.delete(ioCtx, id); err != nil {
+			return err
+		}
+		s.removeFromLabelIndex(id, obj.GetLabels())
+		return nil
 	}
 
 	if obj.GetDeletedAt() != nil {
@@ -457,7 +461,7 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		}
 
 		labelSelect = append(labelSelect, sizedLabel{
-			ids:  ids,
+			ids:  ids.Clone(),
 			size: ids.Len(),
 		})
 	}
@@ -476,7 +480,7 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		ids := info.ids
 		if isFirstLabel {
 			// Use the smallest set to initialize the intersection (copy to avoid modifying the index set).
-			intersection = ids.Clone()
+			intersection = ids
 			isFirstLabel = false
 		} else {
 			// Intersect the current result with the next smallest set.
