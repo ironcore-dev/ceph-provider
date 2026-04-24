@@ -452,6 +452,7 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		label := formatLabel(key, value)
 		ids, found := s.labelIndex[label]
 		if !found {
+			s.labelIndexMu.RUnlock()
 			return []E{}, nil
 		}
 
