@@ -16,7 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
-	"github.com/ironcore-dev/ceph-provider/internal/utils"
+	"github.com/ironcore-dev/ceph-provider/internal/round"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
@@ -24,9 +24,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// SnapshotLongOpsReconciler is a dedicated controller that processes long-running snapshot
-// operations. It watches Snapshot objects and only acts on in-progress states
-// (Populating, Flattening).
+// SnapshotLongOpsReconcilerOptions holds configuration for SnapshotLongOpsReconciler.
 type SnapshotLongOpsReconcilerOptions struct {
 	Pool                string
 	PopulatorBufferSize int64
@@ -65,10 +63,10 @@ func NewSnapshotLongOpsReconciler(
 		opts.PopulatorBufferSize = 5 * 1024 * 1024
 	}
 
-	if opts.PopulateWorkerSize == 0 {
+	if opts.PopulateWorkerSize <= 0 {
 		opts.PopulateWorkerSize = 3
 	}
-	if opts.FlattenWorkerSize == 0 {
+	if opts.FlattenWorkerSize <= 0 {
 		opts.FlattenWorkerSize = 5
 	}
 
@@ -88,6 +86,9 @@ func NewSnapshotLongOpsReconciler(
 	}, nil
 }
 
+// SnapshotLongOpsReconciler is a dedicated controller that processes long-running snapshot
+// operations. It watches Snapshot objects and only acts on in-progress states
+// (Populating, Flattening).
 type SnapshotLongOpsReconciler struct {
 	log    logr.Logger
 	conn   *rados.Conn
@@ -104,6 +105,8 @@ type SnapshotLongOpsReconciler struct {
 	populateWorkers int
 	flattenWorkers  int
 }
+
+const maxPopulateRetries = 10
 
 func (r *SnapshotLongOpsReconciler) Start(ctx context.Context) error {
 	log := r.log
@@ -136,7 +139,8 @@ func (r *SnapshotLongOpsReconciler) Start(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processPopulateQueue(ctx, log)
+			for r.processNextPopulateWorkItem(ctx, log) {
+			}
 		}()
 	}
 
@@ -144,7 +148,8 @@ func (r *SnapshotLongOpsReconciler) Start(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processFlattenQueue(ctx, log)
+			for r.processNextFlattenWorkItem(ctx, log) {
+			}
 		}()
 	}
 
@@ -152,42 +157,58 @@ func (r *SnapshotLongOpsReconciler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *SnapshotLongOpsReconciler) processPopulateQueue(ctx context.Context, log logr.Logger) {
-	for {
-		item, shutdown := r.populateQueue.Get()
-		if shutdown {
-			return
-		}
-		snapshotID := item
-
-		err := r.processPopulateOperation(ctx, snapshotID)
-		if err != nil {
-			log.Error(err, "populate operation failed", "snapshotId", snapshotID)
-			r.populateQueue.AddRateLimited(snapshotID)
-		} else {
-			r.populateQueue.Forget(snapshotID)
-		}
-		r.populateQueue.Done(snapshotID)
+func (r *SnapshotLongOpsReconciler) processNextPopulateWorkItem(ctx context.Context, log logr.Logger) bool {
+	item, shutdown := r.populateQueue.Get()
+	if shutdown {
+		return false
 	}
+	snapshotID := item
+	defer r.populateQueue.Done(snapshotID)
+
+	err := r.processPopulateOperation(ctx, snapshotID)
+	if err != nil {
+		log.Error(err, "populate operation failed", "snapshotId", snapshotID)
+		if r.populateQueue.NumRequeues(snapshotID) >= maxPopulateRetries {
+			log.Error(err, "populate operation reached max retries; marking snapshot as Failed", "snapshotId", snapshotID, "maxRetries", maxPopulateRetries)
+			snapshot, getErr := r.store.Get(ctx, snapshotID)
+			if getErr == nil {
+				snapshot.Status.State = providerapi.SnapshotStateFailed
+				if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
+					log.Error(updateErr, "failed to persist snapshot Failed state after max retries", "snapshotId", snapshotID)
+				}
+			} else if !errors.Is(getErr, store.ErrNotFound) {
+				log.Error(getErr, "failed to get snapshot to mark Failed after max retries", "snapshotId", snapshotID)
+			}
+
+			r.populateQueue.Forget(snapshotID)
+			return true
+		}
+
+		r.populateQueue.AddRateLimited(snapshotID)
+		return true
+	}
+
+	r.populateQueue.Forget(snapshotID)
+	return true
 }
 
-func (r *SnapshotLongOpsReconciler) processFlattenQueue(ctx context.Context, log logr.Logger) {
-	for {
-		item, shutdown := r.flattenQueue.Get()
-		if shutdown {
-			return
-		}
-		snapshotID := item
-
-		err := r.processFlattenOperation(ctx, snapshotID)
-		if err != nil {
-			log.Error(err, "flatten operation failed", "snapshotId", snapshotID)
-			r.flattenQueue.AddRateLimited(snapshotID)
-		} else {
-			r.flattenQueue.Forget(snapshotID)
-		}
-		r.flattenQueue.Done(snapshotID)
+func (r *SnapshotLongOpsReconciler) processNextFlattenWorkItem(ctx context.Context, log logr.Logger) bool {
+	item, shutdown := r.flattenQueue.Get()
+	if shutdown {
+		return false
 	}
+	snapshotID := item
+	defer r.flattenQueue.Done(snapshotID)
+
+	err := r.processFlattenOperation(ctx, snapshotID)
+	if err != nil {
+		log.Error(err, "flatten operation failed", "snapshotId", snapshotID)
+		r.flattenQueue.AddRateLimited(snapshotID)
+		return true
+	}
+
+	r.flattenQueue.Forget(snapshotID)
+	return true
 }
 
 func (r *SnapshotLongOpsReconciler) processPopulateOperation(ctx context.Context, snapshotID string) error {
@@ -214,24 +235,48 @@ func (r *SnapshotLongOpsReconciler) processPopulateOperation(ctx context.Context
 	// If the Ceph snapshot already exists, population likely completed previously but status update didn't.
 	rbdImageID := SnapshotIDToRBDID(snapshot.ID)
 	exists, _, err := snapshotExistsAndProtected(log, ioCtx, rbdImageID, ImageSnapshotVersion)
-	if err == nil && exists {
+	if err != nil {
+		return fmt.Errorf("failed to check snapshot existence: %w", err)
+	}
+	if exists {
 		snapshot.Status.State = providerapi.SnapshotStateReady
 		if _, err := r.store.Update(ctx, snapshot); err != nil {
 			return fmt.Errorf("failed to update snapshot state to Ready: %w", err)
 		}
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("failed to check snapshot existence: %w", err)
-	}
 
-	rc, err := r.getImageSourceForSnapshot(ctx, snapshot)
+	rc, snapshotSize, digest, err := r.getImageSourceForSnapshot(ctx, snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to get image source: %w", err)
 	}
 	defer rc.Close()
 
-	if populateErr := r.prepareSnapshotContent(log, ioCtx, rbdImageID, rc); populateErr != nil {
+	roundedSize := round.OffBytes(snapshotSize)
+	options := librbd.NewRbdImageOptions()
+	defer options.Destroy()
+	// TODO: different pool for OS images?
+	if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
+		return fmt.Errorf("failed to set data pool: %w", err)
+	}
+	if err := librbd.CreateImage(ioCtx, rbdImageID, roundedSize, options); err != nil {
+		if !errors.Is(err, librbd.ErrExist) {
+			return fmt.Errorf("failed to create os rbd image: %w", err)
+		}
+	}
+
+	snapshot.Status.Digest = digest
+	snapshot.Status.Size = int64(roundedSize)
+	if _, err := r.store.Update(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to update snapshot metadata before population: %w", err)
+	}
+
+	if shouldRetry, populateErr := r.prepareSnapshotContent(log, ioCtx, rbdImageID, rc); populateErr != nil {
+		if shouldRetry {
+			// Keep status as Populating so the retry can pick it up again.
+			return fmt.Errorf("transient populate failure: %w", populateErr)
+		}
+
 		snapshot.Status.State = providerapi.SnapshotStateFailed
 		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
 			log.Error(updateErr, "failed to update snapshot state after population failure")
@@ -284,10 +329,9 @@ func (r *SnapshotLongOpsReconciler) processFlattenOperation(ctx context.Context,
 	img, err := librbd.OpenImage(ioCtx, rbdID, snapName)
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			// Image already gone; remove finalizer to allow deletion.
-			snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-			if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-				return fmt.Errorf("failed to update snapshot metadata: %w", err)
+			snapshot.Status.State = providerapi.SnapshotStateFlattened
+			if _, err := r.store.Update(ctx, snapshot); err != nil {
+				return fmt.Errorf("failed to update snapshot state to Flattened: %w", err)
 			}
 			return nil
 		}
@@ -301,7 +345,6 @@ func (r *SnapshotLongOpsReconciler) processFlattenOperation(ctx context.Context,
 	}
 
 	if len(childImgs) != 0 {
-		// Flatten one child per run for fairness.
 		log.V(2).Info("Flattening child image", "child", childImgs[0], "remaining", len(childImgs)-1)
 		if err := flattenImage(log, r.conn, pools[0], childImgs[0]); err != nil {
 			return fmt.Errorf("failed to flatten child %s: %w", childImgs[0], err)
@@ -310,54 +353,27 @@ func (r *SnapshotLongOpsReconciler) processFlattenOperation(ctx context.Context,
 		return nil
 	}
 
-	// No children remaining: perform cleanup first, then remove the finalizer.
-	rbdSnapshot := img.GetSnapshot(snapName)
-	if err := removeSnapshot(rbdSnapshot); err != nil {
-		return fmt.Errorf("failed to remove snapshot: %w", err)
-	}
-
-	// deletes os-image if not referenced by any volume
-	if snapshot.Source.IronCoreImage != "" {
-		if err := img.Close(); err != nil && !errors.Is(err, librbd.ErrImageNotOpen) {
-			return fmt.Errorf("failed to close ironcore os-image: %w", err)
-		}
-		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil && !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to remove ironcore os-image: %w", err)
-		}
-	}
-
-	// deletes parent rbd image of snapshot which is created during source volume deletion
-	// and has no any other reference except snapshot.
-	// cloneSnapshot created both the RBD and the store entry; remove RBD before the store to avoid a leaked image.
-	if rbdID == ImageIDToRBDID(snapshot.ID) {
-		if err := img.Close(); err != nil && !errors.Is(err, librbd.ErrImageNotOpen) {
-			return fmt.Errorf("failed to close RBD image before remove: %w", err)
-		}
-		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil && !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to remove RBD image for snapshot clone: %w", err)
-		}
-		if err := r.images.Delete(ctx, snapshot.ID); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to remove image store entry: %w", err)
-		}
-	}
-
-	// Remove the finalizer last so failed cleanup is retried.
-	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-	if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-		return fmt.Errorf("failed to update snapshot metadata: %w", err)
+	snapshot.Status.State = providerapi.SnapshotStateFlattened
+	if _, err := r.store.Update(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to update snapshot state to Flattened: %w", err)
 	}
 
 	return nil
 }
 
-func (r *SnapshotLongOpsReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {
+// prepareSnapshotContent returns (shouldRetry, err). shouldRetry is true for transient failures
+// that should be retried without marking the snapshot as Failed.
+func (r *SnapshotLongOpsReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) (bool, error) {
 	rbdImg, err := openImage(ioCtx, imageName)
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer closeImage(log, rbdImg)
 
-	return r.populateImage(log, rbdImg, rc)
+	if err := r.populateImage(log, rbdImg, rc); err != nil {
+		return true, err
+	}
+	return false, nil
 }
 
 func (r *SnapshotLongOpsReconciler) populateImage(log logr.Logger, dst io.WriteCloser, src io.Reader) error {
@@ -386,20 +402,19 @@ func (r *SnapshotLongOpsReconciler) populateImage(log logr.Logger, dst io.WriteC
 	return nil
 }
 
-// getImageSourceForSnapshot resolves the image content stream for a snapshot being populated.
-// In the current model, this is only valid for IronCore-image-backed snapshots.
-func (r *SnapshotLongOpsReconciler) getImageSourceForSnapshot(ctx context.Context, snapshot *providerapi.Snapshot) (io.ReadCloser, error) {
+// getImageSourceForSnapshot opens an IronCore image source for snapshot population.
+func (r *SnapshotLongOpsReconciler) getImageSourceForSnapshot(ctx context.Context, snapshot *providerapi.Snapshot) (io.ReadCloser, uint64, string, error) {
 	var platform *ocispec.Platform
 	if snapshot.Labels != nil {
 		if arch, found := snapshot.Labels[providerapi.MachineArchitectureLabel]; found {
 			platform = toPlatform(&arch)
 		}
 	}
-	rc, _, _, err := openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
+	rc, size, digest, err := openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open snapshot source: %w", err)
+		return nil, 0, "", fmt.Errorf("failed to open snapshot source: %w", err)
 	}
-	return rc, nil
+	return rc, size, digest, nil
 }
 
 func openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {

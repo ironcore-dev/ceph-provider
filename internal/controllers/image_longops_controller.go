@@ -18,8 +18,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// ImageLongOpsReconciler processes long-running image operations. It is responsible
-// for deletion-time flattening of children so that the fast ImageReconciler does not block.
+// ImageLongOpsReconcilerOptions holds configuration for ImageLongOpsReconciler.
 type ImageLongOpsReconcilerOptions struct {
 	Pool string
 
@@ -61,6 +60,8 @@ func NewImageLongOpsReconciler(
 	}, nil
 }
 
+// ImageLongOpsReconciler processes long-running image operations. It is responsible
+// for deletion-time flattening of children so that the fast ImageReconciler does not block.
 type ImageLongOpsReconciler struct {
 	log    logr.Logger
 	conn   *rados.Conn
@@ -78,13 +79,7 @@ func (r *ImageLongOpsReconciler) Start(ctx context.Context) error {
 
 	reg, err := r.events.AddHandler(event.HandlerFunc[*providerapi.Image](func(evt event.Event[*providerapi.Image]) {
 		img := evt.Object
-		if img.DeletedAt == nil {
-			return
-		}
-		if img.Status.DeletionPhase == nil {
-			return
-		}
-		if *img.Status.DeletionPhase != providerapi.ImageDeletionPhaseFlatteningChildren {
+		if img.DeletedAt == nil || img.Status.State != providerapi.ImageStateFlatteningChildren {
 			return
 		}
 		r.flattenQueue.Add(img.ID)
@@ -106,7 +101,8 @@ func (r *ImageLongOpsReconciler) Start(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processFlattenQueue(ctx, log)
+			for r.processNextFlattenWorkItem(ctx, log) {
+			}
 		}()
 	}
 
@@ -114,23 +110,23 @@ func (r *ImageLongOpsReconciler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *ImageLongOpsReconciler) processFlattenQueue(ctx context.Context, log logr.Logger) {
-	for {
-		item, shutdown := r.flattenQueue.Get()
-		if shutdown {
-			return
-		}
-		imageID := item
-
-		err := r.processFlattenOperation(ctx, imageID)
-		if err != nil {
-			log.Error(err, "image flatten operation failed", "imageId", imageID)
-			r.flattenQueue.AddRateLimited(imageID)
-		} else {
-			r.flattenQueue.Forget(imageID)
-		}
-		r.flattenQueue.Done(imageID)
+func (r *ImageLongOpsReconciler) processNextFlattenWorkItem(ctx context.Context, log logr.Logger) bool {
+	item, shutdown := r.flattenQueue.Get()
+	if shutdown {
+		return false
 	}
+	imageID := item
+	defer r.flattenQueue.Done(imageID)
+
+	err := r.processFlattenOperation(ctx, imageID)
+	if err != nil {
+		log.Error(err, "image flatten operation failed", "imageId", imageID)
+		r.flattenQueue.AddRateLimited(imageID)
+		return true
+	}
+
+	r.flattenQueue.Forget(imageID)
+	return true
 }
 
 func (r *ImageLongOpsReconciler) processFlattenOperation(ctx context.Context, imageID string) error {
@@ -145,7 +141,7 @@ func (r *ImageLongOpsReconciler) processFlattenOperation(ctx context.Context, im
 		return fmt.Errorf("failed to get image: %w", err)
 	}
 
-	if imgObj.DeletedAt == nil || imgObj.Status.DeletionPhase == nil || *imgObj.Status.DeletionPhase != providerapi.ImageDeletionPhaseFlatteningChildren {
+	if imgObj.DeletedAt == nil || imgObj.Status.State != providerapi.ImageStateFlatteningChildren {
 		return nil
 	}
 
@@ -158,10 +154,10 @@ func (r *ImageLongOpsReconciler) processFlattenOperation(ctx context.Context, im
 	rbdImg, err := openImage(ioCtx, ImageIDToRBDID(imgObj.ID))
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			// Parent already gone; clear phase so image delete can complete.
-			imgObj.Status.DeletionPhase = nil
+			// Parent already gone; clear state so image delete can complete.
+			imgObj.Status.State = providerapi.ImageStateAvailable
 			if _, err := r.images.Update(ctx, imgObj); store.IgnoreErrNotFound(err) != nil {
-				return fmt.Errorf("failed to clear deletion phase: %w", err)
+				return fmt.Errorf("failed to clear image flattening state: %w", err)
 			}
 			return nil
 		}
@@ -183,10 +179,10 @@ func (r *ImageLongOpsReconciler) processFlattenOperation(ctx context.Context, im
 		return nil
 	}
 
-	// Done: clear phase and let normal image reconciler continue deletion steps.
-	imgObj.Status.DeletionPhase = nil
+	// Flattening complete: clear FlatteningChildren so the image reconciler can resume deletion.
+	imgObj.Status.State = providerapi.ImageStateAvailable
 	if _, err := r.images.Update(ctx, imgObj); store.IgnoreErrNotFound(err) != nil {
-		return fmt.Errorf("failed to clear deletion phase: %w", err)
+		return fmt.Errorf("failed to clear image flattening state: %w", err)
 	}
 
 	return nil

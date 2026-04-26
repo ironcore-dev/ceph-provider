@@ -251,8 +251,8 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 // 2. Flatten all child images(cloned images from step 1 and rbd images which are restored using this snapshot) of each snapshot.
 // 3. Remove all snapshots of rbd image and update each snapshot source in store to cloned rbd image id
 func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
-	// If we are in the middle of deletion flattening, wait for ImageLongOpsReconciler.
-	if image.Status.DeletionPhase != nil && *image.Status.DeletionPhase == providerapi.ImageDeletionPhaseFlatteningChildren {
+	// Child flattening is handled by ImageLongOpsReconciler; skip until it finishes.
+	if image.Status.State == providerapi.ImageStateFlatteningChildren {
 		return errImageFlattenInProgress
 	}
 
@@ -306,9 +306,9 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		return fmt.Errorf("unable to list children: %w", err)
 	}
 	if len(childImgs) != 0 {
-		image.Status.DeletionPhase = ptr.To(providerapi.ImageDeletionPhaseFlatteningChildren)
+		image.Status.State = providerapi.ImageStateFlatteningChildren
 		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to update image deletion phase: %w", err)
+			return fmt.Errorf("failed to update image state for flattening children: %w", err)
 		}
 		return errImageFlattenInProgress
 	}

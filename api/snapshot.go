@@ -22,6 +22,7 @@ const (
 	SnapshotStatePopulated  SnapshotState = "Populated"
 	SnapshotStatePopulating SnapshotState = "Populating"
 	SnapshotStateFlattening SnapshotState = "Flattening"
+	SnapshotStateFlattened  SnapshotState = "Flattened"
 	SnapshotStateReady      SnapshotState = "Ready"
 	SnapshotStateFailed     SnapshotState = "Failed"
 )
