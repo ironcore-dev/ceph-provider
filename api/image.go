@@ -17,8 +17,9 @@ type Image struct {
 type ImageState string
 
 const (
-	ImageStatePending   ImageState = "Pending"
-	ImageStateAvailable ImageState = "Available"
+	ImageStatePending            ImageState = "Pending"
+	ImageStateAvailable          ImageState = "Available"
+	ImageStateFlatteningChildren ImageState = "FlatteningChildren"
 )
 
 type EncryptionState string

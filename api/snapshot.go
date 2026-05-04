@@ -18,10 +18,13 @@ type Snapshot struct {
 type SnapshotState string
 
 const (
-	SnapshotStatePending   SnapshotState = "Pending"
-	SnapshotStatePopulated SnapshotState = "Populated"
-	SnapshotStateReady     SnapshotState = "Ready"
-	SnapshotStateFailed    SnapshotState = "Failed"
+	SnapshotStatePending    SnapshotState = "Pending"
+	SnapshotStatePopulated  SnapshotState = "Populated"
+	SnapshotStatePopulating SnapshotState = "Populating"
+	SnapshotStateFlattening SnapshotState = "Flattening"
+	SnapshotStateFlattened  SnapshotState = "Flattened"
+	SnapshotStateReady      SnapshotState = "Ready"
+	SnapshotStateFailed     SnapshotState = "Failed"
 )
 
 type SnapshotStatus struct {

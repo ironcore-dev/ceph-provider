@@ -214,6 +214,8 @@ const (
 	ImageFinalizer = "image"
 )
 
+var errImageFlattenInProgress = errors.New("image flatten in progress")
+
 func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
 	if !slices.Contains(image.Finalizers, ImageFinalizer) {
 		log.V(1).Info("image has no finalizer: done")
@@ -221,6 +223,11 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 
 	if err := r.deleteImageSnapshots(ctx, log, ioCtx, image); err != nil {
+		if errors.Is(err, errImageFlattenInProgress) {
+			// Long-running flattening is handled asynchronously by ImageLongOpsReconciler.
+			// Keep finalizer; deletion will resume once flattening completes.
+			return nil
+		}
 		return fmt.Errorf("failed to delete image snapshots: %w", err)
 	}
 
@@ -244,6 +251,11 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 // 2. Flatten all child images(cloned images from step 1 and rbd images which are restored using this snapshot) of each snapshot.
 // 3. Remove all snapshots of rbd image and update each snapshot source in store to cloned rbd image id
 func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
+	// Child flattening is handled by ImageLongOpsReconciler; skip until it finishes.
+	if image.Status.State == providerapi.ImageStateFlatteningChildren {
+		return errImageFlattenInProgress
+	}
+
 	img, err := openImage(ioCtx, ImageIDToRBDID(image.ID))
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
@@ -288,9 +300,17 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		}
 	}
 
-	// flatten all child images of the original image's snapshots
-	if err := flattenChildImages(log, r.conn, img); err != nil {
-		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
+	// Flattening children can take a long time; delegate to ImageLongOpsReconciler.
+	_, childImgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list children: %w", err)
+	}
+	if len(childImgs) != 0 {
+		image.Status.State = providerapi.ImageStateFlatteningChildren
+		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("failed to update image state for flattening children: %w", err)
+		}
+		return errImageFlattenInProgress
 	}
 
 	// remove snapshot and update snapshot source in store
