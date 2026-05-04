@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -55,7 +56,9 @@ func New[E apiutils.Object](conn *rados.Conn, pool string, opts Options[E]) (*St
 		pool:     pool,
 		omapName: opts.OmapName,
 
-		watches: sets.New[*watch[E]](),
+		// Initialize the label index
+		labelIndex: make(map[string]sets.Set[string]),
+		watches:    sets.New[*watch[E]](),
 
 		newFunc:        opts.NewFunc,
 		createStrategy: opts.CreateStrategy,
@@ -71,9 +74,64 @@ type Store[E apiutils.Object] struct {
 
 	newFunc        func() E
 	createStrategy CreateStrategy[E]
+	labelIndexMu   sync.RWMutex
+	labelIndex     map[string]sets.Set[string] // Add label index field (labelKey=labelValue -> Set[objectID])
 
 	watchesMu sync.RWMutex
 	watches   sets.Set[*watch[E]]
+}
+
+// --- Internal Label Index Helper ---
+func formatLabel(key, value string) string {
+	return fmt.Sprintf("%s=%s", key, value)
+}
+
+// updateLabelIndex updates the index for a single object based on its labels.
+func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[string]string) {
+	oldLabelSet := sets.New[string]()
+	for k, v := range oldLabels {
+		oldLabelSet.Insert(formatLabel(k, v))
+	}
+
+	newLabelSet := sets.New[string]()
+	for k, v := range newLabels {
+		newLabelSet.Insert(formatLabel(k, v))
+	}
+
+	s.labelIndexMu.Lock()
+	// Labels to remove objID from
+	for label := range oldLabelSet.Difference(newLabelSet) {
+		if ids, ok := s.labelIndex[label]; ok {
+			ids.Delete(objID)
+			if ids.Len() == 0 {
+				delete(s.labelIndex, label)
+			}
+		}
+	}
+
+	// Labels to add objID to
+	for label := range newLabelSet.Difference(oldLabelSet) {
+		if _, ok := s.labelIndex[label]; !ok {
+			s.labelIndex[label] = sets.New[string]()
+		}
+		s.labelIndex[label].Insert(objID)
+	}
+	s.labelIndexMu.Unlock()
+}
+
+// removeFromLabelIndex removes an object entirely from the label index.
+func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) {
+	s.labelIndexMu.Lock()
+	for k, v := range labels {
+		label := formatLabel(k, v)
+		if ids, ok := s.labelIndex[label]; ok {
+			ids.Delete(objID)
+			if ids.Len() == 0 {
+				delete(s.labelIndex, label)
+			}
+		}
+	}
+	s.labelIndexMu.Unlock()
 }
 
 func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
@@ -110,7 +168,6 @@ func (s *Store[E]) deleteOmapValue(ioCtx *rados.IOContext, omapName, key string)
 	if err := ioCtx.RmOmapKeys(omapName, []string{key}); err != nil {
 		return fmt.Errorf("unable to delete mapping omap value: %w", err)
 	}
-
 	return nil
 }
 
@@ -155,6 +212,8 @@ func (s *Store[E]) Create(ctx context.Context, obj E) (E, error) {
 		return utils.Zero[E](), err
 	}
 
+	s.updateLabelIndex(obj.GetID(), nil, obj.GetLabels())
+
 	s.enqueue(store.WatchEvent[E]{
 		Type:   store.WatchEventTypeCreated,
 		Object: obj,
@@ -179,7 +238,11 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 	}
 
 	if len(obj.GetFinalizers()) == 0 {
-		return s.delete(ioCtx, id)
+		if err := s.delete(ioCtx, id); err != nil {
+			return err
+		}
+		s.removeFromLabelIndex(id, obj.GetLabels())
+		return nil
 	}
 
 	if obj.GetDeletedAt() != nil {
@@ -194,6 +257,7 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to set object metadata: %w", err)
 	}
 
+	s.removeFromLabelIndex(id, obj.GetLabels())
 	s.enqueue(store.WatchEvent[E]{
 		Type:   store.WatchEventTypeDeleted,
 		Object: obj,
@@ -204,6 +268,9 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 
 func (s *Store[E]) delete(ioCtx *rados.IOContext, id string) error {
 	if err := s.deleteOmapValue(ioCtx, s.omapName, id); err != nil {
+		if errors.Is(err, rados.ErrNotFound) {
+			return store.ErrNotFound
+		}
 		return fmt.Errorf("failed to delete object from omap: %w", err)
 	}
 	return nil
@@ -234,25 +301,45 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 		return utils.Zero[E](), err
 	}
 
+	// Begin OMAP Update Logic
+	deleted := false
+	oldLabels := oldObj.GetLabels()
+	newLabels := obj.GetLabels()
+
 	if obj.GetDeletedAt() != nil && len(obj.GetFinalizers()) == 0 {
-		if err := s.delete(ioCtx, obj.GetID()); err != nil {
-			return utils.Zero[E](), fmt.Errorf("failed to delete object metadata: %w", err)
+		if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
+			return utils.Zero[E](), fmt.Errorf("failed to delete object during update: %w", ErrResourceVersionNotLatest)
 		}
-		return obj, nil
+
+		if err := s.delete(ioCtx, obj.GetID()); err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				return utils.Zero[E](), fmt.Errorf("failed to delete object from omap during update: %w", err)
+			}
+		}
+		deleted = true
+	} else {
+		if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
+			return utils.Zero[E](), fmt.Errorf("failed to update object: %w", ErrResourceVersionNotLatest)
+		}
+		obj.IncrementResourceVersion()
+
+		obj, err = s.set(ioCtx, obj)
+		if err != nil {
+			return utils.Zero[E](), err
+		}
 	}
 
-	if oldObj.GetResourceVersion() != obj.GetResourceVersion() {
-		return utils.Zero[E](), fmt.Errorf("failed to update object: %w", ErrResourceVersionNotLatest)
-	}
-	obj.IncrementResourceVersion()
-
-	obj, err = s.set(ioCtx, obj)
-	if err != nil {
-		return utils.Zero[E](), err
+	var eventType store.WatchEventType
+	if deleted {
+		s.removeFromLabelIndex(obj.GetID(), oldLabels)
+		eventType = store.WatchEventTypeDeleted
+	} else {
+		s.updateLabelIndex(obj.GetID(), oldLabels, newLabels)
+		eventType = store.WatchEventTypeUpdated
 	}
 
 	s.enqueue(store.WatchEvent[E]{
-		Type:   store.WatchEventTypeUpdated,
+		Type:   eventType,
 		Object: obj,
 	})
 
@@ -347,4 +434,76 @@ func (s *Store[E]) get(ioCtx *rados.IOContext, id string) (E, error) {
 	}
 
 	return obj, nil
+}
+
+type sizedLabel struct {
+	ids  sets.Set[string]
+	size int
+}
+
+func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]string) ([]E, error) {
+	if len(labelSelector) == 0 {
+		return s.List(ctx)
+	}
+
+	// pre-allocate the slice to avoid extra memory allocations
+	labelSelect := make([]sizedLabel, 0, len(labelSelector))
+	var intersection sets.Set[string]
+
+	s.labelIndexMu.RLock()
+	// 1 .Gather label set sizes and check for immediate non-matches.
+	for key, value := range labelSelector {
+		label := formatLabel(key, value)
+		ids, found := s.labelIndex[label]
+		if !found {
+			s.labelIndexMu.RUnlock()
+			return []E{}, nil
+		}
+
+		labelSelect = append(labelSelect, sizedLabel{
+			ids:  ids.Clone(),
+			size: ids.Len(),
+		})
+	}
+	s.labelIndexMu.RUnlock()
+	if len(labelSelect) > 1 {
+		// 2. Sort the labels by the size of their matching set (smallest first).
+		sort.Slice(labelSelect, func(i, j int) bool {
+			return labelSelect[i].size < labelSelect[j].size
+		})
+	}
+
+	var isFirstLabel = true
+
+	// 3. Iterate over the sorted slice (labelsForSort) to compute the intersection.
+	for _, info := range labelSelect {
+		ids := info.ids
+		if isFirstLabel {
+			// Use the smallest set to initialize the intersection (copy to avoid modifying the index set).
+			intersection = ids
+			isFirstLabel = false
+		} else {
+			// Intersect the current result with the next smallest set.
+			intersection = intersection.Intersection(ids)
+		}
+
+		if intersection.Len() == 0 {
+			return []E{}, nil
+		}
+	}
+
+	objs := make([]E, 0, intersection.Len())
+	for id := range intersection {
+		obj, err := s.Get(ctx, id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				// Object was deleted after index lookup; skip stale entry
+				continue
+			}
+			return nil, err
+		}
+		objs = append(objs, obj)
+	}
+
+	return objs, nil
 }
