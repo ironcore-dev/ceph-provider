@@ -11,14 +11,15 @@ import (
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume, error) {
 	cephImage, err := s.imageStore.Get(ctx, imageId)
 	if err != nil {
-		if errors.Is(err, utils.ErrVolumeNotFound) {
-			return nil, fmt.Errorf("failed to get image %s: %w", imageId, utils.ErrVolumeNotFound)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("failed to get image %s: %w", imageId, store.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to get image: %w", err)
 	}

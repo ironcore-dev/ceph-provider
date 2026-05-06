@@ -338,7 +338,7 @@ func (s *Store[E]) get(ioCtx *rados.IOContext, id string) (E, error) {
 			return utils.Zero[E](), fmt.Errorf("failed to fetch omap value: %w", err)
 		}
 
-		return utils.Zero[E](), fmt.Errorf("object with id %q %w", id, store.ErrNotFound)
+		return utils.Zero[E](), fmt.Errorf("object with id %q: %w", id, store.ErrNotFound)
 	}
 
 	obj := s.newFunc()
