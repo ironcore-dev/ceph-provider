@@ -12,6 +12,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"github.com/pkg/errors"
 )
 
@@ -20,8 +21,8 @@ func (s *Server) createVolumeSnapshot(ctx context.Context, log logr.Logger, volu
 	volumeID := volumeSnapshot.Spec.VolumeId
 	volume, err := s.imageStore.Get(ctx, volumeID)
 	if err != nil {
-		if errors.Is(err, utils.ErrVolumeNotFound) {
-			return nil, fmt.Errorf("failed to get source volume %s: %w", volumeID, utils.ErrVolumeNotFound)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("failed to get source volume %s: %w", volumeID, store.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to get source volume %s: %w", volumeID, err)
 	}

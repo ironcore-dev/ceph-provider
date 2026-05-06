@@ -9,6 +9,7 @@ import (
 
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"github.com/pkg/errors"
 )
 
@@ -17,10 +18,10 @@ func (s *Server) DeleteVolume(ctx context.Context, req *iri.DeleteVolumeRequest)
 
 	log.V(1).Info("Deleting volume")
 	if err := s.imageStore.Delete(ctx, req.VolumeId); err != nil {
-		if !errors.Is(err, utils.ErrVolumeNotFound) {
+		if !errors.Is(err, store.ErrNotFound) {
 			return nil, fmt.Errorf("error deleting volume: %w", err)
 		}
-		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("failed to get volume %s: %w", req.VolumeId, utils.ErrVolumeNotFound))
+		return nil, utils.ConvertInternalErrorToGRPC(fmt.Errorf("failed to get volume %s: %w", req.VolumeId, store.ErrNotFound))
 	}
 
 	log.V(1).Info("Volume deleted")
