@@ -25,9 +25,12 @@ func (r *SnapshotReconciler) processNextFlattenWorkItem(ctx context.Context, log
 	}
 	defer r.flattenQueue.Done(snapshotID)
 
+	log = log.WithValues("snapshotId", snapshotID)
+	ctx = logr.NewContext(ctx, log)
+
 	err := r.processFlattenOperation(ctx, snapshotID)
 	if err != nil {
-		log.Error(err, "flatten operation failed", "snapshotId", snapshotID)
+		log.Error(err, "flatten operation failed")
 		r.flattenQueue.AddRateLimited(snapshotID)
 		return true
 	}
@@ -38,7 +41,7 @@ func (r *SnapshotReconciler) processNextFlattenWorkItem(ctx context.Context, log
 
 // processFlattenOperation processes one flatten operation
 func (r *SnapshotReconciler) processFlattenOperation(ctx context.Context, snapshotID string) error {
-	log := logr.FromContextOrDiscard(ctx).WithValues("snapshotId", snapshotID)
+	log := logr.FromContextOrDiscard(ctx)
 
 	snapshot, err := r.store.Get(ctx, snapshotID)
 	if err != nil {
@@ -106,13 +109,16 @@ func (r *SnapshotReconciler) processNextPopulateWorkItem(ctx context.Context, lo
 	}
 	defer r.populateQueue.Done(snapshotID)
 
+	log = log.WithValues("snapshotId", snapshotID)
+	ctx = logr.NewContext(ctx, log)
+
 	err := r.processPopulateOperation(ctx, snapshotID)
 	if err != nil {
-		log.Error(err, "populate operation failed", "snapshotId", snapshotID)
+		log.Error(err, "populate operation failed")
 		if r.populateQueue.NumRequeues(snapshotID) >= maxPopulateRetries {
 			log.Error(err, "populate operation reached max retries; marking snapshot as Failed", "snapshotId", snapshotID, "maxRetries", maxPopulateRetries)
 			snapshot, getErr := r.store.Get(ctx, snapshotID)
-			if getErr == nil {
+			if getErr == nil && snapshot.DeletedAt == nil && snapshot.Status.State == providerapi.SnapshotStatePopulating {
 				snapshot.Status.State = providerapi.SnapshotStateFailed
 				if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
 					log.Error(updateErr, "failed to persist snapshot Failed state after max retries", "snapshotId", snapshotID)
@@ -133,9 +139,25 @@ func (r *SnapshotReconciler) processNextPopulateWorkItem(ctx context.Context, lo
 	return true
 }
 
+// syncSnapshotFromStore reloads the snapshot from the store between slow populate steps.
+// Populate stops when it is missing from the store, is being deleted, is not in Populating state, or has no IronCore image source.
+func (r *SnapshotReconciler) syncSnapshotFromStore(ctx context.Context, snapshotID string) (snap *providerapi.Snapshot, stillPopulating bool, err error) {
+	s, err := r.store.Get(ctx, snapshotID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get snapshot: %w", err)
+	}
+	if s.DeletedAt != nil || s.Status.State != providerapi.SnapshotStatePopulating || s.Source.IronCoreImage == "" {
+		return nil, false, nil
+	}
+	return s, true, nil
+}
+
 // processPopulateOperation processes one populate operation
 func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snapshotID string) error {
-	log := logr.FromContextOrDiscard(ctx).WithValues("snapshotId", snapshotID)
+	log := logr.FromContextOrDiscard(ctx)
 
 	snapshot, err := r.store.Get(ctx, snapshotID)
 	if err != nil {
@@ -159,6 +181,13 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 	}
 	defer ioCtx.Destroy()
 
+	var platform *ocispec.Platform
+	if snapshot.Labels != nil {
+		if arch, found := snapshot.Labels[providerapi.MachineArchitectureLabel]; found {
+			platform = toPlatform(&arch)
+		}
+	}
+
 	// If the Ceph snapshot already exists, population completed previously (e.g. controller restart
 	// or status update failure). Skip re-populating and just try to advance status to Ready.
 	imageName := SnapshotIDToRBDID(snapshot.ID)
@@ -167,6 +196,33 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 		return fmt.Errorf("failed to check snapshot existence: %w", err)
 	}
 	if exists {
+		rbdImg, err := openImage(ioCtx, imageName)
+		if err != nil {
+			return fmt.Errorf("failed to open rbd image for snapshot metadata: %w", err)
+		}
+		defer closeImage(log, rbdImg)
+		size, err := rbdImg.GetSize()
+		if err != nil {
+			return fmt.Errorf("failed to get rbd image size: %w", err)
+		}
+		var digest string
+		if snapshot.Status.Digest == "" {
+			digest, _, _, err = resolveIroncoreImageReference(ctx, snapshot.Source.IronCoreImage, platform)
+			if err != nil {
+				return fmt.Errorf("failed to resolve ironcore image digest: %w", err)
+			}
+		}
+		snapshot, stillPopulating, err := r.syncSnapshotFromStore(ctx, snapshot.ID)
+		if err != nil {
+			return err
+		}
+		if !stillPopulating {
+			return nil
+		}
+		snapshot.Status.Size = int64(size)
+		if snapshot.Status.Digest == "" {
+			snapshot.Status.Digest = digest
+		}
 		snapshot.Status.State = providerapi.SnapshotStateReady
 		if _, err := r.store.Update(ctx, snapshot); err != nil {
 			return fmt.Errorf("failed to update snapshot state to Ready: %w", err)
@@ -174,23 +230,19 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 		return nil
 	}
 
-	var platform *ocispec.Platform
-	if snapshot.Labels != nil {
-		if arch, found := snapshot.Labels[providerapi.MachineArchitectureLabel]; found {
-			platform = toPlatform(&arch)
-		}
-	}
-
-	rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
+	rc, rootFSSizeBytes, digest, err := openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
 	if err != nil {
-		snapshot.Status.State = providerapi.SnapshotStateFailed
-		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
-			log.Error(updateErr, "Failed to update snapshot after source resolution failure")
-		}
-		// Terminal error: don't retry.
-		return nil
+		return fmt.Errorf("failed to open ironcore image source: %w", err)
 	}
 	defer rc.Close()
+
+	snapshot, stillPopulating, err := r.syncSnapshotFromStore(ctx, snapshot.ID)
+	if err != nil {
+		return err
+	}
+	if !stillPopulating {
+		return nil
+	}
 
 	// Create the backing RBD image if needed.
 	rbdImg, err := openImage(ioCtx, imageName)
@@ -205,7 +257,7 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 			return fmt.Errorf("failed to set data pool: %w", err)
 		}
 
-		roundedSize := round.OffBytes(snapshotSize)
+		roundedSize := round.OffBytes(rootFSSizeBytes)
 		if err := librbd.CreateImage(ioCtx, imageName, roundedSize, options); err != nil {
 			return fmt.Errorf("failed to create os rbd image: %w", err)
 		}
@@ -215,11 +267,30 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 			return fmt.Errorf("failed to persist snapshot metadata after image create: %w", err)
 		}
 	} else {
+		size, err := rbdImg.GetSize()
+		if err != nil {
+			_ = rbdImg.Close()
+			return fmt.Errorf("failed to get existing RBD image size: %w", err)
+		}
+		metadataChanged := false
+		if snapshot.Status.Digest == "" {
+			snapshot.Status.Digest = digest
+			metadataChanged = true
+		}
+		if snapshot.Status.Size == 0 {
+			snapshot.Status.Size = int64(size)
+			metadataChanged = true
+		}
 		_ = rbdImg.Close()
+		if metadataChanged {
+			if _, err := r.store.Update(ctx, snapshot); err != nil {
+				return fmt.Errorf("failed to persist snapshot metadata for existing image: %w", err)
+			}
+		}
 	}
 
 	if err := r.prepareSnapshotContent(log, ioCtx, imageName, rc); err != nil {
-		return fmt.Errorf("populate failed: %w", err)
+		return fmt.Errorf("failed to populate snapshot: %w", err)
 	}
 
 	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, imageName); err != nil {
@@ -231,6 +302,14 @@ func (r *SnapshotReconciler) processPopulateOperation(ctx context.Context, snaps
 		if !exists {
 			return fmt.Errorf("failed to create ironcore image snapshot after population: %w", err)
 		}
+	}
+
+	snapshot, stillPopulating, err = r.syncSnapshotFromStore(ctx, snapshot.ID)
+	if err != nil {
+		return err
+	}
+	if !stillPopulating {
+		return nil
 	}
 
 	snapshot.Status.State = providerapi.SnapshotStateReady

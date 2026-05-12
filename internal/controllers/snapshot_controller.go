@@ -365,6 +365,11 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
+	if snapshot.Status.State == providerapi.SnapshotStateFailed {
+		log.V(1).Info("Snapshot is in failed state")
+		return nil
+	}
+
 	if snapshot.Status.State == providerapi.SnapshotStateFlattening {
 		r.flattenQueue.Add(snapshot.ID)
 		return nil
@@ -426,33 +431,46 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 	return nil
 }
 
-func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
+// resolveIroncoreImageReference resolves imageReference for populate and returns digest, root filesystem size, and getSourceStream to read layer bytes.
+func resolveIroncoreImageReference(ctx context.Context, imageReference string, platform *ocispec.Platform) (digest string, rootFSSizeBytes uint64, getSourceStream func() (io.ReadCloser, error), err error) {
 	osImgSrc, err := createOsImageSource(platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to create os image source: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to create os image source: %w", err)
 	}
 
 	img, err := osImgSrc.Resolve(ctx, imageReference)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in os image source: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
 	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to resolve ironcore image: %w", err)
 	}
 
 	rootFS := ironcoreImage.RootFS
 	if rootFS == nil {
-		return nil, 0, "", fmt.Errorf("image has no root fs")
+		return "", 0, nil, fmt.Errorf("image has no root fs")
 	}
 
-	content, err := rootFS.Content(ctx)
+	digest = img.Descriptor().Digest.String()
+	rootFSSizeBytes = uint64(rootFS.Descriptor().Size)
+	getSourceStream = func() (io.ReadCloser, error) {
+		return rootFS.Content(ctx)
+	}
+	return digest, rootFSSizeBytes, getSourceStream, nil
+}
+
+func openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
+	digest, rootFSSizeBytes, getSourceStream, err := resolveIroncoreImageReference(ctx, imageReference, platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
+		return nil, 0, "", err
 	}
-
-	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
+	rc, err := getSourceStream()
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to get source stream: %w", err)
+	}
+	return rc, rootFSSizeBytes, digest, nil
 }
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {

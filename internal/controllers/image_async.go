@@ -21,9 +21,12 @@ func (r *ImageReconciler) processNextFlattenWorkItem(ctx context.Context, log lo
 	}
 	defer r.flattenQueue.Done(imageID)
 
+	log = log.WithValues("imageId", imageID)
+	ctx = logr.NewContext(ctx, log)
+
 	err := r.processFlattenOperation(ctx, imageID)
 	if err != nil {
-		log.Error(err, "flatten operation failed", "imageId", imageID)
+		log.Error(err, "flatten operation failed")
 		r.flattenQueue.AddRateLimited(imageID)
 		return true
 	}
@@ -36,7 +39,7 @@ func (r *ImageReconciler) processNextFlattenWorkItem(ctx context.Context, log lo
 // until no children remain. When flattening completes, it re-triggers image reconciliation
 // so deletion can proceed (snapshot removal, reparenting, RemoveImage, finalizer removal).
 func (r *ImageReconciler) processFlattenOperation(ctx context.Context, imageID string) error {
-	log := logr.FromContextOrDiscard(ctx).WithValues("imageId", imageID)
+	log := logr.FromContextOrDiscard(ctx)
 
 	image, err := r.images.Get(ctx, imageID)
 	if err != nil {
@@ -79,10 +82,6 @@ func (r *ImageReconciler) processFlattenOperation(ctx context.Context, imageID s
 	if len(childImgs) == 0 {
 		// Flattening complete; let the normal delete flow proceed.
 		log.V(2).Info("No children remain; resuming image deletion")
-		image.Status.State = providerapi.ImageStateAvailable
-		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to update image state after flattening: %w", err)
-		}
 		r.queue.Add(imageID)
 		return nil
 	}
