@@ -196,34 +196,10 @@ const (
 	SnapshotFinalizer = "snapshot"
 )
 
-func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, snapshot *providerapi.Snapshot) error {
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
 		log.V(1).Info("snapshot has no finalizer: done")
 		return nil
-	}
-
-	rbdID, snapshotID, err := getSnapshotSourceDetails(snapshot)
-	if err != nil {
-		return fmt.Errorf("failed to get snapshot source details: %w", err)
-	}
-
-	img, err := librbd.OpenImage(ioCtx, rbdID, snapshotID)
-	if err != nil {
-		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to open rbd image: %w", err)
-		}
-		// Parent image or snapshot is gone; treat flattening as complete and let cleanup handle the rest.
-		snapshot.Status.State = providerapi.SnapshotStateFlattened
-		if _, err := r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to update snapshot state to Flattened: %w", err)
-		}
-		return nil
-	}
-	defer closeImage(log, img)
-
-	_, childImgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list children: %w", err)
 	}
 
 	if snapshot.Status.State != providerapi.SnapshotStateFlattening {
@@ -233,13 +209,7 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		}
 	}
 
-	// Delegate flattening to the async flatten queue. The worker will set state to Flattened
-	// when flattening completes (or no children remain)
-	if len(childImgs) == 0 {
-		r.flattenQueue.Add(snapshot.ID)
-		return nil
-	}
-
+	// Delegate flattening to the async flatten queue. The async flatten worker sets state to Flattened when done.
 	r.flattenQueue.Add(snapshot.ID)
 	return nil
 }
@@ -313,7 +283,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 
 	if snapshot.DeletedAt != nil {
 		if snapshot.Status.State != providerapi.SnapshotStateFlattened {
-			if err := r.deleteSnapshot(ctx, log, ioCtx, snapshot); err != nil {
+			if err := r.deleteSnapshot(ctx, log, snapshot); err != nil {
 				return fmt.Errorf("failed to delete snapshot: %w", err)
 			}
 		}
@@ -365,6 +335,11 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
+	if snapshot.Status.State == providerapi.SnapshotStateFailed {
+		log.V(1).Info("Snapshot is in failed state")
+		return nil
+	}
+
 	if snapshot.Status.State == providerapi.SnapshotStateFlattening {
 		r.flattenQueue.Add(snapshot.ID)
 		return nil
@@ -372,13 +347,6 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	if snapshot.Status.State == providerapi.SnapshotStatePopulating {
 		r.populateQueue.Add(snapshot.ID)
 		return nil
-	}
-
-	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
-		snapshot.Finalizers = append(snapshot.Finalizers, SnapshotFinalizer)
-		if _, err := r.store.Update(ctx, snapshot); err != nil {
-			return fmt.Errorf("failed to set finalizers: %w", err)
-		}
 	}
 
 	switch {
@@ -426,33 +394,46 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 	return nil
 }
 
-func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
+// resolveIroncoreImageReference resolves imageReference for populate and returns digest, root filesystem size, and getSourceStream to read layer bytes.
+func resolveIroncoreImageReference(ctx context.Context, imageReference string, platform *ocispec.Platform) (digest string, rootFSSizeBytes uint64, getSourceStream func() (io.ReadCloser, error), err error) {
 	osImgSrc, err := createOsImageSource(platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to create os image source: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to create os image source: %w", err)
 	}
 
 	img, err := osImgSrc.Resolve(ctx, imageReference)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in os image source: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
 	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
+		return "", 0, nil, fmt.Errorf("failed to resolve ironcore image: %w", err)
 	}
 
 	rootFS := ironcoreImage.RootFS
 	if rootFS == nil {
-		return nil, 0, "", fmt.Errorf("image has no root fs")
+		return "", 0, nil, fmt.Errorf("image has no root fs")
 	}
 
-	content, err := rootFS.Content(ctx)
+	digest = img.Descriptor().Digest.String()
+	rootFSSizeBytes = uint64(rootFS.Descriptor().Size)
+	getSourceStream = func() (io.ReadCloser, error) {
+		return rootFS.Content(ctx)
+	}
+	return digest, rootFSSizeBytes, getSourceStream, nil
+}
+
+func openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
+	digest, rootFSSizeBytes, getSourceStream, err := resolveIroncoreImageReference(ctx, imageReference, platform)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
+		return nil, 0, "", err
 	}
-
-	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
+	rc, err := getSourceStream()
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to get source stream: %w", err)
+	}
+	return rc, rootFSSizeBytes, digest, nil
 }
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {
