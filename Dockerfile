@@ -96,7 +96,7 @@ ENV LIB_DIR_PREFIX_MINUS=aarch64
 ENV LIB_DIR_SUFFIX_NUMBER=1
 ENV LIB_DIR=lib
 
-FROM busybox:1.37.0-uclibc AS busybox
+FROM busybox:1.38.0-uclibc AS busybox
 FROM distroless-$TARGETARCH AS ceph-volume-provider-image
 WORKDIR /
 COPY --from=busybox /bin/sh /bin/sh
