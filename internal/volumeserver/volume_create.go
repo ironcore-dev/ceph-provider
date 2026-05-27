@@ -20,6 +20,13 @@ const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
+func getLabelsFromVolume(volume *iriv1alpha1.Volume) map[string]string {
+	if volume != nil && volume.Metadata != nil {
+		return volume.Metadata.Labels
+	}
+	return nil
+}
+
 func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, volume *iriv1alpha1.Volume) (*api.Image, error) {
 	if volume == nil {
 		return nil, fmt.Errorf("got an empty volume")
@@ -120,7 +127,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 	image := &api.Image{
 		Metadata: apiutils.Metadata{
 			ID:     s.idGen.Generate(),
-			Labels: volume.Metadata.Labels,
+			Labels: getLabelsFromVolume(volume),
 		},
 		Spec: api.ImageSpec{
 			Size:              imageSize,
