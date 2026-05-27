@@ -83,7 +83,7 @@ type Store[E apiutils.Object] struct {
 
 // --- Internal Label Index Helper ---
 func formatLabel(key, value string) string {
-	return fmt.Sprintf("%s=%s", key, value)
+	return fmt.Sprintf("%s\x00%s", key, value)
 }
 
 // updateLabelIndex updates the index for a single object based on its labels.
