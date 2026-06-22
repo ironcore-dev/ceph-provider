@@ -20,6 +20,12 @@ type SnapshotState string
 const (
 	SnapshotStatePending   SnapshotState = "Pending"
 	SnapshotStatePopulated SnapshotState = "Populated"
+	// SnapshotStatePopulating indicates the IronCore image is being populated asynchronously.
+	SnapshotStatePopulating SnapshotState = "Populating"
+	// SnapshotStateFlattening indicates deletion is waiting for child images to be flattened asynchronously.
+	SnapshotStateFlattening SnapshotState = "Flattening"
+	// SnapshotStateFlattened indicates async child flattening finished; deletion cleanup can proceed.
+	SnapshotStateFlattened SnapshotState = "Flattened"
 	SnapshotStateReady     SnapshotState = "Ready"
 	SnapshotStateFailed    SnapshotState = "Failed"
 )

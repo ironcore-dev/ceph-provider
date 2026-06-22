@@ -16,13 +16,11 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/async"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
-	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
-	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"k8s.io/client-go/util/workqueue"
 )
 
@@ -30,6 +28,7 @@ type SnapshotReconcilerOptions struct {
 	Pool                string
 	PopulatorBufferSize int64
 	WorkerSize          int
+	AsyncRunner         *async.Runner
 }
 
 func NewSnapshotReconciler(
@@ -56,6 +55,10 @@ func NewSnapshotReconciler(
 		return nil, fmt.Errorf("must specify events")
 	}
 
+	if opts.AsyncRunner == nil {
+		return nil, fmt.Errorf("must specify async runner")
+	}
+
 	if opts.Pool == "" {
 		return nil, fmt.Errorf("must specify pool")
 	}
@@ -78,6 +81,7 @@ func NewSnapshotReconciler(
 		pool:                opts.Pool,
 		populatorBufferSize: opts.PopulatorBufferSize,
 		workerSize:          opts.WorkerSize,
+		asyncRunner:         opts.AsyncRunner,
 	}, nil
 }
 
@@ -94,6 +98,8 @@ type SnapshotReconciler struct {
 	populatorBufferSize int64
 
 	workerSize int
+
+	asyncRunner *async.Runner
 }
 
 func (r *SnapshotReconciler) Start(ctx context.Context) error {
@@ -108,6 +114,22 @@ func (r *SnapshotReconciler) Start(ctx context.Context) error {
 	defer func() {
 		_ = r.events.RemoveHandler(reg)
 	}()
+
+	// Requeue the affected snapshot whenever an async operation finishes so reconciliation
+	// can advance the state machine (e.g. Populating -> Ready, Flattening -> Flattened).
+	r.asyncRunner.AddListener(async.ListenerFuncs{
+		HandleDoneFunc: func(evt async.DoneEvent) {
+			snapshotID, ok := parseSnapshotAsyncKey(evt.Key)
+			if !ok {
+				return
+			}
+			if evt.Err != nil {
+				r.queue.AddRateLimited(snapshotID)
+				return
+			}
+			r.queue.Add(snapshotID)
+		},
+	})
 
 	go func() {
 		<-ctx.Done()
@@ -152,44 +174,82 @@ const (
 	SnapshotFinalizer = "snapshot"
 )
 
-func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+// deleteSnapshot starts the async deletion of a snapshot. Flattening child images can be
+// long-running, so instead of doing it inline it moves the snapshot into the Flattening
+// state and submits the work to the async runner. Once flattening completes the runner
+// notifies the reconciler, which advances the snapshot to Flattened and runs
+// cleanupFlattenedSnapshot to remove the rbd snapshot/images and the finalizer.
+func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger, snapshot *providerapi.Snapshot) error {
 	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
 		log.V(1).Info("snapshot has no finalizer: done")
 		return nil
 	}
 
-	rbdID, snapshotID, err := getSnapshotSourceDetails(snapshot)
+	if snapshot.Status.State != providerapi.SnapshotStateFlattening {
+		snapshot.Status.State = providerapi.SnapshotStateFlattening
+		if _, err := r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to update snapshot to Flattening state: %w", err)
+		}
+	}
+
+	// Delegate flattening to the async runner. processFlattenOperation sets the snapshot
+	// to Flattened when done; the done listener then requeues it for cleanup.
+	r.submitFlatten(ctx, log, snapshot.ID)
+	return nil
+}
+
+// cleanupFlattenedSnapshot performs the fast, terminal steps of snapshot deletion after the
+// async flatten finished: it removes the rbd snapshot, deletes the backing os/clone image when
+// the snapshot owns it, and finally clears the finalizer.
+func (r *SnapshotReconciler) cleanupFlattenedSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
+	if !slices.Contains(snapshot.Finalizers, SnapshotFinalizer) {
+		return nil
+	}
+
+	rbdID, snapName, err := getSnapshotSourceDetails(snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to get snapshot source details: %w", err)
 	}
 
-	img, err := librbd.OpenImage(ioCtx, rbdID, snapshotID)
+	img, err := openImage(ioCtx, rbdID)
 	if err != nil {
 		if !errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("failed to open rbd image: %w", err)
+			return fmt.Errorf("failed to open image: %w", err)
 		}
-		snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
-		if _, err := r.store.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("failed to update snapshot metadata: %w", err)
+	} else {
+		defer func() {
+			if img != nil {
+				closeImage(log, img)
+			}
+		}()
+
+		rbdSnapshot := img.GetSnapshot(snapName)
+		if err := removeSnapshot(rbdSnapshot); err != nil && !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to remove snapshot: %w", err)
 		}
-		log.V(2).Info("Removed snapshot finalizer")
-		return nil
 	}
-	shouldClose := true
-	defer func() {
-		if shouldClose {
+
+	// deletes os-image if not referenced by any volume
+	if snapshot.Source.IronCoreImage != "" {
+		log.V(2).Info("Remove ironcore os-image")
+		if img != nil {
 			closeImage(log, img)
+			img = nil
 		}
-	}()
-
-	if err := flattenChildImages(log, r.conn, img); err != nil {
-		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
+		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil && !errors.Is(err, librbd.ErrNotFound) {
+			return fmt.Errorf("failed to remove ironcore os-image: %w", err)
+		}
+		log.V(2).Info("Ironcore os-image removed")
 	}
 
-	log.V(2).Info("Remove snapshot")
-	rbdSnapshot := img.GetSnapshot(snapshotID)
-	if err := removeSnapshot(rbdSnapshot); err != nil {
-		return fmt.Errorf("failed to remove snapshot: %w", err)
+	// deletes parent rbd image of snapshot which is created during source volume deletion
+	// and has no any other reference except snapshot.
+	if rbdID == ImageIDToRBDID(snapshot.ID) {
+		log.V(2).Info("Remove parent rbd image")
+		if err := r.images.Delete(ctx, snapshot.ID); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("unable to remove parent rbd image: %w", err)
+		}
+		log.V(2).Info("Removed parent rbd image")
 	}
 
 	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, SnapshotFinalizer)
@@ -197,30 +257,6 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 		return fmt.Errorf("failed to update snapshot metadata: %w", err)
 	}
 	log.V(2).Info("Removed snapshot finalizer")
-
-	// deletes os-image if not referenced by any volume
-	if snapshot.Source.IronCoreImage != "" {
-		log.V(2).Info("Remove ironcore os-image")
-		shouldClose = false
-		if err := img.Close(); err != nil {
-			return fmt.Errorf("unable to close ironcore os-image: %w", err)
-		}
-
-		if err := librbd.RemoveImage(ioCtx, rbdID); err != nil {
-			return fmt.Errorf("unable to remove ironcore os-image: %w", err)
-		}
-		log.V(2).Info("Ironcore os-image removed")
-	}
-
-	// deletes parent rbd image of snapshot which is created during source volume deletion
-	// and has no any other reference except snapshot
-	if rbdID == ImageIDToRBDID(snapshotID) {
-		log.V(2).Info("Remove parent rbd image")
-		if err := r.images.Delete(ctx, snapshotID); store.IgnoreErrNotFound(err) != nil {
-			return fmt.Errorf("unable to remove parent rbd image: %w", err)
-		}
-		log.V(2).Info("Removed parent rbd image")
-	}
 	return nil
 }
 
@@ -242,10 +278,20 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	if snapshot.DeletedAt != nil {
-		if err := r.deleteSnapshot(ctx, log, ioCtx, snapshot); err != nil {
-			return fmt.Errorf("failed to delete snapshot: %w", err)
+		// Phase 1: kick off (or continue) async child flattening until the snapshot is Flattened.
+		if snapshot.Status.State != providerapi.SnapshotStateFlattened {
+			if err := r.deleteSnapshot(ctx, log, snapshot); err != nil {
+				return fmt.Errorf("failed to delete snapshot: %w", err)
+			}
 		}
-		log.V(1).Info("Successfully deleted snapshot")
+
+		// Phase 2: flattening done; run the terminal cleanup (rbd snapshot/image + finalizer).
+		if snapshot.Status.State == providerapi.SnapshotStateFlattened {
+			if err := r.cleanupFlattenedSnapshot(ctx, log, ioCtx, snapshot); err != nil {
+				return fmt.Errorf("failed to cleanup flattened snapshot: %w", err)
+			}
+			log.V(1).Info("Successfully deleted snapshot")
+		}
 		return nil
 	}
 
@@ -295,81 +341,72 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 		return nil
 	}
 
+	// Restart recovery: re-submit snapshots already parked in an async state so work resumes
+	// after a controller restart (the runner de-duplicates if it is already in flight).
+	if snapshot.Status.State == providerapi.SnapshotStateFlattening {
+		r.submitFlatten(ctx, log, snapshot.ID)
+		return nil
+	}
+	if snapshot.Status.State == providerapi.SnapshotStatePopulating {
+		r.submitPopulate(ctx, log, snapshot.ID)
+		return nil
+	}
+
 	log.V(1).Info("Rbd snapshot does not exist, start reconciliation")
 	switch {
 	case snapshot.Source.IronCoreImage != "":
-		err = r.reconcileIroncoreImageSnapshot(ctx, log, ioCtx, snapshot)
+		// IronCore image snapshots are populated asynchronously by the async runner.
+		snapshot.Status.State = providerapi.SnapshotStatePopulating
+		if _, err := r.store.Update(ctx, snapshot); err != nil {
+			return fmt.Errorf("failed to persist Populating snapshot state: %w", err)
+		}
+		r.submitPopulate(ctx, log, snapshot.ID)
+		return nil
 	case snapshot.Source.VolumeImageID != "":
-		err = r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot)
+		if err := r.reconcileVolumeImageSnapshot(ctx, log, ioCtx, snapshot); err != nil {
+			snapshot.Status.State = providerapi.SnapshotStateFailed
+			if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
+				return errors.Join(err, fmt.Errorf("failed to update snapshot state: %w", updateErr))
+			}
+			return fmt.Errorf("failed to reconcile snapshot: %w", err)
+		}
+		return nil
 	default:
 		return fmt.Errorf("snapshot source not found")
 	}
-	if err != nil {
-		snapshot.Status.State = providerapi.SnapshotStateFailed
-		if _, updateErr := r.store.Update(ctx, snapshot); updateErr != nil {
-			return errors.Join(err, fmt.Errorf("failed to update snapshot state: %w", updateErr))
-		}
-		return fmt.Errorf("failed to reconcile snapshot: %w", err)
-	}
-
-	snapshot.Status.State = providerapi.SnapshotStateReady
-	if _, err = r.store.Update(ctx, snapshot); err != nil {
-		return fmt.Errorf("failed to update snapshot: %w", err)
-	}
-
-	return nil
-}
-func (r *SnapshotReconciler) reconcileIroncoreImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
-	var platform *ocispec.Platform
-
-	if snapshot.Labels != nil {
-		if arch, found := snapshot.Labels[providerapi.MachineArchitectureLabel]; found {
-			log.V(2).Info("Snapshot architecture", "architecture", arch)
-			platform = toPlatform(&arch)
-		}
-	}
-
-	rc, snapshotSize, digest, err := r.openIroncoreImageSource(ctx, snapshot.Source.IronCoreImage, platform)
-	if err != nil {
-		return fmt.Errorf("failed to open snapshot source: %w", err)
-	}
-	defer func() {
-		if err := rc.Close(); err != nil {
-			log.Error(err, "failed to close snapshot source")
-		}
-	}()
-
-	options := librbd.NewRbdImageOptions()
-	defer options.Destroy()
-
-	//TODO: different pool for OS images?
-	if err := options.SetString(librbd.RbdImageOptionDataPool, r.pool); err != nil {
-		return fmt.Errorf("failed to set data pool: %w", err)
-	}
-	log.V(2).Info("Configured pool", "pool", r.pool)
-
-	rbdImageID := SnapshotIDToRBDID(snapshot.ID)
-	roundedSize := round.OffBytes(snapshotSize)
-
-	if err = librbd.CreateImage(ioCtx, rbdImageID, roundedSize, options); err != nil {
-		return fmt.Errorf("failed to create os rbd image: %w", err)
-	}
-	log.V(2).Info("Created rbd image", "bytes", roundedSize)
-
-	if err := r.prepareSnapshotContent(log, ioCtx, rbdImageID, rc); err != nil {
-		return fmt.Errorf("failed to prepare snapshot content: %w", err)
-	}
-
-	log.V(2).Info("Create ironcore image snapshot", "ImageID", rbdImageID)
-	if err := createSnapshot(log, ioCtx, ImageSnapshotVersion, rbdImageID); err != nil {
-		return fmt.Errorf("failed to create ironcore image snapshot: %w", err)
-	}
-
-	snapshot.Status.Digest = digest
-	snapshot.Status.Size = int64(roundedSize)
-	return nil
 }
 
+func (r *SnapshotReconciler) submitPopulate(ctx context.Context, log logr.Logger, snapshotID string) {
+	err := r.asyncRunner.Submit(ctx, snapshotAsyncKey(snapshotID), func(opCtx context.Context) error {
+		return r.processPopulateOperation(opCtx, snapshotID)
+	})
+	switch {
+	case err == nil, errors.Is(err, async.ErrInProgress):
+		return
+	case errors.Is(err, async.ErrAtCapacity), errors.Is(err, async.ErrNotRunning):
+		log.V(2).Info("Async runner unavailable for populate, requeueing", "reason", err.Error())
+		r.queue.AddRateLimited(snapshotID)
+	default:
+		log.Error(err, "failed to submit populate operation, requeueing")
+		r.queue.AddRateLimited(snapshotID)
+	}
+}
+
+func (r *SnapshotReconciler) submitFlatten(ctx context.Context, log logr.Logger, snapshotID string) {
+	err := r.asyncRunner.Submit(ctx, snapshotAsyncKey(snapshotID), func(opCtx context.Context) error {
+		return r.processFlattenOperation(opCtx, snapshotID)
+	})
+	switch {
+	case err == nil, errors.Is(err, async.ErrInProgress):
+		return
+	case errors.Is(err, async.ErrAtCapacity), errors.Is(err, async.ErrNotRunning):
+		log.V(2).Info("Async runner unavailable for flatten, requeueing", "reason", err.Error())
+		r.queue.AddRateLimited(snapshotID)
+	default:
+		log.Error(err, "failed to submit flatten operation, requeueing")
+		r.queue.AddRateLimited(snapshotID)
+	}
+}
 func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, snapshot *providerapi.Snapshot) error {
 	img, err := r.images.Get(ctx, snapshot.Source.VolumeImageID)
 	if err != nil {
@@ -385,36 +422,11 @@ func (r *SnapshotReconciler) reconcileVolumeImageSnapshot(ctx context.Context, l
 	}
 
 	snapshot.Status.Size = int64(img.Status.Size)
+	snapshot.Status.State = providerapi.SnapshotStateReady
+	if _, err := r.store.Update(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to persist snapshot after creating volume image snapshot: %w", err)
+	}
 	return nil
-}
-
-func (r *SnapshotReconciler) openIroncoreImageSource(ctx context.Context, imageReference string, platform *ocispec.Platform) (io.ReadCloser, uint64, string, error) {
-	osImgSrc, err := createOsImageSource(platform)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to create os image source: %w", err)
-	}
-
-	img, err := osImgSrc.Resolve(ctx, imageReference)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve image ref in os image source: %w", err)
-	}
-
-	ironcoreImage, err := ironcoreimage.ResolveImage(ctx, img)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to resolve ironcore image: %w", err)
-	}
-
-	rootFS := ironcoreImage.RootFS
-	if rootFS == nil {
-		return nil, 0, "", fmt.Errorf("image has no root fs")
-	}
-
-	content, err := rootFS.Content(ctx)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("failed to get root fs content: %w", err)
-	}
-
-	return content, uint64(rootFS.Descriptor().Size), img.Descriptor().Digest.String(), nil
 }
 
 func (r *SnapshotReconciler) prepareSnapshotContent(log logr.Logger, ioCtx *rados.IOContext, imageName string, rc io.ReadCloser) error {

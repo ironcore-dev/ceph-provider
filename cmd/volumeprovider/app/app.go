@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/async"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
@@ -60,6 +61,10 @@ type CephOptions struct {
 	VolumeEventStoreOptions eventrecorder.EventStoreOptions
 
 	WorkerSize int
+
+	// AsyncMaxWorkers caps concurrent long-running operations across snapshot populate/flatten
+	// and image child-flatten (shared global async runner).
+	AsyncMaxWorkers int
 }
 
 func (o *Options) Defaults() {
@@ -68,6 +73,7 @@ func (o *Options) Defaults() {
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 	o.Ceph.WorkerSize = 15
+	o.Ceph.AsyncMaxWorkers = 10
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -92,7 +98,9 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.TTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.ResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
 
-	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Defines the factor to calculate the burst limits.")
+	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Number of concurrent workers for the fast image and snapshot reconcilers.")
+
+	fs.IntVar(&o.Ceph.AsyncMaxWorkers, "async-max-workers", o.Ceph.AsyncMaxWorkers, "Maximum number of concurrent long-running async operations (snapshot populate/flatten and image child-flatten).")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -174,6 +182,12 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	if opts.Ceph.AsyncMaxWorkers <= 0 {
+		err := fmt.Errorf("invalid configuration: async-max-workers must be greater than 0, but got %d", opts.Ceph.AsyncMaxWorkers)
+		setupLog.Error(err, "Async worker size validation failed")
+		return err
+	}
+
 	cleanup, err := configureCephAuth(&opts.Ceph)
 	if err != nil {
 		return fmt.Errorf("failed to configure ceph auth: %w", err)
@@ -247,6 +261,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	volumeEventStore := eventrecorder.NewEventStore(log, opts.Ceph.VolumeEventStoreOptions)
 
+	asyncRunner := async.New(log.WithName("async-runner"), "async", opts.Ceph.AsyncMaxWorkers)
+
 	imageReconciler, err := controllers.NewImageReconciler(
 		log.WithName("image-reconciler"),
 		conn,
@@ -256,10 +272,11 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
-			Monitors:   opts.Ceph.Monitors,
-			Client:     opts.Ceph.Client,
-			Pool:       opts.Ceph.Pool,
-			WorkerSize: opts.Ceph.WorkerSize,
+			Monitors:    opts.Ceph.Monitors,
+			Client:      opts.Ceph.Client,
+			Pool:        opts.Ceph.Pool,
+			WorkerSize:  opts.Ceph.WorkerSize,
+			AsyncRunner: asyncRunner,
 		},
 	)
 	if err != nil {
@@ -267,6 +284,15 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		setupLog.Info("Starting async runner")
+		if err := asyncRunner.Start(ctx); err != nil {
+			setupLog.Error(err, "failed to start async runner")
+			return err
+		}
+		return nil
+	})
 
 	g.Go(func() error {
 		setupLog.Info("Starting image reconciler")
@@ -287,6 +313,7 @@ func Run(ctx context.Context, opts Options) error {
 			Pool:                opts.Ceph.Pool,
 			PopulatorBufferSize: opts.Ceph.PopulatorBufferSize,
 			WorkerSize:          opts.Ceph.WorkerSize,
+			AsyncRunner:         asyncRunner,
 		},
 	)
 	if err != nil {

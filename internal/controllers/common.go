@@ -6,6 +6,7 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
@@ -22,7 +23,30 @@ const (
 	SnapshotRBDIDPrefix = "snap_"
 
 	ImageSnapshotVersion = "v1"
+
+	// Async runner keys are namespaced so a shared global runner can serve both reconcilers
+	// without completion events being requeued on the wrong workqueue.
+	snapshotAsyncKeyPrefix = "snapshot:"
+	imageAsyncKeyPrefix    = "image:"
 )
+
+func snapshotAsyncKey(id string) string {
+	return snapshotAsyncKeyPrefix + id
+}
+
+func imageAsyncKey(id string) string {
+	return imageAsyncKeyPrefix + id
+}
+
+func parseSnapshotAsyncKey(key string) (id string, ok bool) {
+	id, ok = strings.CutPrefix(key, snapshotAsyncKeyPrefix)
+	return id, ok
+}
+
+func parseImageAsyncKey(key string) (id string, ok bool) {
+	id, ok = strings.CutPrefix(key, imageAsyncKeyPrefix)
+	return id, ok
+}
 
 func ImageIDToRBDID(imageID string) string {
 	return ImageRBDIDPrefix + imageID
@@ -141,21 +165,6 @@ func removeSnapshot(snapshot *librbd.Snapshot) error {
 
 	if err := snapshot.Remove(); err != nil {
 		return fmt.Errorf("unable to remove snapshot: %w", err)
-	}
-	return nil
-}
-
-func flattenChildImages(log logr.Logger, conn *rados.Conn, img *librbd.Image) error {
-	pools, childImgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list children: %w", err)
-	}
-	log.V(2).Info("Snapshot references", "pools", len(pools), "rbd-images", len(childImgs))
-
-	for i, snapChildImgName := range childImgs {
-		if err := flattenImage(log, conn, pools[i], snapChildImgName); err != nil {
-			return err
-		}
 	}
 	return nil
 }
