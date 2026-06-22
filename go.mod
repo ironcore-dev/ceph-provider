@@ -4,24 +4,24 @@ go 1.25.0
 
 require (
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ceph/go-ceph v0.39.0
-	github.com/containerd/containerd v1.7.32
+	github.com/ceph/go-ceph v0.40.0
+	github.com/containerd/containerd v1.7.33
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.11.0
 	github.com/ironcore-dev/ironcore v0.2.5-0.20260114075630-5ab59ba249c8
-	github.com/ironcore-dev/ironcore-image v0.4.0
+	github.com/ironcore-dev/ironcore-image v0.5.0
 	github.com/ironcore-dev/provider-utils v0.0.0-20260420150206-639a4bf5422f
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
-	github.com/onsi/ginkgo/v2 v2.29.0
-	github.com/onsi/gomega v1.41.0
+	github.com/onsi/ginkgo/v2 v2.31.0
+	github.com/onsi/gomega v1.42.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/rook/rook/pkg/apis v0.0.0-20250716205136-e4da184ce30a
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	go.uber.org/zap v1.28.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	google.golang.org/grpc v1.81.1
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
@@ -122,7 +122,7 @@ require (
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
@@ -138,7 +138,7 @@ require (
 	k8s.io/component-base v0.34.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	oras.land/oras-go/v2 v2.6.0 // indirect
+	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.33.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
