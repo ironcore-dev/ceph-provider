@@ -109,6 +109,8 @@ func (s *Server) getIriState(state api.ImageState) (iri.VolumeState, error) {
 		return iri.VolumeState_VOLUME_AVAILABLE, nil
 	case api.ImageStatePending:
 		return iri.VolumeState_VOLUME_PENDING, nil
+	case api.ImageStateFlatteningChildren:
+		return iri.VolumeState_VOLUME_PENDING, nil
 	default:
 		return 0, fmt.Errorf("unknown volume state '%q'", state)
 	}

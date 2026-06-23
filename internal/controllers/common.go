@@ -145,21 +145,6 @@ func removeSnapshot(snapshot *librbd.Snapshot) error {
 	return nil
 }
 
-func flattenChildImages(log logr.Logger, conn *rados.Conn, img *librbd.Image) error {
-	pools, childImgs, err := img.ListChildren()
-	if err != nil {
-		return fmt.Errorf("unable to list children: %w", err)
-	}
-	log.V(2).Info("Snapshot references", "pools", len(pools), "rbd-images", len(childImgs))
-
-	for i, snapChildImgName := range childImgs {
-		if err := flattenImage(log, conn, pools[i], snapChildImgName); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func snapshotExistsAndProtected(log logr.Logger, ioCtx *rados.IOContext, imageName string, snapshotName string) (bool, bool, error) {
 	img, err := openImage(ioCtx, imageName)
 	if err != nil {

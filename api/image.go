@@ -19,6 +19,8 @@ type ImageState string
 const (
 	ImageStatePending   ImageState = "Pending"
 	ImageStateAvailable ImageState = "Available"
+	// ImageStateFlatteningChildren indicates deletion is waiting for child images to be flattened.
+	ImageStateFlatteningChildren ImageState = "FlatteningChildren"
 )
 
 type EncryptionState string

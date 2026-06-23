@@ -59,7 +59,18 @@ type CephOptions struct {
 
 	VolumeEventStoreOptions eventrecorder.EventStoreOptions
 
+	// WorkerSize controls the number of concurrent workers for the fast reconcilers
+	// (ImageReconciler, SnapshotReconciler).
 	WorkerSize int
+
+	// SnapshotPopulateLongOpsWorkerSize is the number of concurrent workers used for snapshot populate long-running operations.
+	SnapshotPopulateLongOpsWorkerSize int
+
+	// SnapshotFlattenLongOpsWorkerSize is the number of concurrent workers used for snapshot flatten long-running operations.
+	SnapshotFlattenLongOpsWorkerSize int
+
+	// ImageFlattenLongOpsWorkerSize is the number of concurrent workers used for image flatten long-running operations (deletion-time flattening of children).
+	ImageFlattenLongOpsWorkerSize int
 }
 
 func (o *Options) Defaults() {
@@ -68,6 +79,9 @@ func (o *Options) Defaults() {
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 	o.Ceph.WorkerSize = 15
+	o.Ceph.SnapshotPopulateLongOpsWorkerSize = 3
+	o.Ceph.SnapshotFlattenLongOpsWorkerSize = 5
+	o.Ceph.ImageFlattenLongOpsWorkerSize = 5
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -92,7 +106,12 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.TTL, "volume-event-ttl", 5*time.Minute, "Time to live for volume events.")
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.ResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
 
-	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Defines the factor to calculate the burst limits.")
+	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Number of concurrent workers for the fast image and snapshot reconcilers.")
+
+	fs.IntVar(&o.Ceph.SnapshotPopulateLongOpsWorkerSize, "snapshot-populate-long-ops-worker-size", o.Ceph.SnapshotPopulateLongOpsWorkerSize, "Number of concurrent workers for snapshot populate long-running operations.")
+	fs.IntVar(&o.Ceph.SnapshotFlattenLongOpsWorkerSize, "snapshot-flatten-long-ops-worker-size", o.Ceph.SnapshotFlattenLongOpsWorkerSize, "Number of concurrent workers for snapshot flatten long-running operations.")
+
+	fs.IntVar(&o.Ceph.ImageFlattenLongOpsWorkerSize, "image-flatten-long-ops-worker-size", o.Ceph.ImageFlattenLongOpsWorkerSize, "Number of concurrent workers for image flatten long-running operations (deletion-time flattening of children).")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -171,6 +190,21 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.Ceph.WorkerSize <= 1 {
 		err := fmt.Errorf("invalid configuration: worker-size must be greater than 1, but got %d", opts.Ceph.WorkerSize)
 		setupLog.Error(err, "Worker size validation failed")
+		return err
+	}
+	if opts.Ceph.SnapshotPopulateLongOpsWorkerSize <= 0 {
+		err := fmt.Errorf("invalid configuration: snapshot-populate-long-ops-worker-size must be greater than 0, but got %d", opts.Ceph.SnapshotPopulateLongOpsWorkerSize)
+		setupLog.Error(err, "Snapshot populate long-ops worker size validation failed")
+		return err
+	}
+	if opts.Ceph.SnapshotFlattenLongOpsWorkerSize <= 0 {
+		err := fmt.Errorf("invalid configuration: snapshot-flatten-long-ops-worker-size must be greater than 0, but got %d", opts.Ceph.SnapshotFlattenLongOpsWorkerSize)
+		setupLog.Error(err, "Snapshot flatten long-ops worker size validation failed")
+		return err
+	}
+	if opts.Ceph.ImageFlattenLongOpsWorkerSize <= 0 {
+		err := fmt.Errorf("invalid configuration: image-flatten-long-ops-worker-size must be greater than 0, but got %d", opts.Ceph.ImageFlattenLongOpsWorkerSize)
+		setupLog.Error(err, "Image flatten long-ops worker size validation failed")
 		return err
 	}
 
@@ -256,10 +290,11 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
-			Monitors:   opts.Ceph.Monitors,
-			Client:     opts.Ceph.Client,
-			Pool:       opts.Ceph.Pool,
-			WorkerSize: opts.Ceph.WorkerSize,
+			Monitors:          opts.Ceph.Monitors,
+			Client:            opts.Ceph.Client,
+			Pool:              opts.Ceph.Pool,
+			WorkerSize:        opts.Ceph.WorkerSize,
+			FlattenWorkerSize: opts.Ceph.ImageFlattenLongOpsWorkerSize,
 		},
 	)
 	if err != nil {
@@ -287,6 +322,8 @@ func Run(ctx context.Context, opts Options) error {
 			Pool:                opts.Ceph.Pool,
 			PopulatorBufferSize: opts.Ceph.PopulatorBufferSize,
 			WorkerSize:          opts.Ceph.WorkerSize,
+			PopulateWorkerSize:  opts.Ceph.SnapshotPopulateLongOpsWorkerSize,
+			FlattenWorkerSize:   opts.Ceph.SnapshotFlattenLongOpsWorkerSize,
 		},
 	)
 	if err != nil {

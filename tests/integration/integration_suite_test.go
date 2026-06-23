@@ -86,25 +86,20 @@ var _ = BeforeSuite(func() {
 	}()
 	Expect(os.WriteFile(volumeClassesFile.Name(), volumeClassesData, 0666)).To(Succeed())
 
-	opts := app.Options{
-		Address:                    fmt.Sprintf("%s/ceph-volume-provider.sock", os.Getenv("PWD")),
-		PathSupportedVolumeClasses: volumeClassesFile.Name(),
-		Ceph: app.CephOptions{
-			ConnectTimeout:         10 * time.Second,
-			Monitors:               cephMonitors,
-			User:                   cephUsername,
-			KeyringFile:            cephKeyringFilename,
-			Pool:                   cephPoolname,
-			Client:                 cephClientname,
-			KeyEncryptionKeyPath:   keyEncryptionKeyFile.Name(),
-			BurstDurationInSeconds: 15,
-			VolumeEventStoreOptions: eventrecorder.EventStoreOptions{
-				MaxEvents:      maxEvents,
-				TTL:            eventTTL,
-				ResyncInterval: resyncInterval,
-			},
-			WorkerSize: 15,
-		},
+	var opts app.Options
+	opts.Defaults()
+	opts.Address = fmt.Sprintf("%s/ceph-volume-provider.sock", os.Getenv("PWD"))
+	opts.PathSupportedVolumeClasses = volumeClassesFile.Name()
+	opts.Ceph.Monitors = cephMonitors
+	opts.Ceph.User = cephUsername
+	opts.Ceph.KeyringFile = cephKeyringFilename
+	opts.Ceph.Pool = cephPoolname
+	opts.Ceph.Client = cephClientname
+	opts.Ceph.KeyEncryptionKeyPath = keyEncryptionKeyFile.Name()
+	opts.Ceph.VolumeEventStoreOptions = eventrecorder.EventStoreOptions{
+		MaxEvents:      maxEvents,
+		TTL:            eventTTL,
+		ResyncInterval: resyncInterval,
 	}
 
 	srvCtx, cancel := context.WithCancel(context.Background())
