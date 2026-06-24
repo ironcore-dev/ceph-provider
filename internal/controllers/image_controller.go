@@ -18,6 +18,7 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/async"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
@@ -37,10 +38,11 @@ const (
 )
 
 type ImageReconcilerOptions struct {
-	Monitors   string
-	Client     string
-	Pool       string
-	WorkerSize int
+	Monitors    string
+	Client      string
+	Pool        string
+	WorkerSize  int
+	AsyncRunner *async.Runner
 }
 
 func NewImageReconciler(
@@ -78,6 +80,10 @@ func NewImageReconciler(
 		return nil, fmt.Errorf("must specify key encryption")
 	}
 
+	if opts.AsyncRunner == nil {
+		return nil, fmt.Errorf("must specify async runner")
+	}
+
 	if opts.Pool == "" {
 		return nil, fmt.Errorf("must specify pool")
 	}
@@ -108,6 +114,7 @@ func NewImageReconciler(
 		pool:           opts.Pool,
 		keyEncryption:  keyEncryption,
 		workerSize:     opts.WorkerSize,
+		asyncRunner:    opts.AsyncRunner,
 	}, nil
 }
 
@@ -131,6 +138,8 @@ type ImageReconciler struct {
 	keyEncryption encryption.Encryptor
 
 	workerSize int
+
+	asyncRunner *async.Runner
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
@@ -170,6 +179,22 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	defer func() {
 		_ = r.snapshotEvents.RemoveHandler(snapEventReg)
 	}()
+
+	// Requeue the affected image whenever an async flatten operation finishes so deletion can
+	// proceed (snapshot removal, reparenting, RemoveImage, finalizer removal).
+	r.asyncRunner.AddListener(async.ListenerFuncs{
+		HandleDoneFunc: func(evt async.DoneEvent) {
+			imageID, ok := parseImageAsyncKey(evt.Key)
+			if !ok {
+				return
+			}
+			if evt.Err != nil {
+				r.queue.AddRateLimited(imageID)
+				return
+			}
+			r.queue.Add(imageID)
+		},
+	})
 
 	go func() {
 		<-ctx.Done()
@@ -214,6 +239,8 @@ const (
 	ImageFinalizer = "image"
 )
 
+var errImageFlattenInProgress = errors.New("image flatten in progress")
+
 func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
 	if !slices.Contains(image.Finalizers, ImageFinalizer) {
 		log.V(1).Info("image has no finalizer: done")
@@ -221,6 +248,11 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 
 	if err := r.deleteImageSnapshots(ctx, log, ioCtx, image); err != nil {
+		if errors.Is(err, errImageFlattenInProgress) {
+			// Async flatten is running. Keep the finalizer; the done listener requeues the
+			// image once flattening completes so deletion can resume.
+			return nil
+		}
 		return fmt.Errorf("failed to delete image snapshots: %w", err)
 	}
 
@@ -237,6 +269,22 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	log.V(2).Info("Removed Finalizers")
 
 	return nil
+}
+
+func (r *ImageReconciler) submitImageFlatten(ctx context.Context, log logr.Logger, imageID string) {
+	err := r.asyncRunner.Submit(ctx, imageAsyncKey(imageID), func(opCtx context.Context) error {
+		return r.processImageFlattenOperation(opCtx, imageID)
+	})
+	switch {
+	case err == nil, errors.Is(err, async.ErrInProgress):
+		return
+	case errors.Is(err, async.ErrAtCapacity), errors.Is(err, async.ErrNotRunning):
+		log.V(2).Info("Async runner unavailable for image flatten, requeueing", "reason", err.Error())
+		r.queue.AddRateLimited(imageID)
+	default:
+		log.Error(err, "failed to submit image flatten operation, requeueing")
+		r.queue.AddRateLimited(imageID)
+	}
 }
 
 // since ceph does not allow deletion of rbd image if it has snapshots, we will follow below steps to achieve it
@@ -288,9 +336,24 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		}
 	}
 
-	// flatten all child images of the original image's snapshots
-	if err := flattenChildImages(log, r.conn, img); err != nil {
-		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
+	// If children still reference this image's snapshots, flattening can take a long time. Move
+	// it off the reconcile loop by delegating to the async runner and signal that deletion must
+	// wait. processImageFlattenOperation flattens all children; the done listener then requeues
+	// the image so this function runs again and proceeds once no children remain.
+	_, childImgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list children: %w", err)
+	}
+	if len(childImgs) != 0 {
+		log.V(2).Info("Delegating image child flattening to async runner", "childCount", len(childImgs))
+		if image.Status.State != providerapi.ImageStateFlatteningChildren {
+			image.Status.State = providerapi.ImageStateFlatteningChildren
+			if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+				return fmt.Errorf("failed to update image to FlatteningChildren state: %w", err)
+			}
+		}
+		r.submitImageFlatten(ctx, log, image.ID)
+		return errImageFlattenInProgress
 	}
 
 	// remove snapshot and update snapshot source in store
