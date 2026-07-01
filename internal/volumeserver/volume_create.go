@@ -20,16 +20,6 @@ const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
 
-func getArchitectureFromVolume(volume *iriv1alpha1.Volume) *string {
-	if volume != nil && volume.Metadata != nil {
-		if arch, found := volume.Metadata.Labels[api.MachineArchitectureLabel]; found {
-			return ptr.To(arch)
-		}
-	}
-
-	return nil
-}
-
 func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, volume *iriv1alpha1.Volume) (*api.Image, error) {
 	if volume == nil {
 		return nil, fmt.Errorf("got an empty volume")
@@ -66,6 +56,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 
 	log.V(2).Info("Getting volume data source")
 	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
+	var volArch *string
 
 	var snapshotID *string
 	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
@@ -109,6 +100,9 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			if imageSize == 0 {
 				return nil, fmt.Errorf("must specify size when creating volume from image data source")
 			}
+			if dataSource.ImageDataSource.Architecture != "" {
+				volArch = ptr.To(dataSource.ImageDataSource.Architecture)
+			}
 
 		default:
 			return nil, fmt.Errorf("unsupported or incomplete volume data source type")
@@ -132,7 +126,7 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 			Size:              imageSize,
 			Limits:            calculatedLimits,
 			Image:             volImage,
-			ImageArchitecture: getArchitectureFromVolume(volume),
+			ImageArchitecture: volArch,
 			SnapshotRef:       snapshotID,
 			Encryption:        encryptionSpec,
 		},
