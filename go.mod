@@ -10,7 +10,7 @@ require (
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.11.0
 	github.com/ironcore-dev/ironcore v0.2.5-0.20260114075630-5ab59ba249c8
-	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701080741-613cbc09b69b
+	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701105042-7ab1ed925593
 	github.com/ironcore-dev/provider-utils v0.0.0-20260420150206-639a4bf5422f
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.32.0
