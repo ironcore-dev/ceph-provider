@@ -7,6 +7,17 @@ import (
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 )
 
+const (
+	ImageSpecSnapshotRefField = "spec.snapshotRef"
+)
+
+func SetupImageSpecSnapshotRefFieldIndexer(img *Image) string {
+	if img.Spec.SnapshotRef != nil {
+		return *img.Spec.SnapshotRef
+	}
+	return ""
+}
+
 type Image struct {
 	apiutils.Metadata `json:"metadata,omitempty"`
 
