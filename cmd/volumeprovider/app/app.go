@@ -24,6 +24,7 @@ import (
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -216,6 +217,9 @@ func Run(ctx context.Context, opts Options) error {
 		NewFunc:        func() *providerapi.Image { return &providerapi.Image{} },
 		CreateStrategy: strategy.ImageStrategy,
 		IteratorSize:   opts.Ceph.OmapIteratorSize,
+		FieldIndexers: map[string]store.IndexerFunc[*providerapi.Image]{
+			providerapi.ImageSpecSnapshotRefField: providerapi.SetupImageSpecSnapshotRefFieldIndexer,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize image store: %w", err)
