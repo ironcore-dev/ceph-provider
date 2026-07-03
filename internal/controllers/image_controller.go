@@ -21,6 +21,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
+	"github.com/ironcore-dev/ironcore-image/oci/remote"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"
@@ -440,6 +441,9 @@ func (r *ImageReconciler) reconcileSnapshot(ctx context.Context, log logr.Logger
 
 	resolvedImg, err := osImgSrc.Resolve(ctx, img.Spec.Image)
 	if err != nil {
+		if errors.Is(err, remote.ErrNoPlatformMatch) {
+			r.Eventf(img.Metadata, corev1.EventTypeWarning, "NoPlatformMatch", "Image %s has no matching platform: %v", img.Spec.Image, err)
+		}
 		return fmt.Errorf("failed to resolve image ref in os image source: %w", err)
 	}
 
