@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ceph/go-ceph/rados"
+	"github.com/go-logr/logr"
 	utilssync "github.com/ironcore-dev/ceph-provider/internal/sync"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
@@ -31,7 +32,7 @@ type Options[E apiutils.Object] struct {
 	CreateStrategy CreateStrategy[E]
 }
 
-func New[E apiutils.Object](conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
+func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
 	if conn == nil {
 		return nil, fmt.Errorf("must specify conn")
 	}
@@ -51,6 +52,8 @@ func New[E apiutils.Object](conn *rados.Conn, pool string, opts Options[E]) (*St
 	return &Store[E]{
 		idMu: utilssync.NewMutexMap[string](),
 
+		log: log,
+
 		conn:     conn,
 		pool:     pool,
 		omapName: opts.OmapName,
@@ -64,6 +67,8 @@ func New[E apiutils.Object](conn *rados.Conn, pool string, opts Options[E]) (*St
 
 type Store[E apiutils.Object] struct {
 	idMu *utilssync.MutexMap[string]
+
+	log logr.Logger
 
 	conn     *rados.Conn
 	pool     string
@@ -81,6 +86,7 @@ func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
 		select {
 		case handler.events <- evt:
 		default:
+			s.log.V(1).Info("Dropping watch event, due to full channel", "event", evt)
 		}
 	}
 }
