@@ -87,7 +87,7 @@ func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
 		case handler.events <- evt:
 		default:
 			// TODO: switch to `ctx` to backpressure, if channel size is not enough
-			s.log.V(1).Info("Dropping watch event, due to full channel", "event", evt)
+			s.log.Info("Dropping watch event, due to full channel", "event", evt)
 		}
 	}
 }
