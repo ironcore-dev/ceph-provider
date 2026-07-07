@@ -99,14 +99,14 @@ func getOmapValuesByKeys(ioCtx *rados.IOContext, omapName string, keys []string)
 	step := op.GetOmapValuesByKeys(keys)
 
 	if err := op.Operate(ioCtx, omapName, rados.OperationNoFlag); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ceph read operation failed: %w", err)
 	}
 
 	result := make(map[string][]byte, len(keys))
 	for {
 		kv, err := step.Next()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to iterate over ceph read results: %w", err)
 		}
 		if kv == nil {
 			return result, nil
