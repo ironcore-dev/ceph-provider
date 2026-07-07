@@ -99,18 +99,27 @@ func (s *Store[E]) watchHandlers() []*watch[E] {
 	return s.watches.UnsortedList()
 }
 
-func (s *Store[E]) getSingleOmapValue(ioCtx *rados.IOContext, omapName, key string) ([]byte, error) {
-	omap, err := ioCtx.GetAllOmapValues(omapName, "", key, 10)
-	if err != nil {
-		return nil, err
+func getOmapValuesByKeys(ioCtx *rados.IOContext, omapName string, keys []string) (map[string][]byte, error) {
+	op := rados.CreateReadOp()
+	defer op.Release()
+
+	step := op.GetOmapValuesByKeys(keys)
+
+	if err := op.Operate(ioCtx, omapName, rados.OperationNoFlag); err != nil {
+		return nil, fmt.Errorf("ceph read operation failed: %w", err)
 	}
 
-	value, ok := omap[key]
-	if !ok {
-		return nil, rados.ErrNotFound
+	result := make(map[string][]byte, len(keys))
+	for {
+		kv, err := step.Next()
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate over ceph read results: %w", err)
+		}
+		if kv == nil {
+			return result, nil
+		}
+		result[kv.Key] = kv.Value
 	}
-
-	return value, nil
 }
 
 func (s *Store[E]) deleteOmapValue(ioCtx *rados.IOContext, omapName, key string) error {
@@ -339,17 +348,19 @@ func (s *Store[E]) set(ioCtx *rados.IOContext, obj E) (E, error) {
 }
 
 func (s *Store[E]) get(ioCtx *rados.IOContext, id string) (E, error) {
-	data, err := s.getSingleOmapValue(ioCtx, s.omapName, id)
+	data, err := getOmapValuesByKeys(ioCtx, s.omapName, []string{id})
 	if err != nil {
 		if !errors.Is(err, rados.ErrNotFound) {
 			return utils.Zero[E](), fmt.Errorf("failed to fetch omap value: %w", err)
 		}
-
+		return utils.Zero[E](), fmt.Errorf("object with id %q: %w", id, store.ErrNotFound)
+	}
+	if data[id] == nil {
 		return utils.Zero[E](), fmt.Errorf("object with id %q: %w", id, store.ErrNotFound)
 	}
 
 	obj := s.newFunc()
-	if err := json.Unmarshal(data, obj); err != nil {
+	if err := json.Unmarshal(data[id], obj); err != nil {
 		return utils.Zero[E](), fmt.Errorf("failed to unmarshal object: %w", err)
 	}
 
