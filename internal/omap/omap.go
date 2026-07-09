@@ -30,6 +30,7 @@ type Options[E apiutils.Object] struct {
 	OmapName       string
 	NewFunc        func() E
 	CreateStrategy CreateStrategy[E]
+	IteratorSize   int64
 }
 
 func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
@@ -49,6 +50,10 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 		return nil, fmt.Errorf("must specify opts.NewFunc")
 	}
 
+	if opts.IteratorSize <= 0 {
+		return nil, fmt.Errorf("must specify opts.IteratorSize (must be > 0)")
+	}
+
 	return &Store[E]{
 		idMu: utilssync.NewMutexMap[string](),
 
@@ -57,6 +62,8 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 		conn:     conn,
 		pool:     pool,
 		omapName: opts.OmapName,
+
+		iteratorSize: opts.IteratorSize,
 
 		watches: sets.New[*watch[E]](),
 
@@ -70,9 +77,10 @@ type Store[E apiutils.Object] struct {
 
 	log logr.Logger
 
-	conn     *rados.Conn
-	pool     string
-	omapName string
+	conn         *rados.Conn
+	pool         string
+	omapName     string
+	iteratorSize int64
 
 	newFunc        func() E
 	createStrategy CreateStrategy[E]
@@ -313,7 +321,7 @@ func (s *Store[E]) List(ctx context.Context) ([]E, error) {
 	}
 	defer ioCtx.Destroy()
 
-	omap, err := ioCtx.GetAllOmapValues(s.omapName, "", "", 10)
+	omap, err := ioCtx.GetAllOmapValues(s.omapName, "", "", s.iteratorSize)
 	if err != nil {
 		if errors.Is(err, rados.ErrNotFound) {
 			return nil, nil
