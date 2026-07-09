@@ -59,7 +59,8 @@ type CephOptions struct {
 
 	VolumeEventStoreOptions eventrecorder.EventStoreOptions
 
-	WorkerSize int
+	WorkerSize       int
+	OmapIteratorSize int64
 }
 
 func (o *Options) Defaults() {
@@ -68,6 +69,7 @@ func (o *Options) Defaults() {
 	o.Ceph.BurstDurationInSeconds = 15
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 	o.Ceph.WorkerSize = 15
+	o.Ceph.OmapIteratorSize = 1000
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -93,6 +95,7 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.Ceph.VolumeEventStoreOptions.ResyncInterval, "volume-event-resync-interval", 1*time.Minute, "Interval for resynchronizing the volume events.")
 
 	fs.IntVar(&o.Ceph.WorkerSize, "worker-size", o.Ceph.WorkerSize, "Defines the factor to calculate the burst limits.")
+	fs.Int64Var(&o.Ceph.OmapIteratorSize, "omap-iterator-size", o.Ceph.OmapIteratorSize, "Batch size used when iterating omap values during List.")
 }
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
@@ -212,6 +215,7 @@ func Run(ctx context.Context, opts Options) error {
 		OmapName:       omap.NameVolumes,
 		NewFunc:        func() *providerapi.Image { return &providerapi.Image{} },
 		CreateStrategy: strategy.ImageStrategy,
+		IteratorSize:   opts.Ceph.OmapIteratorSize,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize image store: %w", err)
@@ -231,6 +235,7 @@ func Run(ctx context.Context, opts Options) error {
 		OmapName:       omap.NameSnapshots,
 		NewFunc:        func() *providerapi.Snapshot { return &providerapi.Snapshot{} },
 		CreateStrategy: strategy.SnapshotStrategy,
+		IteratorSize:   opts.Ceph.OmapIteratorSize,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize snapshot store: %w", err)
