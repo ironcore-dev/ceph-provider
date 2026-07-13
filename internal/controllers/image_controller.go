@@ -38,10 +38,11 @@ const (
 )
 
 type ImageReconcilerOptions struct {
-	Monitors   string
-	Client     string
-	Pool       string
-	WorkerSize int
+	Monitors          string
+	Client            string
+	Pool              string
+	WorkerSize        int
+	FlattenWorkerSize int
 }
 
 func NewImageReconciler(
@@ -95,10 +96,15 @@ func NewImageReconciler(
 		opts.WorkerSize = 15
 	}
 
+	if opts.FlattenWorkerSize == 0 {
+		opts.FlattenWorkerSize = 5
+	}
+
 	return &ImageReconciler{
 		log:            log,
 		conn:           conn,
 		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
+		flattenQueue:   workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		images:         images,
 		snapshots:      snapshots,
 		EventRecorder:  eventRecorder,
@@ -109,6 +115,7 @@ func NewImageReconciler(
 		pool:           opts.Pool,
 		keyEncryption:  keyEncryption,
 		workerSize:     opts.WorkerSize,
+		flattenWorkers: opts.FlattenWorkerSize,
 	}, nil
 }
 
@@ -117,6 +124,9 @@ type ImageReconciler struct {
 	conn *rados.Conn
 
 	queue workqueue.TypedRateLimitingInterface[string]
+
+	// Async operation queue (image deletion flattening)
+	flattenQueue workqueue.TypedRateLimitingInterface[string]
 
 	images    store.Store[*providerapi.Image]
 	snapshots store.Store[*providerapi.Snapshot]
@@ -132,6 +142,8 @@ type ImageReconciler struct {
 	keyEncryption encryption.Encryptor
 
 	workerSize int
+
+	flattenWorkers int
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
@@ -175,6 +187,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		r.queue.ShutDown()
+		r.flattenQueue.ShutDown()
 	}()
 
 	var wg sync.WaitGroup
@@ -183,6 +196,16 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			for r.processNextWorkItem(ctx, log) {
+			}
+		}()
+	}
+
+	// Start async flatten workers (for image deletion)
+	for i := 0; i < r.flattenWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for r.processNextFlattenWorkItem(ctx, log) {
 			}
 		}()
 	}
@@ -215,6 +238,8 @@ const (
 	ImageFinalizer = "image"
 )
 
+var errImageFlattenInProgress = errors.New("image flatten in progress")
+
 func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCtx *rados.IOContext, image *providerapi.Image) error {
 	if !slices.Contains(image.Finalizers, ImageFinalizer) {
 		log.V(1).Info("image has no finalizer: done")
@@ -222,6 +247,11 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, ioCt
 	}
 
 	if err := r.deleteImageSnapshots(ctx, log, ioCtx, image); err != nil {
+		if errors.Is(err, errImageFlattenInProgress) {
+			// Async flatten is running. Keep finalizer; reconciliation will be triggered again
+			// by the flatten worker once flattening is complete.
+			return nil
+		}
 		return fmt.Errorf("failed to delete image snapshots: %w", err)
 	}
 
@@ -289,9 +319,21 @@ func (r *ImageReconciler) deleteImageSnapshots(ctx context.Context, log logr.Log
 		}
 	}
 
-	// flatten all child images of the original image's snapshots
-	if err := flattenChildImages(log, r.conn, img); err != nil {
-		return fmt.Errorf("failed to flatten snapshot child images: %w", err)
+	// If there are still children referencing this image/snapshots, flattening can take a long time.
+	// Move flattening out of the main reconcile worker by delegating to the async flatten queue.
+	_, childImgs, err := img.ListChildren()
+	if err != nil {
+		return fmt.Errorf("unable to list children: %w", err)
+	}
+	if len(childImgs) != 0 {
+		log.V(2).Info("Enqueue image for async flattening", "childCount", len(childImgs))
+		// Persist state so clients/IRI reflect that deletion is waiting for child flattening.
+		image.Status.State = providerapi.ImageStateFlatteningChildren
+		if _, err := r.images.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+			return fmt.Errorf("failed to update image flattening state: %w", err)
+		}
+		r.flattenQueue.Add(image.ID)
+		return errImageFlattenInProgress
 	}
 
 	// remove snapshot and update snapshot source in store
