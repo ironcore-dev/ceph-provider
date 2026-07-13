@@ -11,7 +11,7 @@ require (
 	github.com/ironcore-dev/controller-utils v0.11.0
 	github.com/ironcore-dev/ironcore v0.2.5-0.20260114075630-5ab59ba249c8
 	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701105042-7ab1ed925593
-	github.com/ironcore-dev/provider-utils v0.0.0-20260420150206-639a4bf5422f
+	github.com/ironcore-dev/provider-utils v0.0.0-20260706064412-a5700fe459b6
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
@@ -103,7 +103,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.1 // indirect
-	github.com/prometheus/procfs v0.19.2 // indirect
+	github.com/prometheus/procfs v0.21.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
