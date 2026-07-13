@@ -673,7 +673,7 @@ func (r *ImageReconciler) setImageLimits(log logr.Logger, ioCtx *rados.IOContext
 
 	for limit, value := range image.Spec.Limits {
 		if err := img.SetMetadata(fmt.Sprintf("%s%s", LimitMetadataPrefix, limit), strconv.FormatInt(value, 10)); err != nil {
-			r.Eventf(image.Metadata, corev1.EventTypeNormal, "SetImageLimitFailed", "SetImageLimits", "Failed to set image limit: %s", err)
+			r.Eventf(image.Metadata, corev1.EventTypeWarning, "SetImageLimitFailed", "SetImageLimits", "Failed to set image limit: %s", err)
 			return fmt.Errorf("failed to set limit (%s): %w", limit, err)
 		}
 		r.Eventf(image.Metadata, corev1.EventTypeNormal, "SetImageLimitSucceeded", "SetImageLimits", "Image limit set. limit: %s value: %d", limit, value)
