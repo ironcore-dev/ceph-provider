@@ -35,7 +35,7 @@ type Options struct {
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Kubeconfig, "kubeconfig", o.Kubeconfig, "Path pointing to a kubeconfig file to use.")
-	fs.StringVar(&o.Address, "address", "/var/run/ceph-bucket-provider.sock", "Address to listen on.")
+	fs.StringVar(&o.Address, "address", "/var/run/iri-bucketprovider.sock", "Address to listen on.")
 
 	fs.StringVar(&o.Namespace, "namespace", o.Namespace, "Target Kubernetes namespace to use.")
 	fs.StringVar(&o.BucketPoolStorageClassName, "bucket-pool-storage-class-name", o.BucketPoolStorageClassName, "Name of the target bucket pool storage class.")
