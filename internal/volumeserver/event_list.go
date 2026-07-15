@@ -64,6 +64,7 @@ func (s *Server) convertEventToIriEvent(events []*recorder.Event) ([]*irievent.E
 				Reason:             event.Reason,
 				Message:            event.Message,
 				Type:               event.Type,
+				Action:             event.Action,
 				EventTime:          event.EventTime,
 			},
 		})
