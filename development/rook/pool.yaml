@@ -1,0 +1,74 @@
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: ceph-provider-pool
+  namespace: rook-ceph
+spec:
+  erasureCoded:
+    codingChunks: 0
+    dataChunks: 0
+  replicated:
+    size: 1
+---
+kind: StorageClass
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: ceph-volumes
+mountOptions:
+  - discard
+parameters:
+  clusterID: rook-ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+  csi.storage.k8s.io/fstype: ext4
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+  imageFeatures: layering,exclusive-lock,object-map,fast-diff
+  pool: ceph-provider-pool
+provisioner: rook-ceph.rbd.csi.ceph.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+apiVersion: ceph.rook.io/v1
+kind: CephClient
+metadata:
+  name: ceph-provider-pool
+  namespace: rook-ceph
+spec:
+  caps:
+    mgr: profile rbd pool=ceph-provider-pool
+    mon: profile rbd
+    osd: profile rbd pool=ceph-provider-pool
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStore
+metadata:
+  name: ceph-provider-pool
+  namespace: rook-ceph
+spec:
+  metadataPool:
+    failureDomain: osd
+    replicated:
+      size: 1
+  dataPool:
+    failureDomain: osd
+    erasureCoded:
+      dataChunks: 2
+      codingChunks: 1
+  preservePoolsOnDelete: true
+  gateway:
+    port: 80
+    instances: 1
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-bucket
+provisioner: rook-ceph.ceph.rook.io/bucket
+reclaimPolicy: Delete
+parameters:
+  objectStoreName: ceph-provider-pool
+  objectStoreNamespace: rook-ceph
