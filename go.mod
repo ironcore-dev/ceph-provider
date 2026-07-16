@@ -4,8 +4,8 @@ go 1.25.1
 
 require (
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ceph/go-ceph v0.39.0
-	github.com/containerd/containerd v1.7.33
+	github.com/ceph/go-ceph v0.40.0
+	github.com/containerd/containerd v1.7.34
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.12.0
@@ -21,7 +21,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	go.uber.org/zap v1.28.0
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	google.golang.org/grpc v1.82.0
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
