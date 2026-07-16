@@ -38,7 +38,7 @@ var _ = Describe("Create Volume", func() {
 		By("ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
-			HaveField("Volume.Spec.Image", Equal("")),
+			HaveField("Volume.Spec.VolumeDataSource", BeNil()),
 			HaveField("Volume.Spec.Class", Equal("foo")),
 			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
@@ -137,7 +137,7 @@ var _ = Describe("Create Volume", func() {
 		By("ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
-			HaveField("Volume.Spec.Image", Equal("")),
+			HaveField("Volume.Spec.VolumeDataSource", BeNil()),
 			HaveField("Volume.Spec.Class", Equal("foo")),
 			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
@@ -213,7 +213,7 @@ var _ = Describe("Create Volume", func() {
 	})
 
 	It("should create a volume with snapshot data source", func(ctx SpecContext) {
-		By("creating a volume with image data source")
+		By("creating a source volume")
 		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
 			Volume: &iriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{
@@ -308,7 +308,7 @@ var _ = Describe("Create Volume", func() {
 			HaveField("Size", Equal(int64(1024*1024*1024))),
 		))
 
-		By("creating a volume with image data source")
+		By("creating a volume with snapshot data source")
 		volCreateResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
 			Volume: &iriv1alpha1.Volume{
 				Metadata: &metav1alpha1.ObjectMetadata{

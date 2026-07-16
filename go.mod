@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.12.0
-	github.com/ironcore-dev/ironcore v0.4.3
+	github.com/ironcore-dev/ironcore v0.4.4-0.20260715153540-89fd7b193411
 	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701105042-7ab1ed925593
 	github.com/ironcore-dev/provider-utils v0.0.0-20260706064412-a5700fe459b6
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
@@ -122,7 +122,7 @@ require (
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
