@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.26.4-trixie AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-trixie AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -70,7 +70,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:963fa6c544fe5ce420f1f54fb88b6fb01479f054c8056d0f74cc2c6000df5240 AS manager
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:f7f8f729987ad0fdf6b05eeeae94b26e6a0f613bdf46feea7fc40f7bd72953e6 AS manager
 WORKDIR /
 COPY --from=controller /workspace/bin/manager .
 USER 65532:65532
@@ -80,7 +80,7 @@ ENTRYPOINT ["/manager"]
 
 
 # Since we're leveraging apt to pull in dependencies, we use `gcr.io/distroless/base` because it includes glibc.
-FROM gcr.io/distroless/base-debian13:latest@sha256:57c1e4c72feb5925c4763ae4f6bd2013ad3854f57eff5b60dd9acb1ce0abc66e AS distroless-base
+FROM gcr.io/distroless/base-debian13:latest@sha256:f4a335ca209e1d2ee873102c17c389ad0142e3d5b21aee2817e9cc9c01d87d20 AS distroless-base
 
 # The distroless amd64 image has a target triplet of x86_64
 FROM distroless-base AS distroless-amd64
