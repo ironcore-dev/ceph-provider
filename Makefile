@@ -94,17 +94,6 @@ lint: golangci-lint ## Run golangci-lint on the code.
 
 check: manifests generate check-license lint test
 
-##@ Documentation
-
-.PHONY: start-docs
-start-docs: ## Start the local mkdocs based development environment.
-	$(CONTAINER_TOOL) build -t ${MKDOCS_IMG} -f docs/Dockerfile .
-	$(CONTAINER_TOOL) run -p 8000:8000 -v `pwd`/:/docs ${MKDOCS_IMG}
-
-.PHONY: clean-docs
-clean-docs: ## Remove all local mkdocs Docker images (cleanup).
-	$(CONTAINER_TOOL) container prune --force --filter "label=project=ceph-provider_documentation"
-
 ##@ Build
 
 .PHONY: build-volume
