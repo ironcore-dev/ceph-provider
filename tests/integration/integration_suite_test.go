@@ -103,7 +103,8 @@ var _ = BeforeSuite(func() {
 				TTL:            eventTTL,
 				ResyncInterval: resyncInterval,
 			},
-			WorkerSize: 15,
+			WorkerSize:       15,
+			OmapIteratorSize: 1000,
 		},
 	}
 
