@@ -88,7 +88,6 @@ func (s *Server) getIriVolumeSpec(image *api.Image) (*iri.VolumeSpec, error) {
 	}
 
 	spec := &iri.VolumeSpec{
-		Image: image.Spec.Image,
 		Resources: &iri.VolumeResources{
 			StorageBytes: storageBytes,
 		},

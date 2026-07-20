@@ -55,15 +55,14 @@ func (s *Server) createImageFromVolume(ctx context.Context, log logr.Logger, vol
 	}
 
 	log.V(2).Info("Getting volume data source")
-	volImage := volume.Spec.Image // TODO: Remove this once volume.Spec.Image is deprecated
-	var volArch *string
-
-	var snapshotID *string
+	var (
+		volImage   string
+		volArch    *string
+		snapshotID *string
+	)
 	if dataSource := volume.Spec.VolumeDataSource; dataSource != nil {
 		switch {
 		case dataSource.SnapshotDataSource != nil:
-			volImage = "" // TODO: Remove this once volume.Spec.Image is deprecated
-
 			snapshotID = &dataSource.SnapshotDataSource.SnapshotId
 			log.V(2).Info("Getting snapshot data source", "snapshotID", snapshotID)
 			snapshot, err := s.snapshotStore.Get(ctx, *snapshotID)

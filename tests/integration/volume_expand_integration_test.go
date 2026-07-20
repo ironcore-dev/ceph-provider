@@ -37,7 +37,7 @@ var _ = Describe("Expand Volume", func() {
 		By("ensuring the correct creation response")
 		Expect(createResp).Should(SatisfyAll(
 			HaveField("Volume.Metadata.Id", Not(BeEmpty())),
-			HaveField("Volume.Spec.Image", Equal("")),
+			HaveField("Volume.Spec.VolumeDataSource", BeNil()),
 			HaveField("Volume.Spec.Class", Equal("foo")),
 			HaveField("Volume.Spec.Resources.StorageBytes", Equal(int64(1024*1024*1024))),
 			HaveField("Volume.Spec.Encryption", BeNil()),
