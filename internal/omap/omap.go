@@ -17,6 +17,8 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -31,6 +33,7 @@ type Options[E apiutils.Object] struct {
 	NewFunc        func() E
 	CreateStrategy CreateStrategy[E]
 	IteratorSize   int64
+	FieldIndexers  map[string]store.IndexerFunc[E]
 }
 
 func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts Options[E]) (*Store[E], error) {
@@ -54,6 +57,11 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 		return nil, fmt.Errorf("must specify opts.IteratorSize (must be > 0)")
 	}
 
+	indexers := make(map[string]store.IndexerFunc[E], len(opts.FieldIndexers))
+	for k, v := range opts.FieldIndexers {
+		indexers[k] = v
+	}
+
 	return &Store[E]{
 		idMu: utilssync.NewMutexMap[string](),
 
@@ -69,6 +77,8 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 
 		newFunc:        opts.NewFunc,
 		createStrategy: opts.CreateStrategy,
+
+		indexers: indexers,
 	}, nil
 }
 
@@ -87,6 +97,8 @@ type Store[E apiutils.Object] struct {
 
 	watchesMu sync.RWMutex
 	watches   sets.Set[*watch[E]]
+
+	indexers map[string]store.IndexerFunc[E]
 }
 
 func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
@@ -314,7 +326,20 @@ func (s *Store[E]) Watch(ctx context.Context) (store.Watch[E], error) {
 	return w, nil
 }
 
-func (s *Store[E]) List(ctx context.Context) ([]E, error) {
+func (s *Store[E]) List(ctx context.Context, opts ...store.ListOption) ([]E, error) {
+	listOpts := &store.ListOptions{}
+	for _, opt := range opts {
+		opt.ApplyToList(listOpts)
+	}
+
+	if listOpts.FieldSelector != nil {
+		for _, req := range listOpts.FieldSelector.Requirements() {
+			if _, ok := s.indexers[req.Field]; !ok {
+				return nil, fmt.Errorf("field selector references unindexed field %q", req.Field)
+			}
+		}
+	}
+
 	ioCtx, err := s.conn.OpenIOContext(s.pool)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get io context: %w", err)
@@ -334,6 +359,20 @@ func (s *Store[E]) List(ctx context.Context) ([]E, error) {
 		obj := s.newFunc()
 		if err := json.Unmarshal(v, &obj); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal object: %w", err)
+		}
+
+		if listOpts.LabelSelector != nil && !listOpts.LabelSelector.Matches(labels.Set(obj.GetLabels())) {
+			continue
+		}
+
+		if listOpts.FieldSelector != nil {
+			merged := fields.Set{}
+			for field, fn := range s.indexers {
+				merged[field] = fn(obj)
+			}
+			if !listOpts.FieldSelector.Matches(merged) {
+				continue
+			}
 		}
 
 		objs = append(objs, obj)

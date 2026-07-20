@@ -152,7 +152,7 @@ func (r *ImageReconciler) Start(ctx context.Context) error {
 			return
 		}
 
-		imageList, err := r.images.List(ctx)
+		imageList, err := r.images.List(ctx, store.MatchingFields{providerapi.ImageSpecSnapshotRefField: evt.Object.ID})
 		if err != nil {
 			log.Error(err, "failed to list images")
 			return
