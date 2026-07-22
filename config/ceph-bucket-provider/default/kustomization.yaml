@@ -11,10 +11,6 @@ namespace: ceph-bucket-provider-system
 # field above.
 namePrefix: ceph-bucket-provider-
 
-# Labels to add to all resources and selectors.
-#commonLabels:
-#  someName: someValue
-
 resources:
 - ../ceph-provider-rbac
 - ../manager
