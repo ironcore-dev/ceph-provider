@@ -39,7 +39,7 @@ var _ = Describe("Create VolumeSnapshot", func() {
 		By("ensuring image has been created in volumes store")
 		image := &api.Image{}
 		Eventually(ctx, func() *api.Image {
-			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", createResp.Volume.Metadata.Id, 10)
+			oMap, err := ioctx.GetOmapValues(omap.LegacyNameVolumes, "", createResp.Volume.Metadata.Id, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(createResp.Volume.Metadata.Id))
 			Expect(json.Unmarshal(oMap[createResp.Volume.Metadata.Id], image)).NotTo(HaveOccurred())
@@ -85,7 +85,7 @@ var _ = Describe("Create VolumeSnapshot", func() {
 		By("ensuring snapshot has been created in snapshot store")
 		snapshot := &api.Snapshot{}
 		Eventually(ctx, func() *api.Snapshot {
-			oMap, err := ioctx.GetOmapValues(omap.NameSnapshots, "", snapshotID, 10)
+			oMap, err := ioctx.GetOmapValues(omap.LegacyNameSnapshots, "", snapshotID, 10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(oMap).To(HaveKey(snapshotID))
 			Expect(json.Unmarshal(oMap[snapshotID], snapshot)).NotTo(HaveOccurred())
