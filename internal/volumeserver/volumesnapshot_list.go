@@ -12,6 +12,7 @@ import (
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -49,17 +50,13 @@ func (s *Server) filterSnapshot(snapshots []*iri.VolumeSnapshot, filter *iri.Vol
 }
 
 func (s *Server) listSnapshots(ctx context.Context) ([]*iri.VolumeSnapshot, error) {
-	cephSnapshots, err := s.snapshotStore.List(ctx)
+	cephSnapshots, err := s.snapshotStore.List(ctx, store.MatchingLabels{api.ManagerLabel: api.VolumeManager})
 	if err != nil {
 		return nil, fmt.Errorf("error listing snapshots: %w", err)
 	}
 
 	var res []*iri.VolumeSnapshot
 	for _, cephSnapshot := range cephSnapshots {
-		if !api.IsObjectManagedBy(cephSnapshot, api.VolumeManager) {
-			continue
-		}
-
 		iriSnapshot, err := s.convertSnapshotToIriVolumeSnapshot(cephSnapshot)
 		if err != nil {
 			return nil, err

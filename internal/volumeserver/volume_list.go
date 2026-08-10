@@ -51,17 +51,13 @@ func (s *Server) filterVolumes(volumes []*iri.Volume, filter *iri.VolumeFilter) 
 }
 
 func (s *Server) listVolumes(ctx context.Context) ([]*iri.Volume, error) {
-	cephImages, err := s.imageStore.List(ctx)
+	cephImages, err := s.imageStore.List(ctx, store.MatchingLabels{api.ManagerLabel: api.VolumeManager})
 	if err != nil {
 		return nil, fmt.Errorf("error listing volumes: %w", err)
 	}
 
 	var res []*iri.Volume
 	for _, cephImage := range cephImages {
-		if !api.IsObjectManagedBy(cephImage, api.VolumeManager) {
-			continue
-		}
-
 		iriVolume, err := s.convertImageToIriVolume(cephImage)
 		if err != nil {
 			return nil, err
