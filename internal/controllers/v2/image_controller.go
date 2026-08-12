@@ -21,7 +21,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/rater"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
-	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/client-go/util/workqueue"
@@ -242,8 +241,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	if !slices.Contains(image.Finalizers, imageFinalizer) {
-		image.Finalizers = append(image.Finalizers, imageFinalizer)
-		if _, err := r.imageStore.Update(ctx, image); err != nil {
+		if _, err := addFinalizer(ctx, r.imageStore, image, imageFinalizer); err != nil {
 			return fmt.Errorf("failed to set finalizers: %w", err)
 		}
 		return nil
@@ -309,13 +307,10 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 			// so the image is no longer connected to the snapshot
 			if snapshot != nil {
 				sourceSnapshotFinalizer := fmt.Sprintf("%s/%s", imageFinalizer, image.ID)
-				if slices.Contains(snapshot.Finalizers, sourceSnapshotFinalizer) {
-					snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, sourceSnapshotFinalizer)
-					if _, err := r.snapshotStore.Update(ctx, snapshot); err != nil {
-						return fmt.Errorf("failed to set finalizers on source snapshot: %w", err)
-					}
-					log.V(2).Info("Removed finalizer from source snapshot", "snapshotId", snapshot.ID)
+				if _, err := removeFinalizer(ctx, r.snapshotStore, snapshot, sourceSnapshotFinalizer); err != nil {
+					return fmt.Errorf("failed to remove finalizer from source snapshot: %w", err)
 				}
+				log.V(2).Info("Removed finalizer from source snapshot", "snapshotId", snapshot.ID)
 			}
 		}
 	} else {
@@ -375,7 +370,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	// TODO: Think about caching the ceph auth key instead of re-fetching it on every reconcile loop.
-	user, key, err := fetchAuth(log, r.client, r.conn)
+	user, key, err := fetchAuth(r.client, r.conn)
 	if err != nil {
 		return fmt.Errorf("failed to fetch credentials: %w", err)
 	}
@@ -458,11 +453,8 @@ func (r *ImageReconciler) createImage(ctx context.Context, ioCtx *rados.IOContex
 
 	// Put finalizer on source snapshot to allow the image to be flattened before snapshot deletion
 	sourceSnapshotFinalizer := fmt.Sprintf("%s/%s", imageFinalizer, image.ID)
-	if !slices.Contains(snapshot.Finalizers, sourceSnapshotFinalizer) {
-		snapshot.Finalizers = append(snapshot.Finalizers, sourceSnapshotFinalizer)
-		if _, err := r.snapshotStore.Update(ctx, snapshot); err != nil {
-			return false, fmt.Errorf("failed to set finalizers on source snapshot: %w", err)
-		}
+	if snapshot, err = addFinalizer(ctx, r.snapshotStore, snapshot, sourceSnapshotFinalizer); err != nil {
+		return false, fmt.Errorf("failed to set finalizers on source snapshot: %w", err)
 	}
 	log.V(2).Info("Added finalizer to source snapshot", "snapshotId", snapshot.ID)
 
@@ -511,18 +503,14 @@ func (r *ImageReconciler) deleteImage(ctx context.Context, log logr.Logger, imag
 			log.V(2).Info("Source snapshot already deleted", "snapshotId", *image.Spec.SnapshotSource)
 		} else {
 			sourceSnapshotFinalizer := fmt.Sprintf("%s/%s", imageFinalizer, image.ID)
-			if slices.Contains(snapshot.Finalizers, sourceSnapshotFinalizer) {
-				snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, sourceSnapshotFinalizer)
-				if _, err := r.snapshotStore.Update(ctx, snapshot); err != nil {
-					return fmt.Errorf("failed to set finalizers on source snapshot: %w", err)
-				}
-				log.V(2).Info("Removed finalizer from source snapshot", "snapshotId", snapshot.ID)
+			if _, err := removeFinalizer(ctx, r.snapshotStore, snapshot, sourceSnapshotFinalizer); err != nil {
+				return fmt.Errorf("failed to remove finalizer from source snapshot: %w", err)
 			}
+			log.V(2).Info("Removed finalizer from source snapshot", "snapshotId", snapshot.ID)
 		}
 	}
 
-	image.Finalizers = utils.DeleteSliceElement(image.Finalizers, imageFinalizer)
-	if _, err := r.imageStore.Update(ctx, image); store.IgnoreErrNotFound(err) != nil {
+	if _, err := removeFinalizer(ctx, r.imageStore, image, imageFinalizer); store.IgnoreErrNotFound(err) != nil {
 		return fmt.Errorf("failed to update image metadata: %w", err)
 	}
 	log.V(2).Info("Removed image finalizer")
@@ -533,7 +521,7 @@ type fetchAuthResponse struct {
 	Key string `json:"key"`
 }
 
-func fetchAuth(log logr.Logger, client string, conn *rados.Conn) (string, string, error) {
+func fetchAuth(client string, conn *rados.Conn) (string, string, error) {
 	cmd, err := json.Marshal(map[string]string{
 		"prefix": "auth get-key",
 		"entity": client,

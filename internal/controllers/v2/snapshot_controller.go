@@ -14,7 +14,6 @@ import (
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api/v2"
-	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/client-go/util/workqueue"
@@ -196,8 +195,7 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 	}
 
 	if !slices.Contains(snapshot.Finalizers, snapshotFinalizer) {
-		snapshot.Finalizers = append(snapshot.Finalizers, snapshotFinalizer)
-		if _, err := r.snapshotStore.Update(ctx, snapshot); err != nil {
+		if _, err := addFinalizer(ctx, r.snapshotStore, snapshot, snapshotFinalizer); err != nil {
 			return fmt.Errorf("failed to set finalizers: %w", err)
 		}
 		return nil
@@ -221,11 +219,8 @@ func (r *SnapshotReconciler) reconcileSnapshot(ctx context.Context, id string) e
 
 	// Put finalizer on parent image to block image deletion until all snapshots have been deleted
 	parentImageFinalizer := fmt.Sprintf("%s/%s", snapshotFinalizer, snapshot.ID)
-	if !slices.Contains(parentImage.Finalizers, parentImageFinalizer) {
-		parentImage.Finalizers = append(parentImage.Finalizers, parentImageFinalizer)
-		if _, err := r.imageStore.Update(ctx, parentImage); err != nil {
-			return fmt.Errorf("failed to set finalizers on parent image: %w", err)
-		}
+	if parentImage, err = addFinalizer(ctx, r.imageStore, parentImage, parentImageFinalizer); err != nil {
+		return fmt.Errorf("failed to set finalizers on parent image: %w", err)
 	}
 	log.V(2).Info("Added finalizer to parent image", "parentImageId", parentImage.ID)
 
@@ -366,17 +361,13 @@ func (r *SnapshotReconciler) deleteSnapshot(ctx context.Context, log logr.Logger
 	} else {
 		// Remove finalizer from parent image to signal this snapshot is no longer blocking deletion
 		parentImageFinalizer := fmt.Sprintf("%s/%s", snapshotFinalizer, snapshot.ID)
-		if slices.Contains(parentImage.Finalizers, parentImageFinalizer) {
-			parentImage.Finalizers = utils.DeleteSliceElement(parentImage.Finalizers, parentImageFinalizer)
-			if _, err := r.imageStore.Update(ctx, parentImage); err != nil {
-				return fmt.Errorf("failed to set finalizers on parent image: %w", err)
-			}
-			log.V(2).Info("Removed finalizer from parent image", "parentImageId", parentImage.ID)
+		if _, err := removeFinalizer(ctx, r.imageStore, parentImage, parentImageFinalizer); err != nil {
+			return fmt.Errorf("failed to remove finalizer from parent image: %w", err)
 		}
+		log.V(2).Info("Removed finalizer from parent image", "parentImageId", parentImage.ID)
 	}
 
-	snapshot.Finalizers = utils.DeleteSliceElement(snapshot.Finalizers, snapshotFinalizer)
-	if _, err := r.snapshotStore.Update(ctx, snapshot); store.IgnoreErrNotFound(err) != nil {
+	if _, err := removeFinalizer(ctx, r.snapshotStore, snapshot, snapshotFinalizer); store.IgnoreErrNotFound(err) != nil {
 		return fmt.Errorf("failed to update snapshot metadata: %w", err)
 	}
 	log.V(2).Info("Removed snapshot finalizer")

@@ -13,7 +13,6 @@ import (
 	"github.com/distribution/reference"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api/v2"
-	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
@@ -233,8 +232,8 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 	}
 
 	if !slices.Contains(volume.Finalizers, VolumeFinalizer) {
-		volume.Finalizers = append(volume.Finalizers, VolumeFinalizer)
-		if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+		var err error
+		if _, err = addFinalizer(ctx, r.volumeStore, volume, VolumeFinalizer); err != nil {
 			return fmt.Errorf("failed to set finalizers: %w", err)
 		}
 		return nil
@@ -319,13 +318,21 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 	}
 }
 
-func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
-	log.V(2).Info("Reconciling empty volume")
+func (r *VolumeReconciler) setVolumeImageRef(ctx context.Context, volume *providerapi.Volume, imageID string) error {
+	if volume.Status.ImageRef == imageID {
+		return nil
+	}
+	volume.Status.ImageRef = imageID
+	if _, err := r.volumeStore.Update(ctx, volume); err != nil {
+		return fmt.Errorf("failed to update volume with image ref: %w", err)
+	}
+	return nil
+}
 
-	imageID := VolumeImageIDPrefix + volume.ID
-	img := &providerapi.Image{
+func buildVolumeImage(volume *providerapi.Volume, snapshotSource *string) *providerapi.Image {
+	return &providerapi.Image{
 		Metadata: apiutils.Metadata{
-			ID: imageID,
+			ID: VolumeImageIDPrefix + volume.ID,
 		},
 		Spec: providerapi.ImageSpec{
 			Size:   volume.Spec.Size,
@@ -335,32 +342,22 @@ func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Lo
 				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
 				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
 			},
-			SnapshotSource: nil,
+			SnapshotSource: snapshotSource,
 		},
 	}
+}
 
-	createdImage, err := r.imageStore.Create(ctx, img)
+func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
+	log.V(2).Info("Reconciling empty volume")
+
+	img := buildVolumeImage(volume, nil)
+
+	createdImage, err := createOrGet(ctx, log, r.imageStore, img, "Image created", "Image already exists")
 	if err != nil {
-		if !errors.Is(err, store.ErrAlreadyExists) {
-			return fmt.Errorf("failed to create image: %w", err)
-		}
-		log.V(2).Info("Image already exists", "imageId", imageID)
-		createdImage, err = r.imageStore.Get(ctx, imageID)
-		if err != nil {
-			return fmt.Errorf("failed to get created image: %w", err)
-		}
-	} else {
-		log.V(1).Info("Image created", "imageId", createdImage.ID)
+		return fmt.Errorf("failed to create or get image: %w", err)
 	}
 
-	if volume.Status.ImageRef != createdImage.ID {
-		volume.Status.ImageRef = createdImage.ID
-		if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-			return fmt.Errorf("failed to update volume with image ref: %w", err)
-		}
-	}
-
-	return nil
+	return r.setVolumeImageRef(ctx, volume, createdImage.ID)
 }
 
 func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
@@ -431,16 +428,9 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 			},
 		}
 
-		baseImage, err = r.imageStore.Create(ctx, baseImage)
+		baseImage, err = createOrGet(ctx, log, r.imageStore, baseImage, "Base image created", "Base image already exists, fetching")
 		if err != nil {
-			if !errors.Is(err, store.ErrAlreadyExists) {
-				return fmt.Errorf("failed to create base image: %w", err)
-			}
-			log.V(1).Info("Base image already exists, fetching", "baseImageId", baseImageID)
-			baseImage, err = r.imageStore.Get(ctx, baseImageID)
-			if err != nil {
-				return fmt.Errorf("failed to get existing base image: %w", err)
-			}
+			return fmt.Errorf("failed to create or get base image: %w", err)
 		}
 	}
 
@@ -474,16 +464,9 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 			},
 		}
 
-		snapshot, err = r.snapshotStore.Create(ctx, snapshot)
+		snapshot, err = createOrGet(ctx, log, r.snapshotStore, snapshot, "Snapshot created", "Snapshot already exists, fetching")
 		if err != nil {
-			if !errors.Is(err, store.ErrAlreadyExists) {
-				return fmt.Errorf("failed to create snapshot: %w", err)
-			}
-			log.V(1).Info("Snapshot already exists, fetching", "snapshotId", snapshotID)
-			snapshot, err = r.snapshotStore.Get(ctx, snapshotID)
-			if err != nil {
-				return fmt.Errorf("failed to get existing snapshot: %w", err)
-			}
+			return fmt.Errorf("failed to create or get snapshot: %w", err)
 		}
 	}
 
@@ -508,47 +491,16 @@ func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logge
 	}
 
 	// Step 6: Create volume's image as clone from snapshot
-	volumeImageID := VolumeImageIDPrefix + volume.ID
-	log.V(1).Info("Creating volume image from snapshot", "snapshotId", snapshotID, "imageId", volumeImageID)
-	volumeImage := &providerapi.Image{
-		Metadata: apiutils.Metadata{
-			ID: volumeImageID,
-		},
-		Spec: providerapi.ImageSpec{
-			Size:   volume.Spec.Size,
-			WWN:    volume.Spec.WWN,
-			Limits: volume.Spec.Limits,
-			Encryption: providerapi.EncryptionSpec{
-				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
-				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
-			},
-			SnapshotSource: &snapshotID,
-		},
-	}
+	volumeImage := buildVolumeImage(volume, &snapshotID)
+	log.V(1).Info("Creating volume image from snapshot", "snapshotId", snapshotID, "imageId", volumeImage.ID)
 
-	createdImage, err := r.imageStore.Create(ctx, volumeImage)
+	createdImage, err := createOrGet(ctx, log, r.imageStore, volumeImage, "Volume image created", "Volume image already exists")
 	if err != nil {
-		if !errors.Is(err, store.ErrAlreadyExists) {
-			return fmt.Errorf("failed to create volume image: %w", err)
-		}
-		log.V(2).Info("Volume image already exists", "imageId", volumeImageID, "snapshotId", snapshotID)
-		createdImage, err = r.imageStore.Get(ctx, volumeImageID)
-		if err != nil {
-			return fmt.Errorf("failed to get created image: %w", err)
-		}
-	} else {
-		log.V(1).Info("Volume image created", "imageId", createdImage.ID, "snapshotId", snapshotID)
+		return fmt.Errorf("failed to create or get volume image: %w", err)
 	}
 
 	// Step 7: Update volume status with ImageRef
-	if volume.Status.ImageRef != createdImage.ID {
-		volume.Status.ImageRef = createdImage.ID
-		if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-			return fmt.Errorf("failed to update volume with image ref: %w", err)
-		}
-	}
-
-	return nil
+	return r.setVolumeImageRef(ctx, volume, createdImage.ID)
 }
 
 func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
@@ -577,47 +529,17 @@ func (r *VolumeReconciler) reconcileRestoredVolume(ctx context.Context, log logr
 	}
 
 	// Create new Image from snapshot
-	imageID := VolumeImageIDPrefix + volume.ID
+	img := buildVolumeImage(volume, &snapshotID)
+	imageID := img.ID
 	log.V(1).Info("Creating image from snapshot", "snapshotId", snapshotID, "imageId", imageID)
-	img := &providerapi.Image{
-		Metadata: apiutils.Metadata{
-			ID: imageID,
-		},
-		Spec: providerapi.ImageSpec{
-			Size:   volume.Spec.Size,
-			WWN:    volume.Spec.WWN,
-			Limits: volume.Spec.Limits,
-			Encryption: providerapi.EncryptionSpec{
-				Type:                providerapi.EncryptionType(volume.Spec.VolumeEncryption.Type),
-				EncryptedPassphrase: volume.Spec.VolumeEncryption.EncryptedPassphrase,
-			},
-			SnapshotSource: &snapshotID,
-		},
-	}
 
-	createdImage, err := r.imageStore.Create(ctx, img)
+	createdImage, err := createOrGet(ctx, log, r.imageStore, img, "Image created from snapshot", "Image already exists")
 	if err != nil {
-		if !errors.Is(err, store.ErrAlreadyExists) {
-			return fmt.Errorf("failed to create image: %w", err)
-		}
-		log.V(2).Info("Image already exists", "imageId", imageID, "snapshotId", snapshotID)
-		createdImage, err = r.imageStore.Get(ctx, imageID)
-		if err != nil {
-			return fmt.Errorf("failed to get created image: %w", err)
-		}
-	} else {
-		log.V(1).Info("Image created from snapshot", "ImageId", createdImage.ID, "SnapshotId", snapshotID)
+		return fmt.Errorf("failed to create or get image: %w", err)
 	}
 
 	// Update volume status with ImageRef
-	if volume.Status.ImageRef != createdImage.ID {
-		volume.Status.ImageRef = createdImage.ID
-		if _, err := r.volumeStore.Update(ctx, volume); err != nil {
-			return fmt.Errorf("failed to update volume with image ref: %w", err)
-		}
-	}
-
-	return nil
+	return r.setVolumeImageRef(ctx, volume, createdImage.ID)
 }
 
 func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
@@ -643,8 +565,7 @@ func (r *VolumeReconciler) deleteVolume(ctx context.Context, log logr.Logger, vo
 	// as they may be shared by multiple volumes (golden image pattern).
 	// Clean up of unused base images and snapshots can be added later.
 
-	volume.Finalizers = utils.DeleteSliceElement(volume.Finalizers, VolumeFinalizer)
-	if _, err := r.volumeStore.Update(ctx, volume); store.IgnoreErrNotFound(err) != nil {
+	if _, err := removeFinalizer(ctx, r.volumeStore, volume, VolumeFinalizer); store.IgnoreErrNotFound(err) != nil {
 		return fmt.Errorf("failed to update volume metadata: %w", err)
 	}
 	log.V(2).Info("Removed volume finalizer")
