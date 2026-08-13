@@ -48,7 +48,7 @@ type Pool struct {
 }
 
 type PoolStats struct {
-	Stored      int     `json:"stored"`
+	Stored      int64   `json:"stored"`
 	Objects     int     `json:"objects"`
 	KbUsed      int     `json:"kb_used"`
 	BytesUsed   int     `json:"bytes_used"`
