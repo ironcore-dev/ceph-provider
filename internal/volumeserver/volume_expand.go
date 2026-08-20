@@ -25,7 +25,7 @@ func (s *Server) expandImage(ctx context.Context, log logr.Logger, imageId strin
 	}
 
 	if validatedStorageBytes <= cephImage.Spec.Size {
-		return fmt.Errorf("requested size %q must be greater than current size %q", storageBytes, cephImage.Spec.Size)
+		return fmt.Errorf("requested size %d must be greater than current size %d", storageBytes, cephImage.Spec.Size)
 	}
 
 	log.V(2).Info("Updating ceph image with new size", "storageBytes", storageBytes)
