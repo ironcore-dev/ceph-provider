@@ -6,7 +6,7 @@ on:
 
 jobs:
   integration-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: contains(github.event.pull_request.labels.*.name, 'integration-tests')
 
     steps:
@@ -21,7 +21,7 @@ jobs:
         run: |
           set -x
           
-          sudo snap install microceph --channel=quincy/stable
+          sudo snap install microceph --channel=tentacle/stable
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ceph-common
           sudo microceph cluster bootstrap
