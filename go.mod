@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ceph/go-ceph v0.40.0
+	github.com/ceph/go-ceph v0.41.0
 	github.com/containerd/containerd v1.7.34
 	github.com/go-logr/logr v1.4.4
 	github.com/google/addlicense v1.2.0
@@ -13,7 +13,7 @@ require (
 	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701105042-7ab1ed925593
 	github.com/ironcore-dev/provider-utils v0.0.0-20260806131116-2fea71480579
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
-	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
