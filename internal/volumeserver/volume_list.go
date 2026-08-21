@@ -8,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume, error) {
@@ -31,38 +31,29 @@ func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume,
 	return s.convertImageToIriVolume(cephImage)
 }
 
-func (s *Server) filterVolumes(volumes []*iri.Volume, filter *iri.VolumeFilter) []*iri.Volume {
-	if filter == nil {
-		return volumes
+func (s *Server) listVolumes(ctx context.Context, log logr.Logger, filter *iri.VolumeFilter) ([]*iri.Volume, error) {
+	matchingLabels := store.MatchingLabels{
+		api.ManagerLabel: api.VolumeManager,
 	}
 
-	var (
-		res []*iri.Volume
-		sel = labels.SelectorFromSet(filter.LabelSelector)
-	)
-	for _, iriVolume := range volumes {
-		if !sel.Matches(labels.Set(iriVolume.Metadata.Labels)) {
-			continue
+	if filter != nil && len(filter.LabelSelector) > 0 {
+		for k := range filter.LabelSelector {
+			matchingLabels[k] = filter.LabelSelector[k]
 		}
-
-		res = append(res, iriVolume)
 	}
-	return res
-}
 
-func (s *Server) listVolumes(ctx context.Context) ([]*iri.Volume, error) {
-	cephImages, err := s.imageStore.List(ctx, store.MatchingLabels{api.ManagerLabel: api.VolumeManager})
+	cephImages, err := s.imageStore.List(ctx, matchingLabels)
 	if err != nil {
+		log.Error(err, "Error listing volumes from image store")
 		return nil, fmt.Errorf("error listing volumes: %w", err)
 	}
 
-	var res []*iri.Volume
+	res := make([]*iri.Volume, 0, len(cephImages))
 	for _, cephImage := range cephImages {
 		iriVolume, err := s.convertImageToIriVolume(cephImage)
 		if err != nil {
 			return nil, err
 		}
-
 		res = append(res, iriVolume)
 	}
 	return res, nil
@@ -70,9 +61,11 @@ func (s *Server) listVolumes(ctx context.Context) ([]*iri.Volume, error) {
 
 func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (*iri.ListVolumesResponse, error) {
 	log := s.loggerFrom(ctx)
+	filter := req.Filter
 	log.V(2).Info("Listing volumes")
 
-	if filter := req.Filter; filter != nil && filter.Id != "" {
+	// Fast path for ID filter
+	if filter != nil && filter.Id != "" {
 		volume, err := s.getIriVolume(ctx, filter.Id)
 		if err != nil {
 			if !errors.Is(err, utils.ErrVolumeNotFound) && !errors.Is(err, utils.ErrVolumeIsntManaged) {
@@ -88,15 +81,12 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 		}, nil
 	}
 
-	volumes, err := s.listVolumes(ctx)
+	log.V(1).Info("Listing all volumes (no specific filter or fallback)")
+	volumes, err := s.listVolumes(ctx, log, filter) // Lists *all* managed volumes
 	if err != nil {
+		// listVolumes already logs the store error
 		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
 
-	volumes = s.filterVolumes(volumes, req.Filter)
-
-	log.V(2).Info("Returning volumes list")
-	return &iri.ListVolumesResponse{
-		Volumes: volumes,
-	}, nil
+	return &iri.ListVolumesResponse{Volumes: volumes}, nil
 }
