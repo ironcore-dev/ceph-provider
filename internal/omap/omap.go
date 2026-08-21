@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -59,11 +61,9 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 	}
 
 	indexers := make(map[string]store.IndexerFunc[E], len(opts.FieldIndexers))
-	for k, v := range opts.FieldIndexers {
-		indexers[k] = v
-	}
+	maps.Copy(indexers, opts.FieldIndexers)
 
-	return &Store[E]{
+	store := &Store[E]{
 		idMu: utilssync.NewMutexMap[string](),
 
 		log: log,
@@ -73,16 +73,22 @@ func New[E apiutils.Object](log logr.Logger, conn *rados.Conn, pool string, opts
 		omapName: opts.OmapName,
 
 		iteratorSize: opts.IteratorSize,
-
-		// Initialize the label index
-		labelIndex: make(map[string]sets.Set[string]),
-		watches:    sets.New[*watch[E]](),
+		watches:      sets.New[*watch[E]](),
 
 		newFunc:        opts.NewFunc,
 		createStrategy: opts.CreateStrategy,
 
-		indexers: indexers,
-	}, nil
+		indexers:   indexers,
+		labelIndex: make(map[string]sets.Set[string]),
+		fieldIndex: make(map[string]sets.Set[string]),
+	}
+	if err := store.initializeLabelIndex(); err != nil {
+		return nil, fmt.Errorf("failed to initialize label index: %w", err)
+	}
+	if err := store.initializeFieldIndex(); err != nil {
+		return nil, fmt.Errorf("failed to initialize field index: %w", err)
+	}
+	return store, nil
 }
 
 type Store[E apiutils.Object] struct {
@@ -97,66 +103,188 @@ type Store[E apiutils.Object] struct {
 
 	newFunc        func() E
 	createStrategy CreateStrategy[E]
-	labelIndexMu   sync.RWMutex
-	labelIndex     map[string]sets.Set[string] // Add label index field (labelKey=labelValue -> Set[objectID])
 
 	watchesMu sync.RWMutex
 	watches   sets.Set[*watch[E]]
 
 	indexers map[string]store.IndexerFunc[E]
+
+	labelIndexMu sync.RWMutex
+	labelIndex   map[string]sets.Set[string] // Add label index field (labelKey=labelValue -> Set[objectID])
+	fieldIndexMu sync.RWMutex
+	fieldIndex   map[string]sets.Set[string] // Add field index field (fieldName=fieldValue -> Set[objectID])
+
 }
 
-// --- Internal Label Index Helper ---
+// --- Internal Index Helpers ---
+func formatIndexKey(key, value string) string {
+	return key + "\x00" + value
+}
+
 func formatLabel(key, value string) string {
-	return fmt.Sprintf("%s\x00%s", key, value)
+	return formatIndexKey(key, value)
+}
+
+func formatField(key, value string) string {
+	return formatIndexKey(key, value)
 }
 
 // updateLabelIndex updates the index for a single object based on its labels.
-func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[string]string) {
-	oldLabelSet := sets.New[string]()
-	for k, v := range oldLabels {
-		oldLabelSet.Insert(formatLabel(k, v))
+func applyIndexDelta(index map[string]sets.Set[string], objID string, oldEntries, newEntries map[string]string) {
+	oldSet := sets.New[string]()
+	for key := range oldEntries {
+		oldSet.Insert(key)
 	}
 
-	newLabelSet := sets.New[string]()
-	for k, v := range newLabels {
-		newLabelSet.Insert(formatLabel(k, v))
+	newSet := sets.New[string]()
+	for key := range newEntries {
+		newSet.Insert(key)
 	}
 
-	s.labelIndexMu.Lock()
-	// Labels to remove objID from
-	for label := range oldLabelSet.Difference(newLabelSet) {
-		if ids, ok := s.labelIndex[label]; ok {
+	for key := range oldSet.Difference(newSet) {
+		if ids, ok := index[key]; ok {
 			ids.Delete(objID)
 			if ids.Len() == 0 {
-				delete(s.labelIndex, label)
+				delete(index, key)
 			}
 		}
 	}
 
-	// Labels to add objID to
-	for label := range newLabelSet.Difference(oldLabelSet) {
-		if _, ok := s.labelIndex[label]; !ok {
-			s.labelIndex[label] = sets.New[string]()
+	for key := range newSet.Difference(oldSet) {
+		if _, ok := index[key]; !ok {
+			index[key] = sets.New[string]()
 		}
-		s.labelIndex[label].Insert(objID)
+		index[key].Insert(objID)
 	}
-	s.labelIndexMu.Unlock()
+}
+
+func removeFromIndex(index map[string]sets.Set[string], objID string, entries map[string]string) {
+	for key := range entries {
+		if ids, ok := index[key]; ok {
+			ids.Delete(objID)
+			if ids.Len() == 0 {
+				delete(index, key)
+			}
+		}
+	}
+}
+
+func (s *Store[E]) updateLabelIndex(objID string, oldLabels, newLabels map[string]string) {
+	oldEntries := make(map[string]string, len(oldLabels))
+	for k, v := range oldLabels {
+		oldEntries[formatLabel(k, v)] = ""
+	}
+	newEntries := make(map[string]string, len(newLabels))
+	for k, v := range newLabels {
+		newEntries[formatLabel(k, v)] = ""
+	}
+
+	s.labelIndexMu.Lock()
+	defer s.labelIndexMu.Unlock()
+	applyIndexDelta(s.labelIndex, objID, oldEntries, newEntries)
 }
 
 // removeFromLabelIndex removes an object entirely from the label index.
 func (s *Store[E]) removeFromLabelIndex(objID string, labels map[string]string) {
 	s.labelIndexMu.Lock()
+	defer s.labelIndexMu.Unlock()
+
+	entries := make(map[string]string, len(labels))
 	for k, v := range labels {
-		label := formatLabel(k, v)
-		if ids, ok := s.labelIndex[label]; ok {
-			ids.Delete(objID)
-			if ids.Len() == 0 {
-				delete(s.labelIndex, label)
+		entries[formatLabel(k, v)] = ""
+	}
+	removeFromIndex(s.labelIndex, objID, entries)
+}
+
+func (s *Store[E]) updateFieldIndex(objID string, oldFields, newFields map[string]string) {
+	oldEntries := make(map[string]string, len(oldFields))
+	for k, v := range oldFields {
+		oldEntries[formatField(k, v)] = ""
+	}
+	newEntries := make(map[string]string, len(newFields))
+	for k, v := range newFields {
+		newEntries[formatField(k, v)] = ""
+	}
+
+	s.fieldIndexMu.Lock()
+	defer s.fieldIndexMu.Unlock()
+	applyIndexDelta(s.fieldIndex, objID, oldEntries, newEntries)
+}
+
+func (s *Store[E]) removeFromFieldIndex(objID string, fields map[string]string) {
+	s.fieldIndexMu.Lock()
+	defer s.fieldIndexMu.Unlock()
+
+	entries := make(map[string]string, len(fields))
+	for k, v := range fields {
+		entries[formatField(k, v)] = ""
+	}
+	removeFromIndex(s.fieldIndex, objID, entries)
+}
+
+func (s *Store[E]) initializeIndex(indexName string, index map[string]sets.Set[string], indexBuilder func(E) map[string]string) error {
+	ioCtx, err := s.conn.OpenIOContext(s.pool)
+	if err != nil {
+		return fmt.Errorf("failed to open IO context for %s index initialization: %w", indexName, err)
+	}
+	defer ioCtx.Destroy()
+
+	omapValues, err := ioCtx.GetAllOmapValues(s.omapName, "", "", s.iteratorSize)
+	if err != nil && !errors.Is(err, rados.ErrNotFound) {
+		if errors.Is(err, rados.ErrNotFound) {
+			s.log.V(1).Info("OMAP not found during initial index initialization", "index", indexName)
+			return nil
+		}
+		s.log.Error(err, "Index initialization failed", "index", indexName)
+		return fmt.Errorf("failed to get all omap values for %s index initialization: %w", indexName, err)
+	}
+
+	for key := range index {
+		delete(index, key)
+	}
+	for k, v := range omapValues {
+		obj := s.newFunc()
+		if err := json.Unmarshal(v, &obj); err != nil {
+			s.log.Error(err, "Failed to unmarshal object during init for index update", "id", k, "index", indexName)
+			continue
+		}
+		for entryKey := range indexBuilder(obj) {
+			if _, ok := index[entryKey]; !ok {
+				index[entryKey] = sets.New[string]()
 			}
+			index[entryKey].Insert(obj.GetID())
 		}
 	}
-	s.labelIndexMu.Unlock()
+	s.log.V(1).Info("OMAP index initialized successfully", "index", indexName, "entries", len(index))
+	return nil
+}
+
+func (s *Store[E]) initializeLabelIndex() error {
+	s.labelIndexMu.Lock()
+	defer s.labelIndexMu.Unlock()
+	return s.initializeIndex("label", s.labelIndex, func(obj E) map[string]string {
+		entries := make(map[string]string, len(obj.GetLabels()))
+		for k, v := range obj.GetLabels() {
+			entries[formatLabel(k, v)] = ""
+		}
+		return entries
+	})
+}
+
+func (s *Store[E]) initializeFieldIndex() error {
+	s.fieldIndexMu.Lock()
+	defer s.fieldIndexMu.Unlock()
+	return s.initializeIndex("field", s.fieldIndex, func(obj E) map[string]string {
+		entries := make(map[string]string, len(s.indexers))
+		for key, idx := range s.indexers {
+			value := idx(obj)
+			if value == "" {
+				continue
+			}
+			entries[formatField(key, value)] = ""
+		}
+		return entries
+	})
 }
 
 func (s *Store[E]) enqueue(evt store.WatchEvent[E]) {
@@ -273,6 +401,7 @@ func (s *Store[E]) Create(ctx context.Context, obj E) (E, error) {
 	}
 
 	s.updateLabelIndex(obj.GetID(), nil, obj.GetLabels())
+	s.updateFieldIndex(obj.GetID(), nil, s.fieldValues(obj))
 
 	s.enqueue(store.WatchEvent[E]{
 		Type:   store.WatchEventTypeCreated,
@@ -280,6 +409,22 @@ func (s *Store[E]) Create(ctx context.Context, obj E) (E, error) {
 	})
 
 	return obj, nil
+}
+
+func (s *Store[E]) fieldValues(obj E) map[string]string {
+	if len(s.indexers) == 0 {
+		return nil
+	}
+
+	values := make(map[string]string, len(s.indexers))
+	for key, indexer := range s.indexers {
+		value := indexer(obj)
+		if value == "" {
+			continue
+		}
+		values[key] = value
+	}
+	return values
 }
 
 func (s *Store[E]) Delete(ctx context.Context, id string) error {
@@ -302,6 +447,7 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 			return err
 		}
 		s.removeFromLabelIndex(id, obj.GetLabels())
+		s.removeFromFieldIndex(id, s.fieldValues(obj))
 		return nil
 	}
 
@@ -318,6 +464,7 @@ func (s *Store[E]) Delete(ctx context.Context, id string) error {
 	}
 
 	s.removeFromLabelIndex(id, obj.GetLabels())
+	s.removeFromFieldIndex(id, s.fieldValues(obj))
 	s.enqueue(store.WatchEvent[E]{
 		Type:   store.WatchEventTypeDeleted,
 		Object: obj,
@@ -389,12 +536,17 @@ func (s *Store[E]) Update(ctx context.Context, obj E) (E, error) {
 		}
 	}
 
+	oldFields := s.fieldValues(oldObj)
+	newFields := s.fieldValues(obj)
+
 	var eventType store.WatchEventType
 	if deleted {
 		s.removeFromLabelIndex(obj.GetID(), oldLabels)
+		s.removeFromFieldIndex(obj.GetID(), oldFields)
 		eventType = store.WatchEventTypeDeleted
 	} else {
 		s.updateLabelIndex(obj.GetID(), oldLabels, newLabels)
+		s.updateFieldIndex(obj.GetID(), oldFields, newFields)
 		eventType = store.WatchEventTypeUpdated
 	}
 
@@ -509,6 +661,70 @@ func (s *Store[E]) List(ctx context.Context, opts ...store.ListOption) ([]E, err
 		return nil, err
 	}
 
+	var labelsMap map[string]string
+	if listOpts.LabelSelector != nil {
+		reqs, isSelectable := listOpts.LabelSelector.Requirements()
+		if !isSelectable {
+			return []E{}, nil
+		}
+		labelsMap = make(map[string]string, len(reqs))
+		for _, req := range reqs {
+			if req.Operator() != selection.Equals {
+				return []E{}, nil
+			}
+			key := req.Key()
+			value, hasValue := listOpts.LabelSelector.RequiresExactMatch(key)
+			if !hasValue {
+				return []E{}, nil
+			}
+			labelsMap[key] = value
+		}
+	}
+
+	var fieldMap map[string]string
+	if listOpts.FieldSelector != nil {
+		reqs := listOpts.FieldSelector.Requirements()
+		fieldMap = make(map[string]string, len(reqs))
+		for _, req := range reqs {
+			if req.Operator != selection.Equals {
+				return []E{}, nil
+			}
+			value, hasValue := listOpts.FieldSelector.RequiresExactMatch(req.Field)
+			if !hasValue {
+				return []E{}, nil
+			}
+			fieldMap[req.Field] = value
+		}
+	}
+
+	if len(labelsMap) > 0 && len(fieldMap) > 0 {
+		labelObjs, err := s.listByLabels(ctx, labelsMap)
+		if err != nil {
+			return nil, err
+		}
+		fieldObjs, err := s.listByFieldSelector(ctx, fieldMap)
+		if err != nil {
+			return nil, err
+		}
+		objIDs := make(map[string]struct{}, len(fieldObjs))
+		for _, obj := range fieldObjs {
+			objIDs[obj.GetID()] = struct{}{}
+		}
+		filtered := make([]E, 0, len(labelObjs))
+		for _, obj := range labelObjs {
+			if _, ok := objIDs[obj.GetID()]; ok {
+				filtered = append(filtered, obj)
+			}
+		}
+		return filtered, nil
+	}
+	if len(labelsMap) > 0 {
+		return s.listByLabels(ctx, labelsMap)
+	}
+	if len(fieldMap) > 0 {
+		return s.listByFieldSelector(ctx, fieldMap)
+	}
+
 	ioCtx, err := s.conn.OpenIOContext(s.pool)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get io context: %w", err)
@@ -529,11 +745,6 @@ func (s *Store[E]) List(ctx context.Context, opts ...store.ListOption) ([]E, err
 		if err := json.Unmarshal(v, &obj); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal object: %w", err)
 		}
-
-		if !s.matchesOptions(obj, *listOpts) {
-			continue
-		}
-
 		objs = append(objs, obj)
 	}
 
@@ -573,57 +784,46 @@ func (s *Store[E]) get(ioCtx *rados.IOContext, id string) (E, error) {
 	return obj, nil
 }
 
-type sizedLabel struct {
+type sizedIndex struct {
 	ids  sets.Set[string]
 	size int
 }
 
-func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]string) ([]E, error) {
-	if len(labelSelector) == 0 {
-		return s.List(ctx)
-	}
-
-	// pre-allocate the slice to avoid extra memory allocations
-	labelSelect := make([]sizedLabel, 0, len(labelSelector))
+func (s *Store[E]) listByIndex(ctx context.Context, selector map[string]string, index map[string]sets.Set[string], mu *sync.RWMutex, formatKey func(string, string) string) ([]E, error) {
+	selects := make([]sizedIndex, 0, len(selector))
 	var intersection sets.Set[string]
 
-	s.labelIndexMu.RLock()
-	// 1 .Gather label set sizes and check for immediate non-matches.
-	for key, value := range labelSelector {
-		label := formatLabel(key, value)
-		ids, found := s.labelIndex[label]
+	if mu != nil {
+		mu.RLock()
+		defer mu.RUnlock()
+	}
+	for key, value := range selector {
+		idxKey := formatKey(key, value)
+		ids, found := index[idxKey]
 		if !found {
-			s.labelIndexMu.RUnlock()
 			return []E{}, nil
 		}
-
-		labelSelect = append(labelSelect, sizedLabel{
+		selects = append(selects, sizedIndex{
 			ids:  ids.Clone(),
 			size: ids.Len(),
 		})
 	}
-	s.labelIndexMu.RUnlock()
-	if len(labelSelect) > 1 {
-		// 2. Sort the labels by the size of their matching set (smallest first).
-		sort.Slice(labelSelect, func(i, j int) bool {
-			return labelSelect[i].size < labelSelect[j].size
+
+	if len(selects) > 1 {
+		sort.Slice(selects, func(i, j int) bool {
+			return selects[i].size < selects[j].size
 		})
 	}
 
-	var isFirstLabel = true
-
-	// 3. Iterate over the sorted slice (labelsForSort) to compute the intersection.
-	for _, info := range labelSelect {
+	var isFirst = true
+	for _, info := range selects {
 		ids := info.ids
-		if isFirstLabel {
-			// Use the smallest set to initialize the intersection (copy to avoid modifying the index set).
+		if isFirst {
 			intersection = ids
-			isFirstLabel = false
+			isFirst = false
 		} else {
-			// Intersect the current result with the next smallest set.
 			intersection = intersection.Intersection(ids)
 		}
-
 		if intersection.Len() == 0 {
 			return []E{}, nil
 		}
@@ -634,7 +834,6 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 		obj, err := s.Get(ctx, id)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				// Object was deleted after index lookup; skip stale entry
 				continue
 			}
 			return nil, err
@@ -643,4 +842,12 @@ func (s *Store[E]) ListByLabels(ctx context.Context, labelSelector map[string]st
 	}
 
 	return objs, nil
+}
+
+func (s *Store[E]) listByLabels(ctx context.Context, labelSelector map[string]string) ([]E, error) {
+	return s.listByIndex(ctx, labelSelector, s.labelIndex, &s.labelIndexMu, formatLabel)
+}
+
+func (s *Store[E]) listByFieldSelector(ctx context.Context, fieldSelector map[string]string) ([]E, error) {
+	return s.listByIndex(ctx, fieldSelector, s.fieldIndex, &s.fieldIndexMu, formatField)
 }

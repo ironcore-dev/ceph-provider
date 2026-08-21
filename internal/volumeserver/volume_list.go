@@ -12,15 +12,8 @@ import (
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
-	providerapi "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
 )
-
-// imageListerWithLabels type parameter E is constrained to be a providerapi.Object.
-type imageListerWithLabels[E providerapi.Object] interface {
-	store.Store[E]
-	ListByLabels(ctx context.Context, labelSelector map[string]string) ([]E, error)
-}
 
 func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume, error) {
 	cephImage, err := s.imageStore.Get(ctx, imageId)
@@ -38,17 +31,23 @@ func (s *Server) getIriVolume(ctx context.Context, imageId string) (*iri.Volume,
 	return s.convertImageToIriVolume(cephImage)
 }
 
-func (s *Server) listVolumes(ctx context.Context, log logr.Logger) ([]*iri.Volume, error) {
-	cephImages, err := s.imageStore.List(ctx)
+func (s *Server) listVolumes(ctx context.Context, log logr.Logger, filter *iri.VolumeFilter) ([]*iri.Volume, error) {
+	matchingLabels := store.MatchingLabels{
+		api.ManagerLabel: api.VolumeManager,
+	}
+
+	if filter != nil && len(filter.LabelSelector) > 0 {
+		for k := range filter.LabelSelector {
+			matchingLabels[k] = filter.LabelSelector[k]
+		}
+	}
+
+	cephImages, err := s.imageStore.List(ctx, matchingLabels)
 	if err != nil {
 		log.Error(err, "Error listing volumes from image store")
 		return nil, fmt.Errorf("error listing volumes: %w", err)
 	}
-	log.V(1).Info("Listed all volumes from store", "count", len(cephImages))
-	return s.listAndConvert(cephImages)
-}
 
-func (s *Server) listAndConvert(cephImages []*api.Image) ([]*iri.Volume, error) {
 	res := make([]*iri.Volume, 0, len(cephImages))
 	for _, cephImage := range cephImages {
 		iriVolume, err := s.convertImageToIriVolume(cephImage)
@@ -66,7 +65,7 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 	log.V(2).Info("Listing volumes")
 
 	// Fast path for ID filter
-	if filter := req.Filter; filter != nil && filter.Id != "" {
+	if filter != nil && filter.Id != "" {
 		volume, err := s.getIriVolume(ctx, filter.Id)
 		if err != nil {
 			if !errors.Is(err, utils.ErrVolumeNotFound) && !errors.Is(err, utils.ErrVolumeIsntManaged) {
@@ -82,31 +81,8 @@ func (s *Server) ListVolumes(ctx context.Context, req *iri.ListVolumesRequest) (
 		}, nil
 	}
 
-	// Fast path for LabelSelector filter (using the new index)
-	if filter != nil && len(filter.LabelSelector) > 0 {
-		log.V(1).Info("Filtering by Label Selector using index", "Selector", filter.LabelSelector)
-		if listerWithLabels, ok := s.imageStore.(imageListerWithLabels[*api.Image]); ok {
-			cephImages, err := listerWithLabels.ListByLabels(ctx, filter.LabelSelector)
-			if err != nil {
-				log.Error(err, "Error listing volumes by labels from store", "Selector", filter.LabelSelector)
-				return nil, fmt.Errorf("error listing volumes by labels: %w", err)
-			}
-			log.V(1).Info("Listed volumes using label index", "count", len(cephImages))
-
-			// Convert results
-			volumes, err := s.listAndConvert(cephImages)
-			if err != nil {
-				log.Error(err, "Error converting volumes found by label", "Selector", filter.LabelSelector)
-				return nil, fmt.Errorf("error converting listed volumes: %w", err)
-			}
-			return &iri.ListVolumesResponse{Volumes: volumes}, nil
-		}
-		log.Error(fmt.Errorf("imageStore does not support ListByLabels"), "Cannot use label index optimization")
-	}
-
-	// Slow path: No specific filter or fallback
 	log.V(1).Info("Listing all volumes (no specific filter or fallback)")
-	volumes, err := s.listVolumes(ctx, log) // Lists *all* managed volumes
+	volumes, err := s.listVolumes(ctx, log, filter) // Lists *all* managed volumes
 	if err != nil {
 		// listVolumes already logs the store error
 		return nil, utils.ConvertInternalErrorToGRPC(err)
