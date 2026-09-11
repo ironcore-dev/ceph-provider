@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.27.1-trixie AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -28,11 +28,19 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="${LDFLAGS}" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
 
 
-# Start from Kubernetes Debian base.
 FROM builder AS ceph-volume-provider-builder
 # Install necessary dependencies
 
-RUN apt update  && apt install -y libcephfs-dev librbd-dev librados-dev libc-bin
+# go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
+RUN curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc && \
+    tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
+Types: deb
+URIs: https://eu.ceph.com/debian-tentacle/
+Suites: bookworm
+Components: main
+Signed-By: /usr/share/keyrings/ceph-release.asc
+EOF
+RUN apt-get update && apt-get install -y libcephfs-dev librbd-dev librados-dev libc-bin
 
 # Install cross-compiler for ARM64 if building for arm64 on an amd64 host
 RUN if [ "$TARGETARCH" = "arm64" ] && [ "$BUILDARCH" = "amd64" ]; then \
@@ -101,39 +109,65 @@ FROM distroless-$TARGETARCH AS ceph-volume-provider-image
 WORKDIR /
 COPY --from=busybox /bin/sh /bin/sh
 COPY --from=busybox /bin/mkdir /bin/mkdir
-COPY --from=ceph-volume-provider-builder /lib/${LIB_DIR_PREFIX}-linux-gnu/librados.so.2 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/librbd.so.1 \
+COPY --from=ceph-volume-provider-builder /usr/lib/librados.so.2 \
+/usr/lib/librbd.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libc.so.6 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libfmt.so.10 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libstdc++.so.6 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libgcc_s.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libssl.so.3 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libcryptsetup.so.12 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libnbd.so.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libcrypto.so.3 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libresolv.so.2 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_thread.so.1.83.0 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libboost_iostreams.so.1.83.0 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libblkid.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libudev.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libibverbs.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/librdmacm.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libz.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libcurl.so.4 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libthrift-0.17.0.so \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libm.so.6 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libuuid.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libdevmapper.so.1.02.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libargon2.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libjson-c.so.5 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libz.so.1 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libzstd.so.1 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libbz2.so.1.0 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/liblzma.so.5 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libcap.so.2 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libgnutls.so.30 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libxml2.so.2 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libnl-route-3.so.200 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libnl-3.so.200 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libnghttp2.so.14 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libidn2.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/librtmp.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libssh2.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libpsl.so.5 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libgssapi_krb5.so.2 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libldap-2.5.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/liblber-2.5.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libzstd.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libbrotlidec.so.1 \
 /lib/${LIB_DIR_PREFIX}-linux-gnu/libselinux.so.1 \
-/lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 /lib/${LIB_DIR_PREFIX}-linux-gnu/
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libp11-kit.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libunistring.so.2 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libtasn1.so.6 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libnettle.so.8 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libhogweed.so.6 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libgmp.so.10 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libicuuc.so.72 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/liblzma.so.5 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libkrb5.so.3 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libk5crypto.so.3 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libcom_err.so.2 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libkrb5support.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libsasl2.so.2 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libbrotlicommon.so.1 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libpcre2-8.so.0 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libffi.so.8 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libicudata.so.72 \
+/lib/${LIB_DIR_PREFIX}-linux-gnu/libkeyutils.so.1 /lib/${LIB_DIR_PREFIX}-linux-gnu/
 RUN mkdir -p /${LIB_DIR}
 COPY --from=ceph-volume-provider-builder /${LIB_DIR}/ld-linux-${LIB_DIR_PREFIX_MINUS}.so.${LIB_DIR_SUFFIX_NUMBER} /${LIB_DIR}/
-RUN mkdir -p /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/
-COPY --from=ceph-volume-provider-builder /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph/libceph-common.so.2 /usr/lib/${LIB_DIR_PREFIX}-linux-gnu/ceph
+RUN mkdir -p /usr/lib/ceph/
+COPY --from=ceph-volume-provider-builder /usr/lib/ceph/libceph-common.so.2 /usr/lib/ceph
 
 COPY --from=ceph-volume-provider-builder /workspace/bin/ceph-volume-provider /ceph-volume-provider
 
