@@ -12,7 +12,18 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-      - run: sudo apt update  && sudo apt install -y libcephfs-dev librbd-dev librados-dev
+      # go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
+      - name: Add Ceph apt repository
+        run: |
+          sudo curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc
+          sudo tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
+          Types: deb
+          URIs: https://eu.ceph.com/debian-tentacle/
+          Suites: noble
+          Components: main
+          Signed-By: /usr/share/keyrings/ceph-release.asc
+          EOF
+      - run: sudo apt-get update && sudo apt-get install -y libcephfs-dev librbd-dev librados-dev
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
