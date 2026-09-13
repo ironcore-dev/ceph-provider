@@ -13,7 +13,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
 	iri "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/storeutils/store"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (s *Server) getIriVolumeSnapshot(ctx context.Context, log logr.Logger, snapshotId string) (*iri.VolumeSnapshot, error) {
@@ -30,27 +29,18 @@ func (s *Server) getIriVolumeSnapshot(ctx context.Context, log logr.Logger, snap
 	return s.convertSnapshotToIriVolumeSnapshot(cephSnapshot)
 }
 
-func (s *Server) filterSnapshot(snapshots []*iri.VolumeSnapshot, filter *iri.VolumeSnapshotFilter) []*iri.VolumeSnapshot {
-	if filter == nil {
-		return snapshots
+func (s *Server) listSnapshots(ctx context.Context, filter *iri.VolumeSnapshotFilter) ([]*iri.VolumeSnapshot, error) {
+	matchingLabels := store.MatchingLabels{
+		api.ManagerLabel: api.VolumeManager,
 	}
 
-	var (
-		res []*iri.VolumeSnapshot
-		sel = labels.SelectorFromSet(filter.LabelSelector)
-	)
-	for _, iriSnapshot := range snapshots {
-		if !sel.Matches(labels.Set(iriSnapshot.Metadata.Labels)) {
-			continue
+	if filter != nil && len(filter.LabelSelector) > 0 {
+		for k := range filter.LabelSelector {
+			matchingLabels[k] = filter.LabelSelector[k]
 		}
-
-		res = append(res, iriSnapshot)
 	}
-	return res
-}
 
-func (s *Server) listSnapshots(ctx context.Context) ([]*iri.VolumeSnapshot, error) {
-	cephSnapshots, err := s.snapshotStore.List(ctx, store.MatchingLabels{api.ManagerLabel: api.VolumeManager})
+	cephSnapshots, err := s.snapshotStore.List(ctx, matchingLabels)
 	if err != nil {
 		return nil, fmt.Errorf("error listing snapshots: %w", err)
 	}
@@ -87,12 +77,10 @@ func (s *Server) ListVolumeSnapshots(ctx context.Context, req *iri.ListVolumeSna
 		}, nil
 	}
 
-	snapshots, err := s.listSnapshots(ctx)
+	snapshots, err := s.listSnapshots(ctx, req.Filter)
 	if err != nil {
 		return nil, utils.ConvertInternalErrorToGRPC(err)
 	}
-
-	snapshots = s.filterSnapshot(snapshots, req.Filter)
 
 	log.V(2).Info("Returning volume snapshot list")
 	return &iri.ListVolumeSnapshotsResponse{
