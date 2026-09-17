@@ -7,6 +7,11 @@ on:
 jobs:
   integration-tests:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        ceph:
+          - squid
+          - tentacle
     if: contains(github.event.pull_request.labels.*.name, 'integration-tests')
 
     steps:
@@ -21,7 +26,7 @@ jobs:
         run: |
           set -x
           
-          sudo snap install microceph --channel=quincy/stable
+          sudo snap install microceph --channel=${{ matrix.ceph }}/stable
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ceph-common
           sudo microceph cluster bootstrap
