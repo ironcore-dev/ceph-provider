@@ -72,9 +72,20 @@ jobs:
           echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV
           sudo chmod +r /etc/ceph/ceph.client.admin.keyring
 
+      # go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
+      - name: Add Ceph apt repository
+        run: |
+          sudo curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc
+          sudo tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
+          Types: deb
+          URIs: https://eu.ceph.com/debian-tentacle/
+          Suites: noble
+          Components: main
+          Signed-By: /usr/share/keyrings/ceph-release.asc
+          EOF
       - name: Install dependencies
         run: |
-          sudo apt install -y libcephfs-dev librbd-dev librados-dev
+          sudo apt-get update && sudo apt-get install -y libcephfs-dev librbd-dev librados-dev
 
       - name: Run go tests
         run: |
