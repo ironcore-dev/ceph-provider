@@ -1,0 +1,18 @@
+# namespace and resourceNames must match --ceph-mon-configmap-namespace and
+# --ceph-mon-configmap-name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rook-mon-endpoints-reader
+  namespace: rook-ceph
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  resourceNames:
+  - rook-ceph-mon-endpoints
+  verbs:
+  - get
+  - list
+  - watch

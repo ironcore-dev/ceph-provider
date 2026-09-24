@@ -9,6 +9,18 @@ and `Bucket` types.
 
 Please consult the [project documentation](https://ironcore-dev.github.io/ceph-provider/) for additional information.
 
+## Rook monitor discovery
+
+Set `--ceph-mon-configmap-namespace=rook-ceph` (and `--kubeconfig` when not running in-cluster) to read monitor addresses from `rook-ceph-mon-endpoints`. Apply `config/ceph-volume-provider/rook-mon-rbac`. The Role namespace and `resourceNames` must match `--ceph-mon-configmap-namespace` and `--ceph-mon-configmap-name`.
+
+A parsed monitor list that differs from the list used at startup stops the process. Kubernetes starts the container again. The new process connects with the updated list and writes that list onto existing volumes when an address was added or removed. The same addresses in another order are left unchanged.
+
+A running guest keeps the monitor hosts already configured on its disk until libvirt applies a monitor change to a disk that is already attached.
+
+Volumes updated from the ConfigMap keep that address list if this binary is rolled back. The previous binary does not walk existing volumes.
+
+ConfigMap addresses must be reachable from hypervisors. `--ceph-monitors` remains valid for non-Rook deployments and integration tests. Leave `--ceph-mon-configmap-namespace` empty to keep that static behavior.
+
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
 **Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).

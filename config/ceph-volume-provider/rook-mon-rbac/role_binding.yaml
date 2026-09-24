@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rook-mon-endpoints-reader
+  namespace: rook-ceph
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rook-mon-endpoints-reader
+subjects:
+- kind: ServiceAccount
+  name: ceph-volume-provider-controller-manager
+  namespace: ceph-volume-provider-system
