@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ceph/go-ceph v0.41.0
-	github.com/containerd/containerd v1.7.35
+	github.com/containerd/containerd v1.7.36
 	github.com/go-logr/logr v1.4.4
 	github.com/google/addlicense v1.2.0
 	github.com/ironcore-dev/controller-utils v0.13.0
