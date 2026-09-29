@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 
 	"github.com/ironcore-dev/ceph-provider/api"
-	"github.com/ironcore-dev/ironcore/broker/common/idgen"
+	"github.com/ironcore-dev/ironcore/iri/common/idgen"
 )
 
 var SnapshotStrategy = snapshotStrategy{}
