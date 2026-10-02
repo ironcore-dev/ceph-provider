@@ -27,6 +27,7 @@ type Server struct {
 	idGen idgen.IDGen
 
 	volumeStore      store.Store[*api.Volume]
+	osImageStore     store.Store[*api.OSImage]
 	snapshotStore    store.Store[*api.Snapshot]
 	volumeEventStore recorder.EventStore
 
@@ -62,6 +63,7 @@ var _ iri.VolumeRuntimeServer = (*Server)(nil)
 
 func New(
 	volumeStore store.Store[*api.Volume],
+	osImageStore store.Store[*api.OSImage],
 	snapshotStore store.Store[*api.Snapshot],
 	volumeClassRegistry VolumeClassRegistry,
 	keyEncryption encryption.Encryptor,
@@ -73,6 +75,7 @@ func New(
 	return &Server{
 		idGen:            opts.IDGen,
 		volumeStore:      volumeStore,
+		osImageStore:     osImageStore,
 		snapshotStore:    snapshotStore,
 		volumeEventStore: opts.VolumeEventStore,
 		volumeClasses:    volumeClassRegistry,

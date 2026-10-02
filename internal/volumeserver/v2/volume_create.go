@@ -5,19 +5,117 @@ package volumeserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	api "github.com/ironcore-dev/ceph-provider/api/v2"
 	"github.com/ironcore-dev/ceph-provider/internal/limits"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
+	"github.com/ironcore-dev/controller-utils/metautils"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
+	"github.com/ironcore-dev/provider-utils/storeutils/store"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/registry"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 const (
 	EncryptionSecretDataPassphraseKey = "encryptionKey"
 )
+
+func (s *Server) createOrGetOSImage(ctx context.Context, log logr.Logger, iriVolume *iriv1alpha1.Volume) (*api.OSImage, error) {
+	// Skip OSImage creation if no image data source is specified
+	dataSource := iriVolume.Spec.VolumeDataSource
+	if dataSource == nil {
+		return nil, nil
+	}
+	imageSource := dataSource.ImageDataSource
+	if imageSource == nil {
+		return nil, nil
+	}
+
+	if imageSource.Image == "" {
+		return nil, fmt.Errorf("must specify image url in image data source")
+	}
+	imageRef, err := registry.ParseReference(imageSource.Image)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse image source: %w", err)
+	}
+	imageName := imageRef.String()
+
+	var imageArch string
+	if arch := imageSource.Architecture; arch != "" {
+		imageArch = arch
+	} else if iriVolume.Metadata != nil {
+		if a, ok := iriVolume.Metadata.Labels[api.MachineArchitectureLabel]; ok {
+			imageArch = a
+		}
+	}
+
+	// Resolve digest for architecture from image reference, as OS images are architecture-specific.
+	imageDigest, err := imageRef.Digest()
+	if err != nil {
+		// If the image reference does not contain a digest, it must be resolved from the repository.
+		repo, err := remote.NewRepository(imageRef.Repository)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create remote image repository: %w", err)
+		}
+		log.V(2).Info("Resolve OCI reference for OS image", "reference", imageRef.String(), "architecture", imageArch)
+		desc, err := oras.Resolve(ctx, repo, imageRef.Reference, oras.ResolveOptions{
+			TargetPlatform: &ocispec.Platform{OS: "linux", Architecture: imageArch},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve image reference: %w", err)
+		}
+		imageDigest = desc.Digest
+	}
+	osImageID := imageDigest.Encoded()
+	imageRef.Reference = imageDigest.String()
+
+	osImage, err := s.osImageStore.Get(ctx, osImageID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, fmt.Errorf("failed to get OS image from store: %w", err)
+	}
+	if err == nil {
+		log.V(2).Info("OS image already exists in store", "OSImageId", osImage.ID)
+		return osImage, nil
+	}
+
+	log.V(1).Info("Creating OS image", "OSImageId", osImageID)
+	osImage = &api.OSImage{
+		Metadata: apiutils.Metadata{
+			ID: osImageID,
+		},
+		Spec: api.OSImageSpec{
+			Source: api.OSImageSource{
+				Reference: imageRef.String(),
+			},
+		},
+	}
+
+	log.V(2).Info("Setting OS image metadata")
+	api.SetManagerLabel(osImage, api.VolumeManager)
+
+	// TODO: Is this the right set of labels to attach to an OS image? Is there something missing? OR should we move some of them to annotations?
+	metautils.SetLabels(osImage, map[string]string{
+		"architecture": imageArch,
+		"os":           "linux",
+		"name":         imageName,
+		"digest":       imageRef.String(),
+	})
+
+	log.V(2).Info("Creating OS image in store")
+	osImage, err = s.osImageStore.Create(ctx, osImage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OS image: %w", err)
+	}
+
+	log.V(2).Info("OS image created", "OSImageID", osImage.ID)
+	return osImage, nil
+}
 
 func (s *Server) createVolumeFromIRI(ctx context.Context, log logr.Logger, iriVolume *iriv1alpha1.Volume) (*api.Volume, error) {
 	if iriVolume == nil {
@@ -68,24 +166,11 @@ func (s *Server) createVolumeFromIRI(ctx context.Context, log logr.Logger, iriVo
 			snapshotID := dataSource.SnapshotDataSource.SnapshotId
 			source.SnapshotSource = &snapshotID
 		case dataSource.ImageDataSource != nil:
-			if dataSource.ImageDataSource.Image == "" {
-				return nil, fmt.Errorf("must specify image url in image data source")
+			osImage, err := s.createOrGetOSImage(ctx, log, iriVolume)
+			if err != nil || osImage == nil {
+				return nil, fmt.Errorf("failed to create OS image: %w", err)
 			}
-			if imageSize == 0 {
-				return nil, fmt.Errorf("must specify size when creating volume from image data source")
-			}
-			var arch *string
-			if a := dataSource.ImageDataSource.Architecture; a != "" {
-				arch = &a
-			} else if iriVolume.Metadata != nil {
-				if a, ok := iriVolume.Metadata.Labels[api.MachineArchitectureLabel]; ok {
-					arch = &a
-				}
-			}
-			source.OSVolume = &api.OSVolumeSource{
-				Name:         dataSource.ImageDataSource.Image,
-				Architecture: arch,
-			}
+			source.OSImage = &osImage.ID
 		default:
 			return nil, fmt.Errorf("unsupported or incomplete volume data source type")
 		}

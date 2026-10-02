@@ -9,4 +9,5 @@ const (
 	NameVolumes         = "ironcore.volumes"
 	NameImages          = "ironcore.images"
 	NameSnapshots       = "ironcore.snapshots"
+	NameOSImages        = "ironcore.os-images"
 )

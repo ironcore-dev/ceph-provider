@@ -9,11 +9,19 @@ import (
 
 const (
 	VolumeStatusImageRefField           = "status.imageRef"
+	VolumeSpecSourceOSImageField        = "spec.source.osImage"
 	VolumeSpecSourceSnapshotSourceField = "spec.source.snapshotSource"
 )
 
 func SetupVolumeStatusImageRefFieldIndexer(volume *Volume) string {
 	return volume.Status.ImageRef
+}
+
+func SetupVolumeSpecSourceOSImageFieldIndexer(volume *Volume) string {
+	if volume.Spec.Source.OSImage != nil {
+		return *volume.Spec.Source.OSImage
+	}
+	return ""
 }
 
 func SetupVolumeSpecSourceSnapshotSourceFieldIndexer(volume *Volume) string {
@@ -53,8 +61,8 @@ type VolumeSpec struct {
 }
 
 type VolumeSource struct {
-	OSVolume       *OSVolumeSource `json:"osVolume"`
-	SnapshotSource *string         `json:"snapshotSource"`
+	OSImage        *string `json:"osImage"`
+	SnapshotSource *string `json:"snapshotSource"`
 }
 
 type OSVolumeSource struct {

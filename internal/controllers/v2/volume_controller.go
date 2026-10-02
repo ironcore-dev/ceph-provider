@@ -10,10 +10,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/distribution/reference"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api/v2"
-	ironcoreimage "github.com/ironcore-dev/ironcore-image"
 	"github.com/ironcore-dev/ironcore-image/oci/image"
 	apiutils "github.com/ironcore-dev/provider-utils/apiutils/api"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
@@ -30,9 +28,11 @@ func NewVolumeReconciler(
 	registry image.Source,
 	snapshotStore store.Store[*providerapi.Snapshot],
 	imageStore store.Store[*providerapi.Image],
+	osImageStore store.Store[*providerapi.OSImage],
 	volumeStore store.Store[*providerapi.Volume],
 	events event.Source[*providerapi.Volume],
 	imageEvents event.Source[*providerapi.Image],
+	osImageEvents event.Source[*providerapi.OSImage],
 	snapshotEvents event.Source[*providerapi.Snapshot],
 	opts VolumeReconcilerOptions,
 ) (*VolumeReconciler, error) {
@@ -48,6 +48,10 @@ func NewVolumeReconciler(
 		return nil, fmt.Errorf("must specify image store")
 	}
 
+	if osImageStore == nil {
+		return nil, fmt.Errorf("must specify os image store")
+	}
+
 	if volumeStore == nil {
 		return nil, fmt.Errorf("must specify volume store")
 	}
@@ -58,6 +62,10 @@ func NewVolumeReconciler(
 
 	if imageEvents == nil {
 		return nil, fmt.Errorf("must specify image events")
+	}
+
+	if osImageEvents == nil {
+		return nil, fmt.Errorf("must specify os image events")
 	}
 
 	if snapshotEvents == nil {
@@ -74,9 +82,11 @@ func NewVolumeReconciler(
 		queue:          workqueue.NewTypedRateLimitingQueue[string](workqueue.DefaultTypedControllerRateLimiter[string]()),
 		snapshotStore:  snapshotStore,
 		imageStore:     imageStore,
+		osImageStore:   osImageStore,
 		volumeStore:    volumeStore,
 		events:         events,
 		imageEvents:    imageEvents,
+		osImageEvents:  osImageEvents,
 		snapshotEvents: snapshotEvents,
 		workerSize:     opts.WorkerSize,
 	}, nil
@@ -90,10 +100,12 @@ type VolumeReconciler struct {
 
 	snapshotStore store.Store[*providerapi.Snapshot]
 	imageStore    store.Store[*providerapi.Image]
+	osImageStore  store.Store[*providerapi.OSImage]
 	volumeStore   store.Store[*providerapi.Volume]
 
 	events         event.Source[*providerapi.Volume]
 	imageEvents    event.Source[*providerapi.Image]
+	osImageEvents  event.Source[*providerapi.OSImage]
 	snapshotEvents event.Source[*providerapi.Snapshot]
 
 	workerSize int
@@ -120,6 +132,16 @@ func (r *VolumeReconciler) Start(ctx context.Context) error {
 	}
 	defer func() {
 		_ = r.imageEvents.RemoveHandler(imageReg)
+	}()
+
+	osImgEventReg, err := r.osImageEvents.AddHandler(event.HandlerFunc[*providerapi.OSImage](func(evt event.Event[*providerapi.OSImage]) {
+		r.requeueVolumesForOSImage(ctx, evt.Object.ID)
+	}))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = r.osImageEvents.RemoveHandler(osImgEventReg)
 	}()
 
 	snapshotReg, err := r.snapshotEvents.AddHandler(event.HandlerFunc[*providerapi.Snapshot](func(evt event.Event[*providerapi.Snapshot]) {
@@ -160,9 +182,6 @@ func (r *VolumeReconciler) Start(ctx context.Context) error {
 }
 
 func (r *VolumeReconciler) requeueVolumesForImage(ctx context.Context, imageID string) {
-	// TODO: Requeue OS Volumes when their base image becomes Available
-	// OS volumes waiting for a base image have an empty ImageRef,
-	// so they are not matched here. We need to connect the base images to the volumes somehow
 	volumes, err := r.volumeStore.List(ctx, store.MatchingFields{providerapi.VolumeStatusImageRefField: imageID})
 	if err != nil {
 		r.log.Error(err, "failed to list volumes for image event requeue")
@@ -173,10 +192,18 @@ func (r *VolumeReconciler) requeueVolumesForImage(ctx context.Context, imageID s
 	}
 }
 
+func (r *VolumeReconciler) requeueVolumesForOSImage(ctx context.Context, osImageID string) {
+	volumes, err := r.volumeStore.List(ctx, store.MatchingFields{providerapi.VolumeSpecSourceOSImageField: osImageID})
+	if err != nil {
+		r.log.Error(err, "failed to list volumes for OS image event requeue")
+		return
+	}
+	for _, vol := range volumes {
+		r.queue.Add(vol.ID)
+	}
+}
+
 func (r *VolumeReconciler) requeueVolumesForSnapshot(ctx context.Context, snapshotID string) {
-	// TODO: Requeue OS Volumes when their intermediate snapshot becomes Ready or Failed.
-	// OS volumes waiting for a intermediate snapshot have no SnapshotSource,
-	// so they are not matched here. We need to connect the snapshots to the volumes somehow
 	volumes, err := r.volumeStore.List(ctx, store.MatchingFields{providerapi.VolumeSpecSourceSnapshotSourceField: snapshotID})
 	if err != nil {
 		r.log.Error(err, "failed to list volumes for snapshot event requeue")
@@ -210,7 +237,6 @@ func (r *VolumeReconciler) processNextWorkItem(ctx context.Context, log logr.Log
 const (
 	VolumeFinalizer     = "volume"
 	VolumeImageIDPrefix = "vol-"
-	BaseImageIDPrefix   = "os-"
 )
 
 func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error {
@@ -310,12 +336,13 @@ func (r *VolumeReconciler) reconcileVolume(ctx context.Context, id string) error
 	}
 
 	// ImageRef is empty, need to create the image based on volume source
+	volumeSource := volume.Spec.Source
 	switch {
-	case volume.Spec.Source.OSVolume == nil && volume.Spec.Source.SnapshotSource == nil:
+	case volumeSource.OSImage == nil && volumeSource.SnapshotSource == nil:
 		return r.reconcileEmptyVolume(ctx, log, volume)
-	case volume.Spec.Source.OSVolume != nil && volume.Spec.Source.SnapshotSource == nil:
+	case volumeSource.OSImage != nil && volumeSource.SnapshotSource == nil:
 		return r.reconcileOSVolume(ctx, log, volume)
-	case volume.Spec.Source.OSVolume == nil && volume.Spec.Source.SnapshotSource != nil:
+	case volumeSource.OSImage == nil && volumeSource.SnapshotSource != nil:
 		return r.reconcileRestoredVolume(ctx, log, volume)
 	default:
 		return fmt.Errorf("invalid volume specification")
@@ -367,136 +394,36 @@ func (r *VolumeReconciler) reconcileEmptyVolume(ctx context.Context, log logr.Lo
 func (r *VolumeReconciler) reconcileOSVolume(ctx context.Context, log logr.Logger, volume *providerapi.Volume) error {
 	log.V(2).Info("Reconciling OS volume")
 
-	if volume.Spec.Source.OSVolume == nil {
-		return fmt.Errorf("OS volume source is nil")
+	if volume.Spec.Source.OSImage == nil {
+		return fmt.Errorf("OS image is nil")
 	}
-	osVolume := volume.Spec.Source.OSVolume
-
-	// Step 1: Resolve OCI image to get digest
-	log.V(2).Info("Resolving OCI image", "ociImageName", osVolume.Name)
-	imageSource, err := createImageSource(toPlatform(osVolume.Architecture))
-	if err != nil {
-		return fmt.Errorf("failed to create image source: %w", err)
-	}
-	ociImage, err := imageSource.Resolve(ctx, osVolume.Name)
-	if err != nil {
-		return fmt.Errorf("failed to resolve OCI image %s: %w", osVolume.Name, err)
-	}
-
-	// Step 2: Get or create base image
-	imageDigest := ociImage.Descriptor().Digest
-	baseImageID := BaseImageIDPrefix + imageDigest.Encoded()
-	snapshotID := imageDigest.Encoded()
-	log.V(2).Info("Using base image", "baseImageId", baseImageID, "snapshotId", snapshotID)
-	baseImage, err := r.imageStore.Get(ctx, baseImageID)
+	osImageRef := *volume.Spec.Source.OSImage
+	osImage, err := r.osImageStore.Get(ctx, osImageRef)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("failed to get base image: %w", err)
+			return fmt.Errorf("failed to get OS image %s: %w", osImageRef, err)
 		}
 
-		ironcoreImage, err := ironcoreimage.ResolveImage(ctx, ociImage)
-		if err != nil {
-			return fmt.Errorf("failed to resolve ironcore image: %w", err)
-		}
-		if ironcoreImage.RootFS == nil {
-			return fmt.Errorf("ironcore image %s has no rootfs", osVolume.Name)
-		}
-		imageSize := uint64(ironcoreImage.RootFS.Descriptor().Size)
-		rootFSDigest := ironcoreImage.RootFS.Descriptor().Digest
-
-		ref, err := reference.ParseNamed(osVolume.Name)
-		if err != nil {
-			return fmt.Errorf("failed to parse image reference %s: %w", osVolume.Name, err)
-		}
-		refDigest, err := reference.WithDigest(ref, rootFSDigest)
-		if err != nil {
-			return fmt.Errorf("failed to parse image reference %s: %w", osVolume.Name, err)
-		}
-		refStr := refDigest.String()
-
-		// Create base image
-		log.V(1).Info("Creating base image", "baseImageId", baseImageID)
-		baseImage = &providerapi.Image{
-			Metadata: apiutils.Metadata{
-				ID: baseImageID,
-			},
-			Spec: providerapi.ImageSpec{
-				Size:   imageSize,
-				WWN:    "", // Base image doesn't need WWN
-				Limits: providerapi.Limits{},
-				Encryption: providerapi.EncryptionSpec{
-					Type: providerapi.EncryptionTypeUnencrypted, // Base images are unencrypted
-				},
-				Reference:      &refStr,
-				SnapshotSource: nil,
-			},
-		}
-
-		baseImage, err = createOrGet(ctx, log, r.imageStore, baseImage, "Base image created", "Base image already exists, fetching")
-		if err != nil {
-			return fmt.Errorf("failed to create or get base image: %w", err)
-		}
+		// TODO: Create OS image if it does not exist?
 	}
 
-	// Step 3: Check base image state
-	switch baseImage.Status.State {
-	case providerapi.ImageStatePending:
-		log.V(1).Info("Base image is pending, waiting", "baseImageId", baseImage.ID)
+	switch osImage.Status.State {
+	case providerapi.OSImageStatePending:
+		log.V(1).Info("OS image is pending, waiting", "osImageId", osImage.ID)
 		return nil
-	case providerapi.ImageStateAvailable:
-		log.V(2).Info("Base image is available", "baseImageId", baseImage.ID)
+	case providerapi.OSImageStateAvailable:
+		log.V(2).Info("OS image is available", "osImageId", osImage.ID)
 	default:
-		return fmt.Errorf("base image %s in unexpected state: %s", baseImage.ID, baseImage.Status.State)
-	}
-
-	// Step 4: Get or create snapshot of base image
-	snapshot, err := r.snapshotStore.Get(ctx, snapshotID)
-	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("failed to get snapshot %s: %w", snapshotID, err)
-		}
-
-		// Create snapshot
-		log.V(1).Info("Creating snapshot of base image", "snapshotId", snapshotID, "baseImageId", baseImageID)
-		snapshot = &providerapi.Snapshot{
-			Metadata: apiutils.Metadata{
-				ID: snapshotID,
-			},
-			Spec: providerapi.SnapshotSpec{
-				ImageRef:   baseImageID,
-				Protection: providerapi.SnapshotProtectionProtected, // Protection needed for cloning
-			},
-		}
-
-		snapshot, err = createOrGet(ctx, log, r.snapshotStore, snapshot, "Snapshot created", "Snapshot already exists, fetching")
-		if err != nil {
-			return fmt.Errorf("failed to create or get snapshot: %w", err)
-		}
-	}
-
-	// Step 5: Check snapshot state
-	switch snapshot.Status.State {
-	case providerapi.SnapshotStatePending:
-		log.V(1).Info("Snapshot is pending, waiting", "snapshotId", snapshot.ID)
-		return nil
-	case providerapi.SnapshotStateReady:
-		log.V(2).Info("Snapshot is ready", "snapshotId", snapshot.ID)
-	case providerapi.SnapshotStateFailed:
-		log.V(1).Info("Snapshot failed, recreating", "snapshotId", snapshot.ID)
-		if err := r.snapshotStore.Delete(ctx, snapshot.ID); err != nil {
-			if !errors.Is(err, store.ErrNotFound) {
-				return fmt.Errorf("failed to delete snapshot %s: %w", snapshot.ID, err)
-			}
-		}
-		log.V(2).Info("Deleted failed snapshot", "snapshotId", snapshot.ID)
-		return nil
-	default:
-		return fmt.Errorf("snapshot %s in unexpected state: %s", snapshotID, snapshot.Status.State)
+		return fmt.Errorf("OS image %s in unexpected state: %s", osImage.ID, osImage.Status.State)
 	}
 
 	// Step 6: Create volume's image as clone from snapshot
-	volumeImage := buildVolumeImage(volume, &snapshotID)
-	log.V(1).Info("Creating volume image from snapshot", "snapshotId", snapshotID, "imageId", volumeImage.ID)
+	snapshotRef := osImage.Status.SnapshotRef
+	if snapshotRef == nil {
+		return fmt.Errorf("OS image %s has no snapshot reference", osImage.ID)
+	}
+	volumeImage := buildVolumeImage(volume, snapshotRef)
+	log.V(1).Info("Creating volume image from OS image snapshot", "snapshotId", *snapshotRef, "imageId", volumeImage.ID)
 
 	createdImage, err := createOrGet(ctx, log, r.imageStore, volumeImage, "Volume image created", "Volume image already exists")
 	if err != nil {

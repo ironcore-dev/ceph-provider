@@ -60,3 +60,11 @@ type snapshotV2Strategy struct{}
 func (snapshotV2Strategy) PrepareForCreate(obj *apiv2.Snapshot) {
 	obj.Status = apiv2.SnapshotStatus{State: apiv2.SnapshotStatePending}
 }
+
+var OSImageStrategy = osImageStrategy{}
+
+type osImageStrategy struct{}
+
+func (osImageStrategy) PrepareForCreate(obj *apiv2.OSImage) {
+	obj.Status = apiv2.OSImageStatus{State: apiv2.OSImageStatePending}
+}

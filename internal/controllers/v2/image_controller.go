@@ -272,15 +272,6 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 	defer closeImage(log, rbdImage)
 
-	// TODO: The if condition here is not a sufficient check for population.
-	// Multiple workers could run into this and start populating in parallel
-	if image.Status.State == providerapi.ImageStatePending && image.Spec.Reference != nil {
-		// TODO: Run populate asynchronously
-		if err := populateImage(ctx, *image.Spec.Reference, rbdImage, r.populatorBufferSize); err != nil {
-			return fmt.Errorf("failed to populate image: %w", err)
-		}
-	}
-
 	if image.Spec.SnapshotSource != nil {
 		snapshotID := *image.Spec.SnapshotSource
 		snapshot, err := r.snapshotStore.Get(ctx, snapshotID)

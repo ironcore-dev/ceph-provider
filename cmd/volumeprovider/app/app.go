@@ -373,6 +373,7 @@ func Run(ctx context.Context, opts Options) error {
 			IteratorSize:   opts.Ceph.OmapIteratorSize,
 			FieldIndexers: map[string]store.IndexerFunc[*apiv2.Volume]{
 				apiv2.VolumeStatusImageRefField:           apiv2.SetupVolumeStatusImageRefFieldIndexer,
+				apiv2.VolumeSpecSourceOSImageField:        apiv2.SetupVolumeSpecSourceOSImageFieldIndexer,
 				apiv2.VolumeSpecSourceSnapshotSourceField: apiv2.SetupVolumeSpecSourceSnapshotSourceFieldIndexer,
 			},
 		})
@@ -433,6 +434,26 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("failed to initialize v2 snapshot events: %w", err)
 		}
 
+		setupLog.Info("Configuring v2 os image store", "OmapName", omap.NameOSImages)
+		osImageStore, err := omap.New(log, conn, opts.Ceph.Pool, omap.Options[*apiv2.OSImage]{
+			OmapName:       omap.NameOSImages,
+			NewFunc:        func() *apiv2.OSImage { return &apiv2.OSImage{} },
+			CreateStrategy: strategy.OSImageStrategy,
+			IteratorSize:   opts.Ceph.OmapIteratorSize,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to initialize v2 os image store: %w", err)
+		}
+
+		osImageEvents, err := event.NewListWatchSource[*apiv2.OSImage](
+			osImageStore.List,
+			osImageStore.Watch,
+			event.ListWatchSourceOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize v2 os image events: %w", err)
+		}
+
 		ociRegistry, err := remote.DockerRegistry()
 		if err != nil {
 			return fmt.Errorf("failed to initialize OCI registry: %w", err)
@@ -443,9 +464,11 @@ func Run(ctx context.Context, opts Options) error {
 			ociRegistry,
 			v2SnapshotStore,
 			v2ImageStore,
+			osImageStore,
 			volumeStore,
 			volumeEvents,
 			v2ImageEvents,
+			osImageEvents,
 			v2SnapshotEvents,
 			controllersv2.VolumeReconcilerOptions{
 				WorkerSize: opts.Ceph.WorkerSize,
@@ -518,6 +541,36 @@ func Run(ctx context.Context, opts Options) error {
 			return nil
 		})
 
+		osImageReconciler, err := controllersv2.NewOSImageReconciler(
+			log.WithName("os-image-reconciler"),
+			conn,
+			osImageStore,
+			v2ImageStore,
+			v2SnapshotStore,
+			osImageEvents,
+			v2ImageEvents,
+			v2SnapshotEvents,
+			controllersv2.OSImageReconcilerOptions{
+				Monitors:            opts.Ceph.Monitors,
+				Client:              opts.Ceph.Client,
+				Pool:                opts.Ceph.Pool,
+				PopulatorBufferSize: opts.Ceph.PopulatorBufferSize,
+				WorkerSize:          opts.Ceph.WorkerSize,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize v2 os image reconciler: %w", err)
+		}
+
+		g.Go(func() error {
+			setupLog.Info("Starting v2 os image reconciler")
+			if err := osImageReconciler.Start(ctx); err != nil {
+				setupLog.Error(err, "failed to start v2 os image reconciler")
+				return err
+			}
+			return nil
+		})
+
 		g.Go(func() error {
 			setupLog.Info("Starting v2 volume events")
 			if err := volumeEvents.Start(ctx); err != nil {
@@ -545,8 +598,18 @@ func Run(ctx context.Context, opts Options) error {
 			return nil
 		})
 
+		g.Go(func() error {
+			setupLog.Info("Starting v2 os image events")
+			if err := osImageEvents.Start(ctx); err != nil {
+				setupLog.Error(err, "failed to start v2 os image events")
+				return err
+			}
+			return nil
+		})
+
 		srv, err := volumeserverv2.New(
 			volumeStore,
+			osImageStore,
 			v2SnapshotStore,
 			classRegistry,
 			encryptor,
