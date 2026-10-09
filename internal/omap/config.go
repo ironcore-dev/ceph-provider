@@ -4,6 +4,10 @@
 package omap
 
 const (
-	NameVolumes   = "ironcore.csi.volumes"
-	NameSnapshots = "ironcore.csi.snapshots"
+	LegacyNameVolumes   = "ironcore.csi.volumes"
+	LegacyNameSnapshots = "ironcore.csi.snapshots"
+	NameVolumes         = "ironcore.volumes"
+	NameImages          = "ironcore.images"
+	NameSnapshots       = "ironcore.snapshots"
+	NameOSImages        = "ironcore.os-images"
 )
