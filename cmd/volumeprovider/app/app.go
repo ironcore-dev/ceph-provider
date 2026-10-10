@@ -14,12 +14,15 @@ import (
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
+	"github.com/ironcore-dev/ceph-provider/internal/ceph/monitors"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
+	"github.com/ironcore-dev/ceph-provider/internal/rook"
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
 	"github.com/ironcore-dev/ceph-provider/internal/volumeserver"
+	"github.com/ironcore-dev/controller-utils/configutils"
 	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
@@ -29,12 +32,14 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 type Options struct {
-	Address string
+	Address    string
+	Kubeconfig string
 
 	PathSupportedVolumeClasses string
 
@@ -48,6 +53,11 @@ type CephOptions struct {
 	KeyringFile string
 	Pool        string
 	Client      string
+
+	MonConfigMapNamespace string
+	MonConfigMapName      string
+	MonConfigMapKey       string
+	ClusterID             string
 
 	ConnectTimeout time.Duration
 
@@ -71,10 +81,14 @@ func (o *Options) Defaults() {
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 	o.Ceph.WorkerSize = 15
 	o.Ceph.OmapIteratorSize = 1000
+	o.Ceph.MonConfigMapName = rook.MonitorConfigMapNameDefaultValue
+	o.Ceph.MonConfigMapKey = rook.MonitorConfigMapDataKeyDefaultValue
+	o.Ceph.ClusterID = rook.ClusterIdDefaultValue
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.Address, "address", "/var/run/iri-volumeprovider.sock", "Address to listen on.")
+	fs.StringVar(&o.Kubeconfig, "kubeconfig", o.Kubeconfig, "Path pointing to a kubeconfig file to use.")
 
 	fs.StringVar(&o.PathSupportedVolumeClasses, "supported-volume-classes", o.PathSupportedVolumeClasses, "File containing supported volume classes.")
 
@@ -83,7 +97,11 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 	fs.Int64Var(&o.Ceph.PopulatorBufferSize, "populator-buffer-size", o.Ceph.PopulatorBufferSize, "Defines the buffer size (in bytes) which is used for downloading a image.")
 
-	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
+	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to. Required unless --ceph-mon-configmap-namespace is set.")
+	fs.StringVar(&o.Ceph.MonConfigMapNamespace, "ceph-mon-configmap-namespace", o.Ceph.MonConfigMapNamespace, "Namespace of the Rook monitor endpoints ConfigMap. Empty disables ConfigMap discovery.")
+	fs.StringVar(&o.Ceph.MonConfigMapName, "ceph-mon-configmap-name", o.Ceph.MonConfigMapName, "Name of the Rook monitor endpoints ConfigMap.")
+	fs.StringVar(&o.Ceph.MonConfigMapKey, "ceph-mon-configmap-key", o.Ceph.MonConfigMapKey, "Data key in the monitor endpoints ConfigMap.")
+	fs.StringVar(&o.Ceph.ClusterID, "ceph-cluster-id", o.Ceph.ClusterID, "clusterID entry to select from csi-cluster-config-json.")
 	fs.DurationVar(&o.Ceph.ConnectTimeout, "ceph-connect-timeout", o.Ceph.ConnectTimeout, "Connect timeout for establishing a connection to ceph.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence). ceph-key-file contains contains only the ceph key.")
@@ -101,9 +119,15 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("available-volume-classes")
-	_ = cmd.MarkFlagRequired("ceph-monitors")
 	_ = cmd.MarkFlagRequired("ceph-pool")
 	_ = cmd.MarkFlagRequired("ceph-kek-path")
+}
+
+func (o *Options) Validate() error {
+	if o.Ceph.MonConfigMapNamespace == "" && o.Ceph.Monitors == "" {
+		return fmt.Errorf("either --ceph-monitors or --ceph-mon-configmap-namespace must be set")
+	}
+	return nil
 }
 
 func Command() *cobra.Command {
@@ -172,6 +196,10 @@ func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+
 	if opts.Ceph.WorkerSize <= 1 {
 		err := fmt.Errorf("invalid configuration: worker-size must be greater than 1, but got %d", opts.Ceph.WorkerSize)
 		setupLog.Error(err, "Worker size validation failed")
@@ -195,11 +223,50 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to init encryptor: %w", err)
 	}
 
-	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User, "Timeout", opts.Ceph.ConnectTimeout)
+	monitorsCSV := opts.Ceph.Monitors
+	var monWatcher *monitors.Watcher
+	if opts.Ceph.MonConfigMapNamespace != "" {
+		if opts.Ceph.Monitors != "" {
+			setupLog.Info("ignoring --ceph-monitors because --ceph-mon-configmap-namespace is set; ConfigMap is the source of truth")
+		}
+		if opts.Ceph.MonConfigMapName == "" {
+			opts.Ceph.MonConfigMapName = rook.MonitorConfigMapNameDefaultValue
+		}
+		if opts.Ceph.MonConfigMapKey == "" {
+			opts.Ceph.MonConfigMapKey = rook.MonitorConfigMapDataKeyDefaultValue
+		}
+		if opts.Ceph.ClusterID == "" {
+			opts.Ceph.ClusterID = rook.ClusterIdDefaultValue
+		}
+
+		cfg, err := configutils.GetConfig(configutils.Kubeconfig(opts.Kubeconfig))
+		if err != nil {
+			return fmt.Errorf("failed to get kubeconfig: %w", err)
+		}
+		kubeClient, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create kubernetes client: %w", err)
+		}
+
+		monWatcher = &monitors.Watcher{
+			Client:    kubeClient,
+			Namespace: opts.Ceph.MonConfigMapNamespace,
+			Name:      opts.Ceph.MonConfigMapName,
+			Key:       opts.Ceph.MonConfigMapKey,
+			ClusterID: opts.Ceph.ClusterID,
+			Log:       setupLog.WithName("mon-watcher"),
+		}
+		monitorsCSV, err = monWatcher.Bootstrap(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	setupLog.Info("Establishing ceph connection", "Monitors", monitorsCSV, "User", opts.Ceph.User, "Timeout", opts.Ceph.ConnectTimeout)
 	connectCtx, cancelConnect := context.WithTimeout(ctx, opts.Ceph.ConnectTimeout)
 	defer cancelConnect()
 	conn, err := ceph.ConnectToRados(connectCtx, ceph.Credentials{
-		Monitors: opts.Ceph.Monitors,
+		Monitors: monitorsCSV,
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,
 	})
@@ -265,7 +332,7 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
-			Monitors:   opts.Ceph.Monitors,
+			Monitors:   monitorsCSV,
 			Client:     opts.Ceph.Client,
 			Pool:       opts.Ceph.Pool,
 			WorkerSize: opts.Ceph.WorkerSize,
@@ -276,6 +343,20 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+
+	if monWatcher != nil {
+		monWatcher.OnChange = func(_ context.Context, csv string) {
+			imageReconciler.SetMonitors(ctx, csv)
+		}
+		g.Go(func() error {
+			setupLog.Info("Starting ceph monitor configmap watcher")
+			if err := monWatcher.Start(ctx); err != nil {
+				setupLog.Error(err, "failed to start ceph monitor configmap watcher")
+				return err
+			}
+			return nil
+		})
+	}
 
 	g.Go(func() error {
 		setupLog.Info("Starting image reconciler")

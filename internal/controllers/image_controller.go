@@ -125,13 +125,68 @@ type ImageReconciler struct {
 	imageEvents    event.Source[*providerapi.Image]
 	snapshotEvents event.Source[*providerapi.Snapshot]
 
-	monitors string
-	client   string
-	pool     string
+	monitorsMu sync.RWMutex
+	monitors   string
+	client     string
+	pool       string
 
 	keyEncryption encryption.Encryptor
 
 	workerSize int
+}
+
+func (r *ImageReconciler) currentMonitors() string {
+	r.monitorsMu.RLock()
+	defer r.monitorsMu.RUnlock()
+	return r.monitors
+}
+
+// SetMonitors stores a new monitor CSV and enqueues all images when the value changes.
+// Empty csv is ignored. Unchanged csv is a no-op.
+func (r *ImageReconciler) SetMonitors(ctx context.Context, csv string) {
+	if csv == "" {
+		return
+	}
+
+	r.monitorsMu.Lock()
+	if r.monitors == csv {
+		r.monitorsMu.Unlock()
+		return
+	}
+	r.monitors = csv
+	r.monitorsMu.Unlock()
+
+	r.log.Info("updated ceph monitors", "monitors", csv)
+	r.enqueueAllImages(ctx)
+}
+
+func (r *ImageReconciler) enqueueAllImages(ctx context.Context) {
+	images, err := r.images.List(ctx)
+	if err != nil {
+		r.log.Error(err, "failed to list images for monitor update")
+		return
+	}
+	for _, img := range images {
+		r.queue.Add(img.ID)
+	}
+}
+
+func (r *ImageReconciler) syncAccessMonitors(ctx context.Context, log logr.Logger, img *providerapi.Image) error {
+	if img.Status.Access == nil {
+		return fmt.Errorf("image access is nil")
+	}
+
+	current := r.currentMonitors()
+	if img.Status.Access.Monitors == current {
+		return nil
+	}
+
+	img.Status.Access.Monitors = current
+	if _, err := r.images.Update(ctx, img); err != nil {
+		return fmt.Errorf("failed to update image access monitors: %w", err)
+	}
+	log.V(1).Info("Updated image access monitors", "monitors", current)
+	return nil
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
@@ -594,7 +649,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 			if err := r.updateImage(ctx, log, ioCtx, img); err != nil {
 				return fmt.Errorf("failed to update image: %w", err)
 			}
-			return nil
+			return r.syncAccessMonitors(ctx, log, img)
 		}
 	} else {
 		options := librbd.NewRbdImageOptions()
@@ -643,7 +698,7 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 	}
 
 	img.Status.Access = &providerapi.ImageAccess{
-		Monitors: r.monitors,
+		Monitors: r.currentMonitors(),
 		Handle:   fmt.Sprintf("%s/%s", r.pool, ImageIDToRBDID(img.ID)),
 		User:     user,
 		UserKey:  key,
