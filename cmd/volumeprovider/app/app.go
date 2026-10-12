@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/ironcore-dev/brokers/common"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
@@ -20,7 +21,6 @@ import (
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
 	"github.com/ironcore-dev/ceph-provider/internal/volumeserver"
-	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/volume/v1alpha1"
 	"github.com/ironcore-dev/provider-utils/eventutils/event"
 	eventrecorder "github.com/ironcore-dev/provider-utils/eventutils/recorder"

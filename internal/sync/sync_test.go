@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	. "github.com/ironcore-dev/ironcore/broker/common/sync"
+	. "github.com/ironcore-dev/brokers/common/sync"
 	. "github.com/ironcore-dev/ironcore/utils/testing"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

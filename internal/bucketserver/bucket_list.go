@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ironcore-dev/brokers/common"
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
-	"github.com/ironcore-dev/ironcore/broker/common"
 	iriv1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/bucket/v1alpha1"
 	objectbucketv1alpha1 "github.com/kube-object-storage/lib-bucket-provisioner/pkg/apis/objectbucket.io/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
