@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
 	metav1alpha1 "github.com/ironcore-dev/ironcore/iri/apis/meta/v1alpha1"
@@ -359,5 +360,168 @@ var _ = Describe("Create Volume", func() {
 		}).Should(SatisfyAll(
 			HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)),
 		))
+	})
+
+	It("should create an encrypted volume with snapshot data source", func(ctx SpecContext) {
+		By("creating a source volume")
+		createResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo",
+				},
+				Spec: &iriv1alpha1.VolumeSpec{
+					Class: "foo",
+					Resources: &iriv1alpha1.VolumeResources{
+						StorageBytes: 1024 * 1024 * 1024,
+					},
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
+			VolumeId: createResp.Volume.Metadata.Id,
+		})
+
+		By("ensuring source volume is in available state")
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
+					Id: createResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)))
+
+		By("writing data to the source volume")
+		data := []byte("data written to the source volume")
+		srcImg, err := librbd.OpenImage(ioctx, "img_"+createResp.Volume.Metadata.Id, librbd.NoSnapshot)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = srcImg.WriteAt(data, 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(srcImg.Close()).To(Succeed())
+
+		By("creating a volume snapshot")
+		createSnapshotResp, err := volumeClient.CreateVolumeSnapshot(ctx, &iriv1alpha1.CreateVolumeSnapshotRequest{
+			VolumeSnapshot: &iriv1alpha1.VolumeSnapshot{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo-snap",
+				},
+				Spec: &iriv1alpha1.VolumeSnapshotSpec{
+					VolumeId: createResp.Volume.Metadata.Id,
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		snapshotID := createSnapshotResp.VolumeSnapshot.Metadata.Id
+
+		DeferCleanup(volumeClient.DeleteVolumeSnapshot, &iriv1alpha1.DeleteVolumeSnapshotRequest{
+			VolumeSnapshotId: snapshotID,
+		})
+
+		By("ensuring volume snapshot is in ready state")
+		Eventually(func() *iriv1alpha1.VolumeSnapshotStatus {
+			resp, err := volumeClient.ListVolumeSnapshots(ctx, &iriv1alpha1.ListVolumeSnapshotsRequest{
+				Filter: &iriv1alpha1.VolumeSnapshotFilter{
+					Id: snapshotID,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.VolumeSnapshots).To(HaveLen(1))
+			return resp.VolumeSnapshots[0].Status
+		}).Should(HaveField("State", Equal(iriv1alpha1.VolumeSnapshotState_VOLUME_SNAPSHOT_READY)))
+
+		By("creating an encrypted volume with snapshot data source")
+		passphrase := []byte("encrypted-volume-from-snapshot-passphrase")
+		volCreateResp, err := volumeClient.CreateVolume(ctx, &iriv1alpha1.CreateVolumeRequest{
+			Volume: &iriv1alpha1.Volume{
+				Metadata: &metav1alpha1.ObjectMetadata{
+					Id: "foo",
+				},
+				Spec: &iriv1alpha1.VolumeSpec{
+					Class: "foo",
+					Resources: &iriv1alpha1.VolumeResources{
+						StorageBytes: 1024 * 1024 * 1024,
+					},
+					VolumeDataSource: &iriv1alpha1.VolumeDataSource{
+						SnapshotDataSource: &iriv1alpha1.SnapshotDataSource{
+							SnapshotId: snapshotID,
+						},
+					},
+					Encryption: &iriv1alpha1.EncryptionSpec{
+						SecretData: map[string][]byte{
+							"encryptionKey": passphrase,
+						},
+					},
+				},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		DeferCleanup(volumeClient.DeleteVolume, &iriv1alpha1.DeleteVolumeRequest{
+			VolumeId: volCreateResp.Volume.Metadata.Id,
+		})
+
+		By("ensuring image has been created inside the ceph cluster with encryption header")
+		Eventually(ctx, func() *api.Image {
+			volImage := &api.Image{}
+			oMap, err := ioctx.GetOmapValues(omap.NameVolumes, "", volCreateResp.Volume.Metadata.Id, 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oMap).To(HaveKey(volCreateResp.Volume.Metadata.Id))
+			Expect(json.Unmarshal(oMap[volCreateResp.Volume.Metadata.Id], volImage)).NotTo(HaveOccurred())
+			return volImage
+		}).Should(SatisfyAll(
+			HaveField("Spec.SnapshotRef", HaveValue(Equal(snapshotID))),
+			HaveField("Spec.Encryption.Type", api.EncryptionTypeEncrypted),
+			HaveField("Status.State", Equal(api.ImageStateAvailable)),
+			HaveField("Status.Encryption", api.EncryptionStateHeaderSet),
+		))
+
+		By("ensuring volume is in available state")
+		Eventually(func() *iriv1alpha1.VolumeStatus {
+			resp, err := volumeClient.ListVolumes(ctx, &iriv1alpha1.ListVolumesRequest{
+				Filter: &iriv1alpha1.VolumeFilter{
+					Id: volCreateResp.Volume.Metadata.Id,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Volumes).NotTo(BeEmpty())
+			return resp.Volumes[0].Status
+		}).Should(HaveField("State", Equal(iriv1alpha1.VolumeState_VOLUME_AVAILABLE)))
+
+		By("reading the source data from the volume with the passphrase")
+		volImg, err := librbd.OpenImage(ioctx, "img_"+volCreateResp.Volume.Metadata.Id, librbd.NoSnapshot)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(volImg.EncryptionLoad(librbd.EncryptionOptionsLUKS2{
+			Alg:        librbd.EncryptionAlgorithmAES256,
+			Passphrase: passphrase,
+		})).To(Succeed())
+		readData := make([]byte, len(data))
+		_, err = volImg.ReadAt(readData, 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(readData).To(Equal(data))
+
+		By("writing data to the volume with the passphrase and reading it back after reopening")
+		writtenData := []byte("data written to the encrypted volume")
+		_, err = volImg.WriteAt(writtenData, 4096)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(volImg.Close()).To(Succeed())
+		reopenedImg, err := librbd.OpenImage(ioctx, "img_"+volCreateResp.Volume.Metadata.Id, librbd.NoSnapshot)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(reopenedImg.Close)
+		Expect(reopenedImg.EncryptionLoad(librbd.EncryptionOptionsLUKS2{
+			Alg:        librbd.EncryptionAlgorithmAES256,
+			Passphrase: passphrase,
+		})).To(Succeed())
+		readWrittenData := make([]byte, len(writtenData))
+		_, err = reopenedImg.ReadAt(readWrittenData, 4096)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(readWrittenData).To(Equal(writtenData))
+		_, err = reopenedImg.ReadAt(readData, 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(readData).To(Equal(data))
 	})
 })
