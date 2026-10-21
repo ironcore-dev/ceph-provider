@@ -63,6 +63,29 @@ make run
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
+### Integration Tests
+
+The integration tests start a single-node Ceph cluster ([ceph-test](https://github.com/arttor/ceph-test)) with
+Docker. The volume provider links against the Ceph client libraries (`librados`, `librbd`). If they are not installed,
+e.g. on macOS, run the tests in a container that has them:
+
+```sh
+make docker-integration-tests
+```
+
+With the libraries installed, run them directly:
+
+```sh
+make integration-tests
+```
+
+Variables:
+
+- `CEPH_CLIENT_VERSION`: the Ceph release tag of the client libraries in the container, e.g. `v19.2.7`. The default is
+  set in the [Dockerfile](Dockerfile), which also uses it for the published images.
+- `CEPH_TEST_CLUSTER_VERSION`: the Ceph release tag of the cluster, e.g. `v19.2.7`. Defaults to `CEPH_CLIENT_VERSION`.
+- `DEBUG=1` (container only): wait for a debugger to attach on port `2345` before running the tests.
+
 ## Licensing
 
 Copyright 2025 SAP SE or an SAP affiliate company and IronCore contributors. Please see our [LICENSE](LICENSE) for
