@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/blang/semver/v4 v4.0.0
-	github.com/ceph/go-ceph v0.41.0
+	github.com/ceph/go-ceph v0.42.1
 	github.com/containerd/containerd v1.7.36
 	github.com/go-logr/logr v1.4.4
 	github.com/google/addlicense v1.2.0
@@ -14,7 +14,7 @@ require (
 	github.com/ironcore-dev/ironcore-image v0.5.1-0.20260701105042-7ab1ed925593
 	github.com/ironcore-dev/provider-utils v0.0.0-20261009075155-2798f2521268
 	github.com/kube-object-storage/lib-bucket-provisioner v0.0.0-20221122204822-d1a8c34382f1
-	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/errors v0.9.1
@@ -22,7 +22,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	go.uber.org/zap v1.28.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	google.golang.org/grpc v1.84.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
