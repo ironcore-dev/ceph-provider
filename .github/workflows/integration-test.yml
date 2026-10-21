@@ -6,12 +6,15 @@ on:
 
 jobs:
   integration-tests:
+    name: integration-tests (client ${{ matrix.client }}, cluster ${{ matrix.cluster }})
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
-        ceph:
-          - squid
-          - tentacle
+        # Ceph client libraries the provider is built with
+        client: [v19.2.7, v20.2.4]
+        # Ceph cluster the provider connects to
+        cluster: [v19.2.7, v20.2.4]
     if: contains(github.event.pull_request.labels.*.name, 'integration-tests')
 
     steps:
@@ -22,76 +25,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Setup MicroCeph
-        run: |
-          set -x
-          
-          sudo snap install microceph --channel=${{ matrix.ceph }}/stable
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ceph-common
-          sudo microceph cluster bootstrap
-          sudo microceph.ceph config set global osd_pool_default_size 1
-          sudo microceph.ceph config set global mon_allow_pool_delete true
-          sudo microceph.ceph config set global osd_memory_target 939524096
-          sudo microceph.ceph osd crush rule rm replicated_rule
-          sudo microceph.ceph osd crush rule create-replicated replicated default osd
-          for flag in nosnaptrim noscrub nobackfill norebalance norecover noscrub nodeep-scrub; do
-              sudo microceph.ceph osd set $flag
-          done
-          
-          # Create a loop device for Ceph OSD
-          CEPH_OSD_IMG=~/ceph-osd.img
-          CEPH_OSD_SIZE_GIB=10
-          
-          dd if=/dev/zero of="$CEPH_OSD_IMG" bs=1M count=$((CEPH_OSD_SIZE_GIB*1024)) status=progress
-          sync
-          LOOP=$(sudo losetup --find --show "$CEPH_OSD_IMG")
-          sudo microceph disk add --wipe "${LOOP}"
-          sudo rm -rf /etc/ceph
-          sudo ln -s /var/snap/microceph/current/conf/ /etc/ceph
-          sudo microceph enable rgw
-          
-          sudo ceph osd pool create devpool 8
-          
-          sleep 30
-          sudo microceph.ceph status
-          # Wait until there are no more "unkowns" pgs
-          for _ in $(seq 60); do
-            if sudo microceph.ceph pg stat | grep -wF unknown; then
-              sleep 1
-            else
-              break
-            fi
-          done
-          sudo microceph.ceph status
-          sudo rm -f /snap/bin/rbd
-
-      - name: Set Environment Variables
-        run: |
-          echo "CEPH_USERNAME=admin" >> $GITHUB_ENV
-          echo "CEPH_POOLNAME=devpool" >> $GITHUB_ENV
-          echo "CEPH_CLIENTNAME=client.admin" >> $GITHUB_ENV
-          echo "CEPH_DISK_SIZE=$((10*1024*1024*1024))" >> $GITHUB_ENV
-          echo "CEPH_KEYRING_FILENAME=/etc/ceph/ceph.client.admin.keyring" >> $GITHUB_ENV
-          echo "CEPH_MONITORS=$(hostname):6789" >> $GITHUB_ENV
-          echo "CEPH_CONFIG_FILE=/etc/ceph/ceph.conf" >> $GITHUB_ENV
-          sudo chmod +r /etc/ceph/ceph.client.admin.keyring
-
-      # go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
-      - name: Add Ceph apt repository
-        run: |
-          sudo curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc
-          sudo tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
-          Types: deb
-          URIs: https://eu.ceph.com/debian-tentacle/
-          Suites: noble
-          Components: main
-          Signed-By: /usr/share/keyrings/ceph-release.asc
-          EOF
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y libcephfs-dev librbd-dev librados-dev
-
       - name: Run go tests
         run: |
-          make integration-tests 
+          make docker-integration-tests CEPH_CLIENT_VERSION=${{ matrix.client }} CEPH_TEST_CLUSTER_VERSION=${{ matrix.cluster }}

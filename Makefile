@@ -6,6 +6,13 @@ CEPH_BUCKET_PROVIDER_IMG ?= ceph-bucket-provider:latest
 # Docker image name for the mkdocs based local development setup
 MKDOCS_IMG=ironcore-dev/ceph-provider-docs
 
+# Ceph release tag of the client libraries the provider is built and tested with, set in the Dockerfile
+CEPH_CLIENT_VERSION ?= $(shell sed -n 's/^ARG CEPH_CLIENT_VERSION=//p' Dockerfile)
+# Ceph release tag of the cluster the integration tests run against (ghcr.io/arttor/ceph-test)
+CEPH_TEST_CLUSTER_VERSION ?= $(CEPH_CLIENT_VERSION)
+# Image with Go and the Ceph client libraries to build and test the code in a container
+DEV_IMG = ceph-provider-dev:$(CEPH_CLIENT_VERSION)
+
 # LDFLAGS for the build targets
 LDFLAGS ?= -s -w
 VERSION=$(shell git describe --tags --abbrev=0)
@@ -78,7 +85,28 @@ test: manifests generate fmt vet envtest check-license ## Run tests.
 
 .PHONY: integration-tests
 integration-tests:
-	CGO=1 go run github.com/onsi/ginkgo/v2/ginkgo --label-filter="integration" ./...
+	CEPH_TEST_CLUSTER_VERSION=$(CEPH_TEST_CLUSTER_VERSION) CGO=1 go run github.com/onsi/ginkgo/v2/ginkgo --label-filter="integration" ./...
+
+.PHONY: dev-image
+dev-image: ## Build the image with Go and the Ceph client libraries.
+	$(CONTAINER_TOOL) build --build-arg CEPH_CLIENT_VERSION=$(CEPH_CLIENT_VERSION) --target dev -t $(DEV_IMG) .
+
+# Runs a command in the dev image with the repository, the Go caches and the docker socket mounted
+DEV_RUN = $(CONTAINER_TOOL) run --rm $(shell [ -t 0 ] && echo -it) \
+	-v $(CURDIR):/src \
+	-v ceph-provider-go-mod:/go/pkg/mod \
+	-v ceph-provider-go-build-$(CEPH_CLIENT_VERSION):/root/.cache/go-build \
+	-v /var/run/docker.sock:/var/run/docker.sock \
+	-e CEPH_TEST_CLUSTER_VERSION=$(CEPH_TEST_CLUSTER_VERSION)
+
+.PHONY: docker-integration-tests
+docker-integration-tests: dev-image ## Run integration tests in the dev image, no local Ceph libraries needed. DEBUG=1 waits for a debugger on port 2345.
+ifeq ($(DEBUG),1)
+	$(DEV_RUN) -p 127.0.0.1:2345:2345 $(DEV_IMG) dlv test ./tests/integration --headless --listen=:2345 --api-version=2 --output=/tmp/integration.test \
+		-- -ginkgo.label-filter=integration -ginkgo.v
+else
+	$(DEV_RUN) $(DEV_IMG) make integration-tests
+endif
 
 .PHONY: add-license
 add-license: addlicense ## Add license headers to all go files.
@@ -114,7 +142,7 @@ run-bucket: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build --build-arg LDFLAGS="${LDFLAGS} -X $(CEPH_VOLUME_PROVIDR_VERSION)=$(VERSION) -X $(CEPH_VOLUME_PROVIDER_COMMIT)=$(COMMIT)" --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
+	$(CONTAINER_TOOL) build --build-arg LDFLAGS="${LDFLAGS} -X $(CEPH_VOLUME_PROVIDR_VERSION)=$(VERSION) -X $(CEPH_VOLUME_PROVIDER_COMMIT)=$(COMMIT)" --build-arg CEPH_CLIENT_VERSION=$(CEPH_CLIENT_VERSION) --target ceph-volume-provider -t ${CEPH_VOLUME_PROVIDER_IMG} .
 	$(CONTAINER_TOOL) build --build-arg LDFLAGS="${LDFLAGS} -X $(CEPH_BUCKET_PROVIDR_VERSION)=$(VERSION) -X $(CEPH_BUCKET_PROVIDER_COMMIT)=$(COMMIT)" --target ceph-bucket-provider -t ${CEPH_BUCKET_PROVIDER_IMG} .
 
 .PHONY: docker-push
