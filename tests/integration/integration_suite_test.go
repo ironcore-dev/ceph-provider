@@ -59,8 +59,13 @@ func TestIntegration_GRPCServer(t *testing.T) {
 
 const verboseTestLogLevel = zapcore.Level(-2)
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.Level(verboseTestLogLevel), zap.UseDevMode(true)))
+
+	// Kept for backward compatibility to use "make integration-tests" with external cluster set by CEPH_* envars.
+	if cephMonitors == "" {
+		startCephTestCluster(ctx)
+	}
 
 	keyEncryptionKeyFile, err := os.CreateTemp(GinkgoT().TempDir(), "keyencryption")
 	Expect(err).NotTo(HaveOccurred())
