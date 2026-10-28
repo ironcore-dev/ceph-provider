@@ -90,7 +90,7 @@ jobs:
           EOF
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libcephfs-dev librbd-dev librados-dev
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libcephfs-dev librbd-dev librados-dev
 
       - name: Run go tests
         run: |
