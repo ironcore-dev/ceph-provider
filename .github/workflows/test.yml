@@ -7,7 +7,7 @@ on:
 jobs:
   checks:
     name: run
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -24,5 +24,5 @@ jobs:
           Components: main
           Signed-By: /usr/share/keyrings/ceph-release.asc
           EOF
-      - run: sudo apt-get update && sudo apt-get install -y libcephfs-dev librbd-dev librados-dev
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcephfs-dev librbd-dev librados-dev
       - run: make test
