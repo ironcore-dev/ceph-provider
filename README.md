@@ -7,7 +7,7 @@
 `ceph-provider` is a Ceph based provider implementation of the [ironcore](https://github.com/ironcore-dev/ironcore) `Volume` 
 and `Bucket` types.
 
-Please consult the [project documentation](https://ironcore-dev.github.io/ceph-provider/) for additional information.
+Please consult the [project documentation](https://ironcore.dev/iaas/architecture/providers/ceph-provider.html) for additional information.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
