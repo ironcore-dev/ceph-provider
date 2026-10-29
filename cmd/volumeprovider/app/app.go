@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	goflag "flag"
 	"fmt"
 	"net"
@@ -15,9 +16,11 @@ import (
 	"github.com/ironcore-dev/brokers/common"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
 	"github.com/ironcore-dev/ceph-provider/internal/ceph"
+	"github.com/ironcore-dev/ceph-provider/internal/ceph/monitors"
 	"github.com/ironcore-dev/ceph-provider/internal/controllers"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/omap"
+	"github.com/ironcore-dev/ceph-provider/internal/rook"
 	"github.com/ironcore-dev/ceph-provider/internal/strategy"
 	"github.com/ironcore-dev/ceph-provider/internal/vcr"
 	"github.com/ironcore-dev/ceph-provider/internal/volumeserver"
@@ -49,6 +52,10 @@ type CephOptions struct {
 	Pool        string
 	Client      string
 
+	MonConfigMapPath string
+	MonConfigMapKey  string
+	ClusterID        string
+
 	ConnectTimeout time.Duration
 
 	BurstFactor            int64
@@ -71,6 +78,8 @@ func (o *Options) Defaults() {
 	o.Ceph.PopulatorBufferSize = 5 * 1024 * 1024
 	o.Ceph.WorkerSize = 15
 	o.Ceph.OmapIteratorSize = 1000
+	o.Ceph.MonConfigMapKey = rook.MonitorConfigMapDataKeyDefaultValue
+	o.Ceph.ClusterID = rook.ClusterIdDefaultValue
 }
 
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
@@ -83,7 +92,10 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 	fs.Int64Var(&o.Ceph.PopulatorBufferSize, "populator-buffer-size", o.Ceph.PopulatorBufferSize, "Defines the buffer size (in bytes) which is used for downloading a image.")
 
-	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to.")
+	fs.StringVar(&o.Ceph.Monitors, "ceph-monitors", o.Ceph.Monitors, "Ceph Monitors to connect to. Required unless --ceph-mon-configmap-path is set.")
+	fs.StringVar(&o.Ceph.MonConfigMapPath, "ceph-mon-configmap-path", o.Ceph.MonConfigMapPath, "Directory where the Rook monitor endpoints ConfigMap is mounted. Empty keeps --ceph-monitors.")
+	fs.StringVar(&o.Ceph.MonConfigMapKey, "ceph-mon-configmap-key", o.Ceph.MonConfigMapKey, "File name in the mounted ConfigMap directory.")
+	fs.StringVar(&o.Ceph.ClusterID, "ceph-cluster-id", o.Ceph.ClusterID, "clusterID entry to select from csi-cluster-config-json.")
 	fs.DurationVar(&o.Ceph.ConnectTimeout, "ceph-connect-timeout", o.Ceph.ConnectTimeout, "Connect timeout for establishing a connection to ceph.")
 	fs.StringVar(&o.Ceph.User, "ceph-user", o.Ceph.User, "Ceph User.")
 	fs.StringVar(&o.Ceph.KeyFile, "ceph-key-file", o.Ceph.KeyFile, "ceph-key-file or ceph-keyring-file must be provided (ceph-key-file has precedence). ceph-key-file contains contains only the ceph key.")
@@ -101,9 +113,15 @@ func (o *Options) AddFlags(fs *pflag.FlagSet) {
 
 func (o *Options) MarkFlagsRequired(cmd *cobra.Command) {
 	_ = cmd.MarkFlagRequired("available-volume-classes")
-	_ = cmd.MarkFlagRequired("ceph-monitors")
 	_ = cmd.MarkFlagRequired("ceph-pool")
 	_ = cmd.MarkFlagRequired("ceph-kek-path")
+}
+
+func (o *Options) Validate() error {
+	if o.Ceph.MonConfigMapPath == "" && o.Ceph.Monitors == "" {
+		return fmt.Errorf("either --ceph-monitors or --ceph-mon-configmap-path must be set")
+	}
+	return nil
 }
 
 func Command() *cobra.Command {
@@ -172,6 +190,10 @@ func Run(ctx context.Context, opts Options) error {
 	log := ctrl.LoggerFrom(ctx)
 	setupLog := log.WithName("setup")
 
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+
 	if opts.Ceph.WorkerSize <= 1 {
 		err := fmt.Errorf("invalid configuration: worker-size must be greater than 1, but got %d", opts.Ceph.WorkerSize)
 		setupLog.Error(err, "Worker size validation failed")
@@ -195,11 +217,36 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to init encryptor: %w", err)
 	}
 
-	setupLog.Info("Establishing ceph connection", "Monitors", opts.Ceph.Monitors, "User", opts.Ceph.User, "Timeout", opts.Ceph.ConnectTimeout)
+	monitorsCSV := opts.Ceph.Monitors
+	var monWatcher *monitors.Watcher
+	if opts.Ceph.MonConfigMapPath != "" {
+		if opts.Ceph.Monitors != "" {
+			setupLog.Info("ignoring --ceph-monitors because --ceph-mon-configmap-path is set; the mounted ConfigMap is the source of truth")
+		}
+		if opts.Ceph.MonConfigMapKey == "" {
+			opts.Ceph.MonConfigMapKey = rook.MonitorConfigMapDataKeyDefaultValue
+		}
+		if opts.Ceph.ClusterID == "" {
+			opts.Ceph.ClusterID = rook.ClusterIdDefaultValue
+		}
+
+		monWatcher = &monitors.Watcher{
+			Dir:       opts.Ceph.MonConfigMapPath,
+			Key:       opts.Ceph.MonConfigMapKey,
+			ClusterID: opts.Ceph.ClusterID,
+			Log:       setupLog.WithName("mon-watcher"),
+		}
+		monitorsCSV, err = monWatcher.Bootstrap(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	setupLog.Info("Establishing ceph connection", "Monitors", monitorsCSV, "User", opts.Ceph.User, "Timeout", opts.Ceph.ConnectTimeout)
 	connectCtx, cancelConnect := context.WithTimeout(ctx, opts.Ceph.ConnectTimeout)
 	defer cancelConnect()
 	conn, err := ceph.ConnectToRados(connectCtx, ceph.Credentials{
-		Monitors: opts.Ceph.Monitors,
+		Monitors: monitorsCSV,
 		User:     opts.Ceph.User,
 		Keyfile:  opts.Ceph.KeyFile,
 	})
@@ -265,7 +312,7 @@ func Run(ctx context.Context, opts Options) error {
 		snapshotEvents,
 		encryptor,
 		controllers.ImageReconcilerOptions{
-			Monitors:   opts.Ceph.Monitors,
+			Monitors:   monitorsCSV,
 			Client:     opts.Ceph.Client,
 			Pool:       opts.Ceph.Pool,
 			WorkerSize: opts.Ceph.WorkerSize,
@@ -276,6 +323,22 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+
+	if monWatcher != nil {
+		monWatcher.Baseline = monitorsCSV
+		g.Go(func() error {
+			setupLog.Info("Starting ceph monitor configmap directory watcher")
+			if err := monWatcher.Start(ctx); err != nil {
+				if errors.Is(err, monitors.ErrMonitorListChanged) {
+					setupLog.Info("ceph monitor list changed; exiting so the process reconnects")
+					return err
+				}
+				setupLog.Error(err, "failed to start ceph monitor configmap watcher")
+				return err
+			}
+			return nil
+		})
+	}
 
 	g.Go(func() error {
 		setupLog.Info("Starting image reconciler")

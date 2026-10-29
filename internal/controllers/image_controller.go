@@ -18,6 +18,7 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/go-logr/logr"
 	providerapi "github.com/ironcore-dev/ceph-provider/api"
+	"github.com/ironcore-dev/ceph-provider/internal/ceph/monitors"
 	"github.com/ironcore-dev/ceph-provider/internal/encryption"
 	"github.com/ironcore-dev/ceph-provider/internal/round"
 	"github.com/ironcore-dev/ceph-provider/internal/utils"
@@ -132,6 +133,24 @@ type ImageReconciler struct {
 	keyEncryption encryption.Encryptor
 
 	workerSize int
+}
+
+func (r *ImageReconciler) syncAccessMonitors(ctx context.Context, log logr.Logger, img *providerapi.Image) error {
+	if img.Status.Access == nil {
+		return fmt.Errorf("image access is nil")
+	}
+
+	current := r.monitors
+	if monitors.EqualEndpoints(img.Status.Access.Monitors, current) {
+		return nil
+	}
+
+	img.Status.Access.Monitors = current
+	if _, err := r.images.Update(ctx, img); err != nil {
+		return fmt.Errorf("failed to update image access monitors: %w", err)
+	}
+	log.V(1).Info("Updated image access monitors", "monitors", current)
+	return nil
 }
 
 func (r *ImageReconciler) Start(ctx context.Context) error {
@@ -591,6 +610,9 @@ func (r *ImageReconciler) reconcileImage(ctx context.Context, id string) error {
 
 	if imageExists {
 		if img.Status.State == providerapi.ImageStateAvailable {
+			if err := r.syncAccessMonitors(ctx, log, img); err != nil {
+				return err
+			}
 			if err := r.updateImage(ctx, log, ioCtx, img); err != nil {
 				return fmt.Errorf("failed to update image: %w", err)
 			}
