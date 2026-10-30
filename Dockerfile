@@ -1,3 +1,24 @@
+# Go toolchain with the Ceph client libraries go-ceph links against
+FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS ceph-dev
+
+# Ceph release tag of the client libraries the provider is built and tested with.
+# go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
+ARG CEPH_CLIENT_VERSION=v20.2.4
+RUN curl -fsSL https://download.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc && \
+    tee /etc/apt/sources.list.d/ceph.sources <<EOF
+Types: deb
+URIs: https://download.ceph.com/debian-${CEPH_CLIENT_VERSION#v}/
+Suites: bookworm
+Components: main
+Signed-By: /usr/share/keyrings/ceph-release.asc
+EOF
+RUN apt-get update && apt-get install -y libcephfs-dev librbd-dev librados-dev libc-bin
+
+# Image to build and test the code in a container, e.g. on macOS where the Ceph client libraries are not available
+FROM ceph-dev AS dev
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.27.2
+WORKDIR /src
+
 # Build the manager binary
 FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS builder
 
@@ -28,19 +49,15 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="${LDFLAGS}" -a -o bin/ceph-bucket-provider ./cmd/bucketprovider/main.go
 
 
-FROM builder AS ceph-volume-provider-builder
-# Install necessary dependencies
+FROM ceph-dev AS ceph-volume-provider-builder
+WORKDIR /workspace
+COPY --from=builder /workspace ./
 
-# go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
-RUN curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc && \
-    tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
-Types: deb
-URIs: https://eu.ceph.com/debian-tentacle/
-Suites: bookworm
-Components: main
-Signed-By: /usr/share/keyrings/ceph-release.asc
-EOF
-RUN apt-get update && apt-get install -y libcephfs-dev librbd-dev librados-dev libc-bin
+ARG TARGETOS
+ARG TARGETARCH
+ARG BUILDPLATFORM
+ARG LDFLAGS
+ENV BUILDARCH=${BUILDPLATFORM##*/}
 
 # Install cross-compiler for ARM64 if building for arm64 on an amd64 host
 RUN if [ "$TARGETARCH" = "arm64" ] && [ "$BUILDARCH" = "amd64" ]; then \
