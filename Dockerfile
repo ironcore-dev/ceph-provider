@@ -32,10 +32,10 @@ FROM builder AS ceph-volume-provider-builder
 # Install necessary dependencies
 
 # go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
-RUN curl -fsSL https://eu.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc && \
+RUN curl -fsSL https://download.ceph.com/keys/release.asc -o /usr/share/keyrings/ceph-release.asc && \
     tee /etc/apt/sources.list.d/ceph.sources <<'EOF'
 Types: deb
-URIs: https://eu.ceph.com/debian-tentacle/
+URIs: https://download.ceph.com/debian-tentacle/
 Suites: bookworm
 Components: main
 Signed-By: /usr/share/keyrings/ceph-release.asc
