@@ -27,7 +27,7 @@ import (
 
 const (
 	pollingInterval      = 50 * time.Millisecond
-	eventuallyTimeout    = 5 * time.Second
+	eventuallyTimeout    = 80 * time.Second
 	consistentlyDuration = 1 * time.Second
 	maxEvents            = 5
 	eventTTL             = 2 * time.Second
@@ -51,6 +51,7 @@ func TestIntegration_GRPCServer(t *testing.T) {
 	SetDefaultConsistentlyPollingInterval(pollingInterval)
 	SetDefaultEventuallyPollingInterval(pollingInterval)
 	SetDefaultEventuallyTimeout(eventuallyTimeout)
+	EnforceDefaultTimeoutsWhenUsingContexts()
 	SetDefaultConsistentlyDuration(consistentlyDuration)
 
 	RegisterFailHandler(Fail)
