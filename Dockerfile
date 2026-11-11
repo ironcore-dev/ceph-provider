@@ -88,7 +88,7 @@ ENTRYPOINT ["/manager"]
 
 
 # Since we're leveraging apt to pull in dependencies, we use `gcr.io/distroless/base` because it includes glibc.
-FROM gcr.io/distroless/base-debian13:latest@sha256:075a33d9c49026ca7ee72738b4c4a1caea55d0f44227356e46a611a211050e20 AS distroless-base
+FROM gcr.io/distroless/base-debian13:latest@sha256:ca90dc2333005edbc15bccbd7cd61c08ee0fd9dd1fa5ac68bc72778e6659ec5d AS distroless-base
 
 # The distroless amd64 image has a target triplet of x86_64
 FROM distroless-base AS distroless-amd64
