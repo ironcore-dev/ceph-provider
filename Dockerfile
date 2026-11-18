@@ -1,5 +1,5 @@
 # Go toolchain with the Ceph client libraries go-ceph links against
-FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS ceph-dev
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm AS ceph-dev
 
 # Ceph release tag of the client libraries the provider is built and tested with.
 # go-ceph v0.41.0 requires Ceph Squid >= 19.2.4 or Tentacle >= 20.2.1
@@ -15,7 +15,7 @@ EOF
 RUN apt-get update && apt-get install -y libcephfs-dev librbd-dev librados-dev libc-bin
 
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.4-bookworm AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -90,7 +90,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329 AS manager
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931 AS manager
 WORKDIR /
 COPY --from=controller /workspace/bin/manager .
 USER 65532:65532
@@ -100,7 +100,7 @@ ENTRYPOINT ["/manager"]
 
 
 # Since we're leveraging apt to pull in dependencies, we use `gcr.io/distroless/base` because it includes glibc.
-FROM gcr.io/distroless/base-debian13:latest@sha256:ca90dc2333005edbc15bccbd7cd61c08ee0fd9dd1fa5ac68bc72778e6659ec5d AS distroless-base
+FROM gcr.io/distroless/base-debian13:latest@sha256:0e48b9bcd868bce9fa872cee10b52961d9e32677823da4bf68eefb44f38e7b9d AS distroless-base
 
 # The distroless amd64 image has a target triplet of x86_64
 FROM distroless-base AS distroless-amd64
