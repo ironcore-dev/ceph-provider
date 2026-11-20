@@ -86,8 +86,15 @@ spec:
           volumeMounts:
             - name: var-run
               mountPath: /var/run
+            - name: rook-mon-endpoints
+              mountPath: /etc/ceph-mon-endpoints
+              readOnly: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
         - name: var-run
           emptyDir: { }
+        - name: rook-mon-endpoints
+          configMap:
+            name: rook-ceph-mon-endpoints
+            optional: true
