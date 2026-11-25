@@ -9,6 +9,14 @@ and `Bucket` types.
 
 Please consult the [project documentation](https://ironcore.dev/iaas/architecture/providers/ceph-provider.html) for additional information.
 
+## Rook monitor discovery
+
+Mount the ConfigMap `rook-ceph-mon-endpoints` and set `--ceph-mon-configmap-path` to that directory, for example `/etc/ceph-mon-endpoints`. The pod has to run in the same namespace as the ConfigMap. The Deployment mounts it there and sets `optional: true`, so the pod still starts when that ConfigMap is not in its namespace. Leave the path flag empty in that case. `--ceph-monitors` is ignored while the path is set.
+
+A parsed monitor list that differs from the list used at startup stops the process. Kubernetes starts the container again. The new process connects with the updated list and writes that list onto existing volumes when an address was added or removed. The same addresses in another order are left unchanged.
+
+ConfigMap addresses must be reachable from hypervisors. `--ceph-monitors` remains valid for non-Rook deployments and integration tests. Leave `--ceph-mon-configmap-path` empty to keep that static behavior.
+
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
 **Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
